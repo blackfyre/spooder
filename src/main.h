@@ -2,6 +2,9 @@
 #define MAIN_H
 
 #include <Arduino.h>
+#include <Wire.h>
+#include <SPI.h>
+#include "display/display.h"
 
 #ifdef ARDUINO_SAM_DUE
 #define DEV_I2C Wire1

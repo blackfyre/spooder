@@ -1,13 +1,7 @@
 #include "main.h"
-#include <Scheduler.h>
-#include <Wire.h>
-#include <SPI.h>
-#include <math.h>
 #include <Adafruit_PWMServoDriver.h>
 #include "headers/vectors.h"
 #include "headers/Init.h"
-#include "LSM6DSOXSensor.h"
-#include "headers/activity_recognition.h"
 #include "tof/tof.h"
 #include "display/display.h"
 #include "control/gamepad.h"
@@ -86,23 +80,10 @@ int attackCooldown = 0;
 long elapsedTime = 0;
 long loopStartTime = 0;
 
-//Interrupts.
-volatile int mems_event = 0;
-
-// MLC
-ucf_line_t *ProgramPointer;
-int32_t LineCounter;
-int32_t TotalNumberOfLine;
-
-void INT1Event_cb();
-void printMLCStatus(uint8_t status);
 
 // Setup the Servo drivers
 Adafruit_PWMServoDriver pcaPanel1 = Adafruit_PWMServoDriver(pwmDriver1Address);
 Adafruit_PWMServoDriver pcaPanel2 = Adafruit_PWMServoDriver(pwmDriver2Address);
-
-// Gyro
-LSM6DSOXSensor AccGyr(&DEV_I2C, LSM6DSOX_I2C_ADD_L);
 
 
 
