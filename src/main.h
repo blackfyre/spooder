@@ -5,6 +5,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include "display/display.h"
+#include "movement/vectors.h"
 
 #ifdef ARDUINO_SAM_DUE
 #define DEV_I2C Wire1

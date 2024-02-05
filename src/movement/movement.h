@@ -4,6 +4,8 @@
 #include "../main.h"
 #include "vectors.h"
 #include <Adafruit_PWMServoDriver.h>
+#include <math.h>
+#include "bezier.h"
 
 /**
  * @file Init.h
@@ -24,6 +26,15 @@ struct ServoDriver
 {
   Adafruit_PWMServoDriver driver;
   int channel;
+
+  /**
+   * @brief Writes the specified number of microseconds to the motor.
+   * 
+   * @param micros The number of microseconds to write.
+   */
+  void writeMs(uint16_t micros) {
+    driver.writeMicroseconds(channel, micros);
+  }
 };
 
 struct Leg {
@@ -68,6 +79,102 @@ Vector3 ControlPoints[10];
 Vector3 RotateControlPoints[10];
 
 Vector3 AttackControlPoints[10];
+
+// Hexapod state management
+enum State
+{
+    Initialize,
+    Stand,
+    Car,
+    Calibrate,
+    SlamAttack
+};
+
+enum LegState
+{
+    Propelling,
+    Lifting,
+    Standing,
+    Reset
+};
+
+enum Gait
+{
+    Tri,
+    Wave,
+    Ripple,
+    Bi,
+    Quad,
+    Hop
+};
+
+int totalGaits = 6;
+Gait gaits[6] = {Tri, Wave, Ripple, Bi, Quad, Hop};
+
+float points = 1000;
+int cycleProgress[6];
+LegState legStates[6];
+int standProgress = 0;
+
+State currentState = Initialize;
+Gait currentGait = Tri;
+Gait previousGait = Tri;
+int currentGaitID = 0;
+
+float standingDistanceAdjustment = 0;
+
+float distanceFromGroundBase = -60;
+float distanceFromGround = 0;
+float previousDistanceFromGround = 0;
+
+float liftHeight = 130;
+float landHeight = 70;
+float strideOvershoot = 10;
+float distanceFromCenter = 190;
+
+float crabTargetForwardAmount = 0;
+float crabForwardAmount = 0;
+
+Vector2 joy1TargetVector = Vector2(0, 0);
+float joy1TargetMagnitude = 0;
+
+Vector2 joy1CurrentVector = Vector2(0, 0);
+float joy1CurrentMagnitude = 0;
+
+Vector2 joy2TargetVector = Vector2(0, 0);
+float joy2TargetMagnitude = 0;
+
+Vector2 joy2CurrentVector = Vector2(0, 0);
+float joy2CurrentMagnitude = 0;
+
+unsigned long timeSinceLastInput = 0;
+
+float landingBuffer = 15;
+
+int attackCooldown = 0;
+long elapsedTime = 0;
+long loopStartTime = 0;
+
+Vector3 targetCalibration = Vector3(224, 0, 116);
+int inBetweenZ = -20;
+
+float forwardAmount;
+float turnAmount;
+float tArray[6];
+int ControlPointsAmount = 0;
+int RotateControlPointsAmount = 0;
+float pushFraction = 3.0 / 6.0;
+float speedMultiplier = 0.5;
+float strideLengthMultiplier = 1.5;
+float liftHeightMultiplier = 1.0;
+float maxStrideLength = 200;
+float maxSpeed = 100;
+float legPlacementAngle = 56;
+
+int leftSlider = 50;
+float globalSpeedMultiplier = 0.55;
+float globalRotationMultiplier = 0.55;
+
 
 void setupServos();
 
