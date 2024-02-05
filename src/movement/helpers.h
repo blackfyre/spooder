@@ -1,3 +1,8 @@
+#ifndef MOVEMENT_HELPERS_H
+#define MOVEMENT_HELPERS_H
+
+#include "movement.h"
+
 /**
  * Linearly interpolates between two values.
  *
@@ -67,3 +72,16 @@ int angleToPulse(int ang)
     Serial.println(pulse);
     return pulse;
 }
+
+/**
+ * Converts an angle in degrees to microseconds.
+ * 
+ * @param angle The angle in degrees.
+ * @return The corresponding time in microseconds.
+ */
+int angleToMicroseconds(double angle) {
+  double val = 500.0 + (((2500.0 - 500.0) / 180.0) * angle);
+  return (int)val;
+}
+
+#endif
