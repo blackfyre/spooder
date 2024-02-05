@@ -1,3 +1,9 @@
+#ifndef VECTORS_H
+#define VECTORS_H
+
+#include "../main.h"
+#include <math.h>
+
 /**
  * @brief Represents a 2D vector.
  */
@@ -257,3 +263,6 @@ public:
     return sqrt(dx * dx + dy * dy + dz * dz);
   }
 };
+
+
+#endif

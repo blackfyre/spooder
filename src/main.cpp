@@ -1,90 +1,8 @@
 #include "main.h"
-#include <Adafruit_PWMServoDriver.h>
-#include "headers/vectors.h"
-#include "headers/Init.h"
 #include "tof/tof.h"
 #include "display/display.h"
 #include "control/gamepad.h"
-
-
-// Hexapod state management
-enum State {
-  Initialize,
-  Stand,
-  Car,
-  Calibrate,
-  SlamAttack
-};
-
-enum LegState {
-  Propelling,
-  Lifting,
-  Standing,
-  Reset
-};
-
-enum Gait {
-  Tri,
-  Wave,
-  Ripple,
-  Bi,
-  Quad,
-  Hop  
-};
-
-int totalGaits = 6;
-Gait gaits[6] = {Tri,Wave,Ripple,Bi,Quad,Hop};
-
-
-float points = 1000;
-int cycleProgress[6];
-LegState legStates[6];
-int standProgress = 0;
-
-State currentState = Initialize;
-Gait currentGait = Tri;
-Gait previousGait = Tri;
-int currentGaitID = 0;
-
-float standingDistanceAdjustment = 0;
-
-float distanceFromGroundBase = -60;
-float distanceFromGround = 0; 
-float previousDistanceFromGround = 0;
-
-float liftHeight = 130;
-float landHeight = 70;
-float strideOvershoot = 10;
-float distanceFromCenter = 190;
-
-float crabTargetForwardAmount = 0;
-float crabForwardAmount = 0;
-
-Vector2 joy1TargetVector = Vector2(0,0);
-float joy1TargetMagnitude = 0;
-
-Vector2 joy1CurrentVector = Vector2(0,0);
-float joy1CurrentMagnitude = 0;
-
-Vector2 joy2TargetVector = Vector2(0,0);
-float joy2TargetMagnitude = 0;
-
-Vector2 joy2CurrentVector = Vector2(0,0);
-float joy2CurrentMagnitude = 0;
-
-unsigned long timeSinceLastInput = 0;
-
-float landingBuffer = 15;
-
-int attackCooldown = 0;
-long elapsedTime = 0;
-long loopStartTime = 0;
-
-
-// Setup the Servo drivers
-Adafruit_PWMServoDriver pcaPanel1 = Adafruit_PWMServoDriver(pwmDriver1Address);
-Adafruit_PWMServoDriver pcaPanel2 = Adafruit_PWMServoDriver(pwmDriver2Address);
-
+#include "mlc/mlc.h"
 
 
 // Arduino setup function. Runs in CPU 1
@@ -111,7 +29,7 @@ void setup() {
   display.print(".");
   display.display();
 
-  //setupMLC();
+  setupMLC();
   display.print(".");
   display.display();
   
@@ -138,10 +56,8 @@ void setup() {
 
 // loop for processing sensory data
 void loop() {
-  //TODO: rename to loopGamepad
-  //loopGamepad();
-  //TODO: rename to loopMLC
-  //loopMLC();
+  loopGamepad();
+  loopMLC();
   loopTOF();
   loopDisplay();
   
