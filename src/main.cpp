@@ -3,6 +3,7 @@
 #include "display/display.h"
 #include "control/gamepad.h"
 #include "mlc/mlc.h"
+#include "movement/movement.h"
 
 
 // Arduino setup function. Runs in CPU 1
@@ -36,6 +37,10 @@ void setup() {
   delay(300);
 
   setupTOF();
+  display.print(".");
+  display.display();
+
+  setupServos();
   display.print(".");
   display.display();
 

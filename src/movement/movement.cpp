@@ -5,81 +5,6 @@
 Adafruit_PWMServoDriver pcaPanel1 = Adafruit_PWMServoDriver(pwmDriver1Address);
 Adafruit_PWMServoDriver pcaPanel2 = Adafruit_PWMServoDriver(pwmDriver2Address);
 
-// Hexapod state management
-enum State {
-  Initialize,
-  Stand,
-  Car,
-  Calibrate,
-  SlamAttack
-};
-
-enum LegState {
-  Propelling,
-  Lifting,
-  Standing,
-  Reset
-};
-
-enum Gait {
-  Tri,
-  Wave,
-  Ripple,
-  Bi,
-  Quad,
-  Hop  
-};
-
-int totalGaits = 6;
-Gait gaits[6] = {Tri,Wave,Ripple,Bi,Quad,Hop};
-
-
-float points = 1000;
-int cycleProgress[6];
-LegState legStates[6];
-int standProgress = 0;
-
-State currentState = Initialize;
-Gait currentGait = Tri;
-Gait previousGait = Tri;
-int currentGaitID = 0;
-
-float standingDistanceAdjustment = 0;
-
-float distanceFromGroundBase = -60;
-float distanceFromGround = 0; 
-float previousDistanceFromGround = 0;
-
-float liftHeight = 130;
-float landHeight = 70;
-float strideOvershoot = 10;
-float distanceFromCenter = 190;
-
-float crabTargetForwardAmount = 0;
-float crabForwardAmount = 0;
-
-Vector2 joy1TargetVector = Vector2(0,0);
-float joy1TargetMagnitude = 0;
-
-Vector2 joy1CurrentVector = Vector2(0,0);
-float joy1CurrentMagnitude = 0;
-
-Vector2 joy2TargetVector = Vector2(0,0);
-float joy2TargetMagnitude = 0;
-
-Vector2 joy2CurrentVector = Vector2(0,0);
-float joy2CurrentMagnitude = 0;
-
-unsigned long timeSinceLastInput = 0;
-
-float landingBuffer = 15;
-
-int attackCooldown = 0;
-long elapsedTime = 0;
-long loopStartTime = 0;
-
-Vector3 targetCalibration = Vector3(224, 0, 116);
-int inBetweenZ = -20;
 
 void stateCalibration()
 {
@@ -113,84 +38,67 @@ void stateCalibration()
     }
 }
 
-float forwardAmount;
-float turnAmount;
-float tArray[6];
-int ControlPointsAmount = 0;
-int RotateControlPointsAmount = 0;
-float pushFraction = 3.0 / 6.0;
-float speedMultiplier = 0.5;
-float strideLengthMultiplier = 1.5;
-float liftHeightMultiplier = 1.0;
-float maxStrideLength = 200;
-float maxSpeed = 100;
-float legPlacementAngle = 56;
-
-int leftSlider = 50;
-float globalSpeedMultiplier = 0.55;
-float globalRotationMultiplier = 0.55;
-
+Legs legs;
 
 /**
  * @brief Attaches the servos to the appropriate pins.
  */
 void setupServos()
 {
-  Legs legs;
-  legs.leg1.coxa.driver = pcaPanel1;
-  legs.leg1.coxa.channel = 0;
 
-  legs.leg1.femur.driver = pcaPanel1;
-  legs.leg1.femur.channel = 1;
+    legs.leg1.coxa.driver = pcaPanel1;
+    legs.leg1.coxa.channel = 0;
 
-  legs.leg1.tibia.driver = pcaPanel1;
-  legs.leg1.tibia.channel = 2;
+    legs.leg1.femur.driver = pcaPanel1;
+    legs.leg1.femur.channel = 1;
 
-  legs.leg2.coxa.driver = pcaPanel1;
-  legs.leg2.coxa.channel = 3;
+    legs.leg1.tibia.driver = pcaPanel1;
+    legs.leg1.tibia.channel = 2;
 
-  legs.leg2.femur.driver = pcaPanel1;
-  legs.leg2.femur.channel = 4;
+    legs.leg2.coxa.driver = pcaPanel1;
+    legs.leg2.coxa.channel = 3;
 
-  legs.leg2.tibia.driver = pcaPanel1;
-  legs.leg2.tibia.channel = 5;
+    legs.leg2.femur.driver = pcaPanel1;
+    legs.leg2.femur.channel = 4;
 
-  legs.leg3.coxa.driver = pcaPanel1;
-  legs.leg3.coxa.channel = 6;
+    legs.leg2.tibia.driver = pcaPanel1;
+    legs.leg2.tibia.channel = 5;
 
-  legs.leg3.femur.driver = pcaPanel1;
-  legs.leg3.femur.channel = 7;
+    legs.leg3.coxa.driver = pcaPanel1;
+    legs.leg3.coxa.channel = 6;
 
-  legs.leg3.tibia.driver = pcaPanel1;
-  legs.leg3.tibia.channel = 8;
+    legs.leg3.femur.driver = pcaPanel1;
+    legs.leg3.femur.channel = 7;
 
-  legs.leg4.coxa.driver = pcaPanel2;
-  legs.leg4.coxa.channel = 0;
+    legs.leg3.tibia.driver = pcaPanel1;
+    legs.leg3.tibia.channel = 8;
 
-  legs.leg4.femur.driver = pcaPanel2;
-  legs.leg4.femur.channel = 1;
+    legs.leg4.coxa.driver = pcaPanel2;
+    legs.leg4.coxa.channel = 0;
 
-  legs.leg4.tibia.driver = pcaPanel2;
-  legs.leg4.tibia.channel = 2;
+    legs.leg4.femur.driver = pcaPanel2;
+    legs.leg4.femur.channel = 1;
 
-  legs.leg5.coxa.driver = pcaPanel2;
-  legs.leg5.coxa.channel = 3;
+    legs.leg4.tibia.driver = pcaPanel2;
+    legs.leg4.tibia.channel = 2;
 
-  legs.leg5.femur.driver = pcaPanel2;
-  legs.leg5.femur.channel = 4;
+    legs.leg5.coxa.driver = pcaPanel2;
+    legs.leg5.coxa.channel = 3;
 
-  legs.leg5.tibia.driver = pcaPanel2;
-  legs.leg5.tibia.channel = 5;
+    legs.leg5.femur.driver = pcaPanel2;
+    legs.leg5.femur.channel = 4;
 
-  legs.leg6.coxa.driver = pcaPanel2;
-  legs.leg6.coxa.channel = 6;
+    legs.leg5.tibia.driver = pcaPanel2;
+    legs.leg5.tibia.channel = 5;
 
-  legs.leg6.femur.driver = pcaPanel2;
-  legs.leg6.femur.channel = 7;
+    legs.leg6.coxa.driver = pcaPanel2;
+    legs.leg6.coxa.channel = 6;
 
-  legs.leg6.tibia.driver = pcaPanel2;
-  legs.leg6.tibia.channel = 8;
+    legs.leg6.femur.driver = pcaPanel2;
+    legs.leg6.femur.channel = 7;
 
+    legs.leg6.tibia.driver = pcaPanel2;
+    legs.leg6.tibia.channel = 8;
 }
 
 /**
@@ -372,9 +280,11 @@ void set3HighestLeg()
  */
 void stateCar()
 {
-    leftSlider = (int)rc_data.slider2;
+    // leftSlider = (int)rc_data.slider2;
+    leftSlider = 44;
     globalSpeedMultiplier = (leftSlider + 10.0) * 0.01;
-    globalRotationMultiplier = map(rc_data.slider2, 0, 100, 40, 130) * 0.01;
+    // globalRotationMultiplier = map(rc_data.slider2, 0, 100, 40, 130) * 0.01;
+    globalRotationMultiplier = map(44, 0, 100, 40, 130) * 0.01;
 
     if (currentState != Car || previousGait != currentGait)
     {
@@ -596,80 +506,83 @@ Vector3 getGaitPoint(int leg, float pushFraction)
     }
 }
 
-void moveToPos(int leg, Vector3 pos){
-  currentPoints[leg] = pos;
-  
-  float dis = Vector3(0,0,0).distanceTo(pos);
-  if(dis > legLength){
-    print_value("Point impossible to reach", pos, false);
-    print_value("Distance",dis, true);
-    return;
-  }
+void moveToPos(int leg, Vector3 pos)
+{
+    currentPoints[leg] = pos;
 
-  float x = pos.x;
-  float y = pos.y;
-  float z = pos.z;
+    float dis = Vector3(0, 0, 0).distanceTo(pos);
+    if (dis > legLength)
+    {
+        print_value("Point impossible to reach", pos, false);
+        print_value("Distance", dis, true);
+        return;
+    }
 
-  float o1 = offsets[leg].x;
-  float o2 = offsets[leg].y;
-  float o3 = offsets[leg].z;
+    float x = pos.x;
+    float y = pos.y;
+    float z = pos.z;
 
-  float theta1 = atan2(y,x) * (180 / PI) + o1; // base angle
-  float l = sqrt(x*x + y*y); // x and y extension 
-  float l1 = l - a1;
-  float h = sqrt(l1*l1 + z*z);
+    float o1 = offsets[leg].x;
+    float o2 = offsets[leg].y;
+    float o3 = offsets[leg].z;
 
-  float phi1 = acos(constrain((pow(h,2) + pow(a2,2) - pow(a3,2)) / (2*h*a2),-1,1));
-  float phi2 = atan2(z, l1);
-  float theta2 = (phi1 + phi2) * 180 / PI + o2;
-  float phi3 = acos(constrain((pow(a2,2) + pow(a3,2) - pow(h,2)) / (2*a2*a3),-1,1));
-  float theta3 = 180 - (phi3 * 180 / PI) + o3;
+    float theta1 = atan2(y, x) * (180 / PI) + o1; // base angle
+    float l = sqrt(x * x + y * y);                // x and y extension
+    float l1 = l - a1;
+    float h = sqrt(l1 * l1 + z * z);
 
-  targetRot = Vector3(theta1,theta2,theta3);
-  
-  int coxaMicroseconds = angleToMicroseconds(targetRot.x);
-  int femurMicroseconds = angleToMicroseconds(targetRot.y);
-  int tibiaMicroseconds = angleToMicroseconds(targetRot.z);
+    float phi1 = acos(constrain((pow(h, 2) + pow(a2, 2) - pow(a3, 2)) / (2 * h * a2), -1, 1));
+    float phi2 = atan2(z, l1);
+    float theta2 = (phi1 + phi2) * 180 / PI + o2;
+    float phi3 = acos(constrain((pow(a2, 2) + pow(a3, 2) - pow(h, 2)) / (2 * a2 * a3), -1, 1));
+    float theta3 = 180 - (phi3 * 180 / PI) + o3;
 
-  switch(leg){
+    targetRot = Vector3(theta1, theta2, theta3);
+
+    int coxaMicroseconds = angleToMicroseconds(targetRot.x);
+    int femurMicroseconds = angleToMicroseconds(targetRot.y);
+    int tibiaMicroseconds = angleToMicroseconds(targetRot.z);
+
+    switch (leg)
+    {
     case 0:
-      coxa1.writeMicroseconds(coxaMicroseconds);
-      femur1.writeMicroseconds(femurMicroseconds);
-      tibia1.writeMicroseconds(tibiaMicroseconds);
-      break;
+        legs.leg1.coxa.writeMs(coxaMicroseconds);
+        legs.leg1.femur.writeMs(femurMicroseconds);
+        legs.leg1.tibia.writeMs(tibiaMicroseconds);
+        break;
 
     case 1:
-      coxa2.writeMicroseconds(coxaMicroseconds);
-      femur2.writeMicroseconds(femurMicroseconds);
-      tibia2.writeMicroseconds(tibiaMicroseconds);
-      break;
+        legs.leg2.coxa.writeMs(coxaMicroseconds);
+        legs.leg2.femur.writeMs(femurMicroseconds);
+        legs.leg2.tibia.writeMs(tibiaMicroseconds);
+        break;
 
     case 2:
-      coxa3.writeMicroseconds(coxaMicroseconds);
-      femur3.writeMicroseconds(femurMicroseconds);
-      tibia3.writeMicroseconds(tibiaMicroseconds);
-      break;
+        legs.leg3.coxa.writeMs(coxaMicroseconds);
+        legs.leg3.femur.writeMs(femurMicroseconds);
+        legs.leg3.tibia.writeMs(tibiaMicroseconds);
+        break;
 
     case 3:
-      coxa4.writeMicroseconds(coxaMicroseconds);
-      femur4.writeMicroseconds(femurMicroseconds);
-      tibia4.writeMicroseconds(tibiaMicroseconds);
-      break;
+        legs.leg4.coxa.writeMs(coxaMicroseconds);
+        legs.leg4.femur.writeMs(coxaMicroseconds);
+        legs.leg4.tibia.writeMs(tibiaMicroseconds);
+        break;
 
     case 4:
-      coxa5.writeMicroseconds(coxaMicroseconds);
-      femur5.writeMicroseconds(femurMicroseconds);
-      tibia5.writeMicroseconds(tibiaMicroseconds);
-      break;
+        legs.leg5.coxa.writeMs(coxaMicroseconds);
+        legs.leg5.femur.writeMs(femurMicroseconds);
+        legs.leg5.tibia.writeMs(tibiaMicroseconds);
+        break;
 
     case 5:
-      coxa6.writeMicroseconds(coxaMicroseconds);
-      femur6.writeMicroseconds(femurMicroseconds);
-      tibia6.writeMicroseconds(tibiaMicroseconds);
-      break;
+        legs.leg6.coxa.writeMs(coxaMicroseconds);
+        legs.leg6.femur.writeMs(femurMicroseconds);
+        legs.leg6.tibia.writeMs(tibiaMicroseconds);
+        break;
 
     default:
-      break;
-  }
-  return; 
+        break;
+    }
+    return;
 }
