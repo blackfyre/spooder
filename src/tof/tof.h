@@ -2,7 +2,7 @@
 #define TOF_H
 
 #include "Adafruit_VL6180X.h"
-#include "display.h"
+#include "../display/display.h"
 
 
 // TOF

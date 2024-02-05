@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include "headers/logo.h"
+#include "logo.h"
 #include "display.h"
 
 Adafruit_SH1107 display = Adafruit_SH1107(SCREEN_HEIGHT, SCREEN_WIDTH, &Wire);

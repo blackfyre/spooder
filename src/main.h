@@ -1,5 +1,5 @@
-#ifndef DISPLAY_H
-#define DISPLAY_H
+#ifndef MAIN_H
+#define MAIN_H
 
 #include <Arduino.h>
 

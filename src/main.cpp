@@ -8,9 +8,9 @@
 #include "headers/Init.h"
 #include "LSM6DSOXSensor.h"
 #include "headers/activity_recognition.h"
-#include "tof.h"
-#include "display.h"
-#include "gamepad.h"
+#include "tof/tof.h"
+#include "display/display.h"
+#include "control/gamepad.h"
 
 
 // Hexapod state management
