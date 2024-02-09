@@ -4,10 +4,13 @@
 #include "control/gamepad.h"
 #include "mlc/mlc.h"
 #include "movement/movement.h"
+#include "globals/wiring.h"
 
+TwoWire* globalWire = &Wire;
 
 // Arduino setup function. Runs in CPU 1
 void setup() {
+  Wire.begin();
   pinMode(LED_BUILTIN, OUTPUT);
   //define RGB LED as outputs
   BP32.pinMode(LED_R, OUTPUT);

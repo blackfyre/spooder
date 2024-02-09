@@ -5,7 +5,6 @@
 #include "vectors.h"
 #include <Adafruit_PWMServoDriver.h>
 #include <math.h>
-#include "bezier.h"
 
 /**
  * @file Init.h
@@ -178,33 +177,6 @@ float globalRotationMultiplier = 0.55;
 
 void setupServos();
 
-
-Vector2 GetPointOnBezierCurve(Vector2* points, int numPoints, float t) {
-  Vector2 pos;
-
-  for (int i = 0; i < numPoints; i++) {
-    float b = binomialCoefficient(numPoints - 1, i) * pow(1 - t, numPoints - 1 - i) * pow(t, i);
-    pos.x += b * points[i].x;
-    pos.y += b * points[i].y;
-  }
-
-  return pos;
-}
-
-
-Vector3 GetPointOnBezierCurve(Vector3* points, int numPoints, float t) {
-  Vector3 pos;
-
-  for (int i = 0; i < numPoints; i++) {
-    float b = binomialCoefficient(numPoints - 1, i) * pow(1 - t, numPoints - 1 - i) * pow(t, i);
-    pos.x += b * points[i].x;
-    pos.y += b * points[i].y;
-    pos.z += b * points[i].z;
-  }
-
-  return pos;
-}
-
 int binomialCoefficient(int n, int k) {
   int result = 1;
 
@@ -219,6 +191,7 @@ int binomialCoefficient(int n, int k) {
 }
 
 
+
 void setCycleStartPoints(int leg){
   cycleStartPoints[leg] = currentPoints[leg];    
 }
@@ -229,5 +202,11 @@ void setCycleStartPoints(){
   }     
 }
 
+void moveToPos(int leg, Vector3 pos);
 
-#endif
+void set3HighestLeg();
+
+Vector3 getGaitPoint(int leg, float pushFraction);
+
+
+#endif // MOVEMENT_H
