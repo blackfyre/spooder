@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "tof.h"
+#include "../globals/wiring.h"
 
 Adafruit_VL6180X vl = Adafruit_VL6180X();
 
@@ -15,7 +16,7 @@ bool tofSensorAvailable = false;
  */
 void setupTOF() {
   Serial.println("Adafruit VL6180x test!");
-  if (!vl.begin()) {
+  if (!vl.begin(globalWire)) {
     Serial.println("Failed to find sensor");
   } else {
     Serial.println("Sensor found!");

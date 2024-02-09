@@ -1,8 +1,9 @@
 #include <Arduino.h>
 #include "logo.h"
 #include "display.h"
+#include "../globals/wiring.h"
 
-Adafruit_SH1107 display = Adafruit_SH1107(SCREEN_HEIGHT, SCREEN_WIDTH, &Wire);
+Adafruit_SH1107 display = Adafruit_SH1107(SCREEN_HEIGHT, SCREEN_WIDTH, globalWire);
 
 char logBuffer[BUFFER_SIZE][80];
 int idleLoopCount = 0;
