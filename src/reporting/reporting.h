@@ -1,5 +1,5 @@
-#ifndef DEBUG_H
-#define DEBUG_H
+#ifndef REPORTING_H
+#define REPORTING_H
 
 #include <Arduino.h>
 #include "../movement/vectors.h"

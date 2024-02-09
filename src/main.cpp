@@ -5,14 +5,25 @@
 #include "mlc/mlc.h"
 #include "movement/movement.h"
 #include "globals/wiring.h"
+#include <Scheduler.h>
 
-TwoWire* globalWire = &Wire;
+TwoWire *globalWire = &Wire;
+
+// loop for acting on recieved data
+// do not overwhelm i2c
+void loop2()
+{
+  loopGamepad();
+
+  delay(50);
+}
 
 // Arduino setup function. Runs in CPU 1
-void setup() {
+void setup()
+{
   Wire.begin();
   pinMode(LED_BUILTIN, OUTPUT);
-  //define RGB LED as outputs
+  // define RGB LED as outputs
   BP32.pinMode(LED_R, OUTPUT);
   BP32.pinMode(LED_G, OUTPUT);
   BP32.pinMode(LED_B, OUTPUT);
@@ -20,23 +31,22 @@ void setup() {
   BP32.digitalWrite(LED_G, LED_OFF);
   BP32.digitalWrite(LED_B, LED_OFF);
 
-  
   setupDisplay();
 
   // Initialize serial
   Serial.begin(115200);
-  
+
   display.print(".");
   display.display();
 
-  //setupGamepad();
+  setupGamepad();
   display.print(".");
   display.display();
 
   setupMLC();
   display.print(".");
   display.display();
-  
+
   delay(300);
 
   setupTOF();
@@ -54,7 +64,7 @@ void setup() {
 
   display.clearDisplay();
 
-  //Scheduler.startLoop(loop2);
+  Scheduler.startLoop(loop2);
 
   addToLogBuffer("Ready!");
   addToLogBuffer("Waiting on gamepad...");
@@ -63,20 +73,14 @@ void setup() {
 }
 
 // loop for processing sensory data
-void loop() {
-  loopGamepad();
+void loop()
+{
+
   loopMLC();
   loopTOF();
   loopDisplay();
-  
+
   delay(50);
 }
 
-// loop for acting on recieved data
-// do not overwhelm i2c
-//void loop2() {
-  
-
-//  delay(50);
-//}
 

@@ -1,4 +1,4 @@
-#include "debug.h"
+#include "reporting.h"
 
 void print_value(String name, float value, bool newLine){
   Serial.print(name + ": ");
