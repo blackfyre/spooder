@@ -1,9 +1,150 @@
 #include "movement.h"
-#include "helpers.h"
+#include "../reporting/reporting.h"
+
+// PCA9685 outputs = 12-bit = 4096 steps
+// 2.5% of 20ms = 0.5ms ; 12.5% of 20ms = 2.5ms
+// 2.5% of 4096 = 102 steps; 12.5% of 4096 = 512 steps
 
 // Setup the Servo drivers
 Adafruit_PWMServoDriver pcaPanel1 = Adafruit_PWMServoDriver(pwmDriver1Address);
 Adafruit_PWMServoDriver pcaPanel2 = Adafruit_PWMServoDriver(pwmDriver2Address);
+
+
+const Vector3 offsets1 = {90, 75, -18};
+const Vector3 offsets2 = {93, 75, -15};
+const Vector3 offsets3 = {93, 75, -18};
+const Vector3 offsets4 = {87, 80, -26};
+const Vector3 offsets5 = {85, 89, -16};
+const Vector3 offsets6 = {93, 85, -24};
+const Vector3 offsets[6] = {offsets1, offsets2, offsets3, offsets4, offsets5, offsets6};
+
+const float a1 = 41;  // Coxa Length
+const float a2 = 116; // Femur Length
+const float a3 = 183; // Tibia Length
+float legLength = a1 + a2 + a3;
+
+Vector3 currentPoints[6];
+Vector3 cycleStartPoints[6];
+
+Vector3 currentRot(180, 0, 180);
+Vector3 targetRot(180, 0, 180);
+
+float strideMultiplier[6] = {1, 1, 1, -1, -1, -1};
+float rotationMultiplier[6] = {-1, 0, 1, -1, 0, 1};
+
+Vector3 ControlPoints[10];
+Vector3 RotateControlPoints[10];
+
+Vector3 AttackControlPoints[10];
+
+// Hexapod state management
+enum State
+{
+    Initialize,
+    Stand,
+    Car,
+    Calibrate,
+    SlamAttack
+};
+
+enum LegState
+{
+    Propelling,
+    Lifting,
+    Standing,
+    Reset
+};
+
+enum Gait
+{
+    Tri,
+    Wave,
+    Ripple,
+    Bi,
+    Quad,
+    Hop
+};
+
+int totalGaits = 6;
+Gait gaits[6] = {Tri, Wave, Ripple, Bi, Quad, Hop};
+
+float points = 1000;
+int cycleProgress[6];
+LegState legStates[6];
+int standProgress = 0;
+
+State currentState = Initialize;
+Gait currentGait = Tri;
+Gait previousGait = Tri;
+int currentGaitID = 0;
+
+float standingDistanceAdjustment = 0;
+
+float distanceFromGroundBase = -60;
+float distanceFromGround = 0;
+float previousDistanceFromGround = 0;
+
+float liftHeight = 130;
+float landHeight = 70;
+float strideOvershoot = 10;
+float distanceFromCenter = 190;
+
+float crabTargetForwardAmount = 0;
+float crabForwardAmount = 0;
+
+Vector2 joy1TargetVector = Vector2(0, 0);
+float joy1TargetMagnitude = 0;
+
+Vector2 joy1CurrentVector = Vector2(0, 0);
+float joy1CurrentMagnitude = 0;
+
+Vector2 joy2TargetVector = Vector2(0, 0);
+float joy2TargetMagnitude = 0;
+
+Vector2 joy2CurrentVector = Vector2(0, 0);
+float joy2CurrentMagnitude = 0;
+
+unsigned long timeSinceLastInput = 0;
+
+float landingBuffer = 15;
+
+int attackCooldown = 0;
+long elapsedTime = 0;
+long loopStartTime = 0;
+
+Vector3 targetCalibration = Vector3(224, 0, 116);
+int inBetweenZ = -20;
+
+
+float forwardAmount;
+float turnAmount;
+float tArray[6];
+
+int ControlPointsAmount = 0;
+int RotateControlPointsAmount = 0;
+float pushFraction = 3.0 / 6.0;
+float speedMultiplier = 0.5;
+float strideLengthMultiplier = 1.5;
+float liftHeightMultiplier = 1.0;
+float maxStrideLength = 200;
+float maxSpeed = 100;
+float legPlacementAngle = 56;
+int leftSlider = 50;
+float globalSpeedMultiplier = 0.55;
+float globalRotationMultiplier = 0.55;
+
+int binomialCoefficient(int n, int k) {
+  int result = 1;
+
+  // Calculate the binomial coefficient using the formula:
+  // (n!) / (k! * (n - k)!)
+  for (int i = 1; i <= k; i++) {
+    result *= (n - (k - i));
+    result /= i;
+  }
+
+  return result;
+}
 
 Vector2 GetPointOnBezierCurve(Vector2* points, int numPoints, float t) {
   Vector2 pos;
@@ -31,19 +172,106 @@ Vector3 GetPointOnBezierCurve(Vector3* points, int numPoints, float t) {
   return pos;
 }
 
+Legs legs;
+
+/**
+ * Linearly interpolates between two values.
+ *
+ * @param a The starting value.
+ * @param b The ending value.
+ * @param f The interpolation factor (0.0 to 1.0).
+ * @return The interpolated value between a and b.
+ */
+float lerp(float a, float b, float f)
+{
+    return a * (1.0 - f) + (b * f);
+}
+
+/**
+ * Linearly interpolates between two vectors.
+ *
+ * @param a The starting vector.
+ * @param b The ending vector.
+ * @param f The interpolation factor (0.0 to 1.0).
+ * @return The interpolated vector.
+ */
+Vector2 lerp(Vector2 a, Vector2 b, float f)
+{
+    return Vector2(lerp(a.x, b.x, f), lerp(a.y, b.y, f));
+}
+
+/**
+ * Calculates the hypotenuse of a right triangle using the Pythagorean theorem.
+ *
+ * @param x The length of one side of the triangle.
+ * @param y The length of the other side of the triangle.
+ * @return The length of the hypotenuse.
+ */
+float calculateHypotenuse(float x, float y)
+{
+    float result = sqrt(pow(x, 2) + pow(y, 2));
+    return result;
+}
+
+/**
+ * Maps a value from one range to another range.
+ *
+ * @param x The value to be mapped.
+ * @param in_min The minimum value of the input range.
+ * @param in_max The maximum value of the input range.
+ * @param out_min The minimum value of the output range.
+ * @param out_max The maximum value of the output range.
+ * @return The mapped value.
+ */
+float mapFloat(float x, float in_min, float in_max, float out_min, float out_max)
+{
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+/**
+ * Converts an angle to a pulse value.
+ *
+ * @param ang The angle to be converted.
+ * @return The pulse value corresponding to the given angle.
+ */
+int angleToPulse(int ang)
+{
+    int pulse = map(ang, 0, 180, SERVOMIN, SERVOMAX); // map angle of 0 to 180 to Servo min and Servo max
+    Serial.print("Angle: ");
+    Serial.print(ang);
+    Serial.print(" pulse: ");
+    Serial.println(pulse);
+    return pulse;
+}
+
+/**
+ * Converts an angle in degrees to microseconds.
+ * 
+ * @param angle The angle in degrees.
+ * @return The corresponding time in microseconds.
+ */
+int angleToMicroseconds(double angle) {
+  double val = 500.0 + (((2500.0 - 500.0) / 180.0) * angle);
+  return (int)val;
+}
+
 
 void stateCalibration()
 {
+    Serial.println("Setting Calibration state");
     currentState = Calibrate;
 
+    Serial.println("Preparing to pull up legs!");
     bool legsUp = true;
 
+    Serial.println("Checking last state!");
     for (int i = 0; i < 6; i++)
     {
         if (currentPoints[i].z < inBetweenZ)
             legsUp = false;
     }
 
+    Serial.println("Moving legs!");
     if (!legsUp)
     {
         for (int i = 0; i < 6; i++)
@@ -64,13 +292,41 @@ void stateCalibration()
     }
 }
 
-Legs legs;
+/**
+ * @brief Initializes the state of the hexapod.
+ */
+void stateInit()
+{
+    moveToPos(0, Vector3(160, 0, 0));
+    moveToPos(1, Vector3(160, 0, 0));
+    moveToPos(2, Vector3(160, 0, 0));
+    moveToPos(3, Vector3(160, 0, 0));
+    moveToPos(4, Vector3(160, 0, 0));
+    moveToPos(5, Vector3(160, 0, 0));
+
+    delay(25);
+
+    moveToPos(0, Vector3(225, 0, 115));
+    moveToPos(1, Vector3(225, 0, 115));
+    moveToPos(2, Vector3(225, 0, 115));
+    moveToPos(3, Vector3(225, 0, 115));
+    moveToPos(4, Vector3(225, 0, 115));
+    moveToPos(5, Vector3(225, 0, 115));
+    // return;
+
+    delay(500);
+}
 
 /**
  * @brief Attaches the servos to the appropriate pins.
  */
 void setupServos()
 {
+
+    Serial.println("Setting up PCA Panels");
+    pcaPanel1.begin();
+    pcaPanel2.begin();
+    Serial.println("PCA Panels initiated");
 
     legs.leg1.coxa.driver = pcaPanel1;
     legs.leg1.coxa.channel = 0;
@@ -125,31 +381,8 @@ void setupServos()
 
     legs.leg6.tibia.driver = pcaPanel2;
     legs.leg6.tibia.channel = 8;
-}
 
-/**
- * @brief Initializes the state of the hexapod.
- */
-void stateInit()
-{
-    moveToPos(0, Vector3(160, 0, 0));
-    moveToPos(1, Vector3(160, 0, 0));
-    moveToPos(2, Vector3(160, 0, 0));
-    moveToPos(3, Vector3(160, 0, 0));
-    moveToPos(4, Vector3(160, 0, 0));
-    moveToPos(5, Vector3(160, 0, 0));
-
-    delay(25);
-
-    moveToPos(0, Vector3(225, 0, 115));
-    moveToPos(1, Vector3(225, 0, 115));
-    moveToPos(2, Vector3(225, 0, 115));
-    moveToPos(3, Vector3(225, 0, 115));
-    moveToPos(4, Vector3(225, 0, 115));
-    moveToPos(5, Vector3(225, 0, 115));
-    // return;
-
-    delay(500);
+    stateInit();
 }
 
 // Standing Control Points Array
@@ -161,6 +394,16 @@ Vector3 standingEndPoint;
 
 int currentLegs[3] = {-1, -1, -1};
 int standLoops = 0;
+
+void setCycleStartPoints(int leg){
+  cycleStartPoints[leg] = currentPoints[leg];    
+}
+
+void setCycleStartPoints(){
+  for(int i = 0; i < 6; i++){
+    cycleStartPoints[i] = currentPoints[i]; 
+  }     
+}
 
 /**
  * @brief Function representing the standing state of the hexapod.
@@ -569,46 +812,9 @@ void moveToPos(int leg, Vector3 pos)
     int femurMicroseconds = angleToMicroseconds(targetRot.y);
     int tibiaMicroseconds = angleToMicroseconds(targetRot.z);
 
-    switch (leg)
-    {
-    case 0:
-        legs.leg1.coxa.writeMs(coxaMicroseconds);
-        legs.leg1.femur.writeMs(femurMicroseconds);
-        legs.leg1.tibia.writeMs(tibiaMicroseconds);
-        break;
-
-    case 1:
-        legs.leg2.coxa.writeMs(coxaMicroseconds);
-        legs.leg2.femur.writeMs(femurMicroseconds);
-        legs.leg2.tibia.writeMs(tibiaMicroseconds);
-        break;
-
-    case 2:
-        legs.leg3.coxa.writeMs(coxaMicroseconds);
-        legs.leg3.femur.writeMs(femurMicroseconds);
-        legs.leg3.tibia.writeMs(tibiaMicroseconds);
-        break;
-
-    case 3:
-        legs.leg4.coxa.writeMs(coxaMicroseconds);
-        legs.leg4.femur.writeMs(coxaMicroseconds);
-        legs.leg4.tibia.writeMs(tibiaMicroseconds);
-        break;
-
-    case 4:
-        legs.leg5.coxa.writeMs(coxaMicroseconds);
-        legs.leg5.femur.writeMs(femurMicroseconds);
-        legs.leg5.tibia.writeMs(tibiaMicroseconds);
-        break;
-
-    case 5:
-        legs.leg6.coxa.writeMs(coxaMicroseconds);
-        legs.leg6.femur.writeMs(femurMicroseconds);
-        legs.leg6.tibia.writeMs(tibiaMicroseconds);
-        break;
-
-    default:
-        break;
-    }
+    Leg legsArray[6] = {legs.leg1, legs.leg2, legs.leg3, legs.leg4, legs.leg5, legs.leg6};
+    legsArray[leg].coxa.writeMs(coxaMicroseconds);
+    legsArray[leg].femur.writeMs(femurMicroseconds);
+    legsArray[leg].tibia.writeMs(tibiaMicroseconds);
     return;
 }
