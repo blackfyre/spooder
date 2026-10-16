@@ -1,11 +1,13 @@
 schema: spec-driven
 
 context: |
-  Arduino firmware for a hexapod robot on the Arduino Nano RP2040 Connect
-  (PlatformIO, raspberrypi platform, mbed-based Arduino core, C++).
-  Toolchain via mise; build with `mise run build`. No unit tests yet, so a
-  successful build is the automated gate; hardware behaviour is verified on the board.
-  Subsystems live in src/<module>/ and expose setupX()/loopX() functions.
+  Firmware for a hexapod robot on a Pimoroni Servo 2040 (RP2040), C++ on
+  pico-sdk 2.2.0 + pimoroni-pico v1.29.0-2 (pinned submodules in external/),
+  built with CMake via `mise run build` (requires a power_limits.h, see CLAUDE.md).
+  Hardware-free logic lives in core/ and is host-tested with Unity via
+  `mise run test` (PlatformIO native env); hardware adapters live in
+  firmware/servo2040/src/. A TTGO T-Display (ESP32) Bluetooth gamepad bridge
+  and I2C sensors are planned. Hardware behaviour is verified on the board.
 
 # Project context (optional)
 # This is shown to AI when creating artifacts.

@@ -1,84 +1,109 @@
 ---
 name: spooder-hardware-check
-description: Workflow for building, flashing and observing the Spooder firmware on the Arduino Nano RP2040 Connect — safety preparation, upload, serial and OLED boot signals, and what "working" looks like per subsystem. Use when a change must be confirmed on the robot, when upload or boot fails, or when the user asks to flash, test on hardware, or read the serial monitor.
+description: Workflow for wiring, powering, flashing and bringing up the Spooder firmware on the Pimoroni Servo 2040 — power and ground rules, J6 header wiring, the staged bring-up order (USB only, bench supply, one servo, all servos), what the serial console and LEDs show, and how to exercise and verify power protection. Use when a change must be confirmed on the robot, when flashing or boot fails, or when the user asks to flash, test on hardware or read the serial console.
 ---
 
 # Spooder hardware check
 
-A successful `mise run build` is the automated gate. This workflow is the hardware gate; it needs the board connected and, for anything that moves, a person present. Do not flash code that drives servos without telling the user first — the robot moves on boot (Initialise, then Stand, on the first movement ticks after `setup()`).
+`mise run test` and the firmware build are the automated gates. This workflow is the hardware gate.
 
-## 1. Prepare
+- It needs the board connected and, for anything that moves, a person present.
+- Tell the user before flashing anything that drives servos. Once the supply is accepted, the robot starts moving.
+- Record results in the OpenSpec change being verified.
 
-- Robot on a stand with all six feet off the ground before any upload that touches `movement`.
-- Servo power supply on (the PCA9685 boards are not powered from USB); USB connected to the Nano.
-- Check the board is visible: `pio device list` should show a USB serial device (usually `/dev/ttyACM0`). On Linux, a permission error means the user is not in the `dialout` group or the PlatformIO udev rules are missing — report it; do not change system configuration yourself.
+## Power and wiring rules (read first)
 
-## 2. Build and flash
+- **Servo supply:** into the screw terminals, rated 10 A continuous, reverse-polarity protected, servos up to 11 V.
+  - With the board's "Separate USB and Ext. Power" trace intact, the terminal supply also feeds USB VBUS and J6 pin 17 (5V).
+  - For any supply above 5 V, **cut that trace**, then power the logic from USB or a separate 5 V BEC on J6 pin 17.
+- **Ground:** connect external logic ground (bridge, sensors) only to **logic GND**, on J6 pins 1, 3, 5, 11 or 16 or the Qw/ST GND.
+  - **Never** use the servo-connector ground pins. The current shunt sits in the servo ground return, so current returned through it is mis-measured.
+- **3.3 V logic only on J6.** No pin is 5 V tolerant.
+- **Pull-ups:** the board has none on GPIO19–21 or 26–28. I²C sensors need breakouts with pull-ups, or 4.7 kΩ resistors to 3V3.
+- **Bench supplies:** use a current-limited bench supply for first power-up and protection tests. Set the limit below the firmware's trip current.
 
-```sh
-mise run build     # must pass first
-mise run upload    # pio run --target upload
-```
+J6 (unpopulated 17-pin header), pin → signal: 1 GND, 2 USER_SW, 3 GND, 4 RESET, 5 GND, 6 SWDIO, 7 SWCLK, 8 GPIO28, 9 GPIO27, 10 GPIO26, 11 GND, 12 GPIO19, 13 GPIO21, 14 GPIO20, 15 3V3, 16 GND, 17 5V. Allocation: see `spooder-firmware-shape`.
 
-Upload uses the `picotool` protocol (`rp2040load`): PlatformIO opens the serial port at 1200 baud to reset the Nano into its bootloader, then flashes it. If it cannot find the board, double-tap the Nano's reset button to enter bootloader mode and retry. A successful upload ends with `[SUCCESS]`; the board then reboots and the serial port reappears.
-
-## 3. Observe
-
-```sh
-mise run monitor   # pio device monitor, 115200 baud; Ctrl+C to exit
-```
-
-The monitor holds the port; close it before the next upload.
-
-Expected boot sequence (serial and OLED):
-
-| Step | Serial | OLED |
-|---|---|---|
-| Display | `OLED begun` | splash, then `Boot` |
-| Gamepad | `Firmware version installed: …`, `BD Address: …` | `.` |
-| IMU | `Activity Recognition for LSM6DSOX MLC`, `UCF Number Line=…`, `Program loaded inside the LSM6DSOX MLC`, then about 3 s pause and an `Activity: …` line | `.` |
-| ToF | `Sensor found!` or `Failed to find sensor` | `.` |
-| Servos | `Setting up PCA Panels`, `PCA Panels initiated, prescale N` (N ≈ 121 for 50 Hz) | `.` |
-| Ready | — | `done!`, then log lines `Ready!`, `Waiting on gamepad...`; amber `LED_BUILTIN` on |
-| Movement | — | legs go to `(160,0,0)`, then `(225,0,115)`, then settle into Stand over about a second; the OLED keeps updating meanwhile |
-
-Failure signatures:
-
-- **Stops before `OLED begun`**, or the OLED stays blank: I²C bus or display wiring; nothing after it will work.
-- **Built-in LED blinking at 2 Hz after the UCF line**: the MLC program failed to load (`Error loading the Program to LSM6DSOX at line: N`). The firmware halts here by design.
-- **`Failed to find sensor`**: the ToF is absent or miswired. The firmware carries on without it.
-- **`Point impossible to reach: (x,y,z) leg: N`**: an IK target beyond 340 mm or non-finite. The leg keeps its last position; reported once per rejection.
-- **Legs twitch or go to the wrong angles**: check the channel map and offsets in `spooder-leg-kinematics` before touching code.
-
-## 4. Movement checks (serial hook)
-
-Until the gamepad drives movement, build with the serial hook and send single characters from `mise run monitor`:
+## Build and flash
 
 ```sh
-PLATFORMIO_BUILD_FLAGS=-DSPOODER_SERIAL_COMMANDS mise run upload
+# power_limits.h must exist (copy power_limits.example.h and set the limits for the fitted servos and supply)
+mise run build
+# put the board in BOOTSEL: hold BOOT/USER, tap RESET; the RPI-RP2 drive must be mounted
+mise run upload
+mise run monitor          # USB serial; Ctrl+C to exit
 ```
 
-| Key | Command | Expect |
-|---|---|---|
-| `w` / `r` / `x` | walk forward / rotate / walk with no input | legs cycle in the current gait; `x` holds still |
-| `g` | next gait (Tri, Wave, Ripple, Bi, Quad, Hop) | legs re-phase and keep walking |
-| `f` | toggle fixed stride | stride length no longer depends on input |
-| `+` / `-` | body height ±10 | body rises / lowers smoothly |
-| `s` | stand | walking legs return three at a time |
-| `z` | sleep | legs fold, then go limp (outputs off) |
-| `c` | calibrate | low legs rise, then all go to (224,0,116) |
+- If `upload` reports no RPI-RP2 drive, mount it first. The task looks it up with `findmnt` by its label.
+- The console takes a second or two to re-enumerate after a reset.
 
-With the hook, a command older than 1 s never occurs (it is re-stamped every tick), so stale-command Sleep is only exercised by the host tests.
+## What the board shows
 
-Measurements worth recording: one servo pulse at a known angle on a scope or logic analyser (500 µs at 0°, 2500 µs at 180°, ±2 %, 20 ms frame), and the loop period (toggle a pin or print `millis()` deltas temporarily).
+**Serial (USB):**
+- once per second: `supply <A> A (avg <A> A), <V> V; output on|off; mode <n>; faults 0x..`;
+- `supply accepted: starting movement` when protection first allows output;
+- `fault latched: <name> (<A> A, <V> V)` once per fault;
+- `point impossible to reach: (...) leg n` once per rejection.
 
-## 5. Per-subsystem checks
+**LEDs:**
 
-- **Gamepad**: put the controller into pairing mode. Expect `CALLBACK: Controller is connected, index=0`, the blue RGB LED on and `Gamepad found!` on the OLED. Buttons light red/green and log their letter. The labels are swapped for 8BitDo pads (see the comments in `processGamepad`).
-- **ToF**: move a hand under the sensor. `Range: N` lines appear on the OLED only when the value changes.
-- **IMU / MLC**: move or shake the board. `Activity: …` lines appear on interrupt.
-- **Display idle**: 50 s without a log line, the logo replaces the log (`IDLE_LOGO_MS`).
+| Pattern | Meaning |
+|---|---|
+| Pulsing amber | Waiting for a valid supply (USB only, supply off, or settling) |
+| Green, *n* LEDs lit | Healthy; *n* = mode + 1 (1 Initialise, 2 Stand, 3 Walk, 4 Sleep, 5 Calibrate) |
+| White ↔ red | Overcurrent |
+| Magenta ↔ red | Brown-out |
+| Blue ↔ red | Overvoltage |
+| Orange ↔ red | Sustained current |
+| Yellow ↔ red | Undervoltage |
 
-## 6. Report
+**Serial keys:**
 
-State what was flashed (commit or "working tree"), which checks were observed and their result, and anything not checked. Quote the relevant serial lines rather than paraphrasing them. If the user ran the steps, ask them for the serial output instead of assuming the outcome.
+| Key | Action |
+|---|---|
+| `s` | Stand |
+| `w` | Walk forward |
+| `r` | Walk rotating |
+| `x` | Walk with no input |
+| `g` | Next gait |
+| `f` | Toggle fixed stride |
+| `z` | Sleep |
+| `c` | Calibrate |
+| `+` / `-` | Raise or lower body height |
+| `!` | Clear faults |
+| `p` | Print readings now |
+
+## Staged bring-up
+
+Stop at the first stage that misbehaves.
+
+1. **USB only, no servo supply.**
+   - Expect pulsing amber, output off, and a voltage near 0 V with current near 0 A.
+   - Expect no faults: an absent supply isn't a fault.
+2. **Bench supply, no servos, current-limited.**
+   - Raise it into the configured voltage window.
+   - Within 500 ms, expect `supply accepted`, and the LEDs turn green.
+   - Check the reported voltage against a meter (±2 %).
+3. **Overvoltage and undervoltage.**
+   - With no servos: raise the supply above `SPOODER_MAX_V`. Expect an overvoltage fault immediately, with output off. Restore, then `!` clears it.
+   - Lower it below `SPOODER_MIN_V` for longer than the debounce time. Expect an undervoltage fault and Sleep.
+4. **One servo, on output 1.**
+   - Check a 1500 µs pulse on a scope or logic analyser: ±2 %, 20 ms period.
+   - Unpowered outputs show no pulse.
+5. **Overcurrent.**
+   - Stall the servo by hand, briefly, or set the bench limit to just above the trip current.
+   - Expect output off within 20 ms, and the overcurrent LEDs.
+   - Clear with `!` once the current is normal. Output returns only after 500 ms of valid supply.
+6. **One leg, then all 18,** with the robot on a stand, feet off the ground.
+   - Boot runs Initialise, then Stand.
+   - Then `w`, `g`, `r`, `z` (legs fold, then go limp), `s` (wakes through Stand) and `c`.
+7. **Geometry and calibration.**
+   - Measure the new frame's link lengths, and compare them with `kinematics::COXA/FEMUR/TIBIA_LENGTH`.
+   - Recalibrate `LEG_OFFSETS` per the `spooder-leg-kinematics` skill.
+
+## Report
+
+- State what was flashed: the commit or "working tree", plus the limits file.
+- List each stage and its result, and anything not checked.
+- Quote serial lines rather than paraphrasing them.
+- If the user did the steps, ask for their output rather than assuming it.

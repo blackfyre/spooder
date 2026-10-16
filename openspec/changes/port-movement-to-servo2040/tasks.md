@@ -47,4 +47,4 @@
   - one servo, then one leg, measuring a 1500 µs pulse on a scope (±2 %, 20 ms frame);
   - the bench supply's current limit lowered below the trip value: overcurrent latches and clears;
   - all 18 servos with the robot on a stand: boot, Stand, Walk, Sleep via the serial hook.
-- [ ] 4.3 Rewrite `CLAUDE.md` (platform, toolchain, commands, layout), `spooder-firmware-shape` (Servo 2040 layout, core 0 loop, J6 pin allocation, protection layer) and `spooder-hardware-check` (Servo 2040 flashing, bring-up order, wiring and power notes from design D9). Update `spooder-leg-kinematics` (servo mapping and output adapter). Verify that every symbol and path the docs mention exists (`grep`).
+- [x] 4.3 Rewrite `CLAUDE.md` (platform, toolchain, commands, layout), `spooder-firmware-shape` (Servo 2040 layout, core 0 loop, J6 pin allocation, protection layer) and `spooder-hardware-check` (Servo 2040 flashing, bring-up order, wiring and power notes from design D9). Update `spooder-leg-kinematics` (servo mapping and output adapter). Verify that every symbol and path the docs mention exists (`grep`).
