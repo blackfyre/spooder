@@ -59,7 +59,8 @@ offset size field
 5+N    2    CRC-16/CCITT-FALSE over bytes 1..4+N
 ```
 
-- **Command payload** (12 bytes): mode u8, translate x i8, translate y i8, rotate i8, height u8, speed u8, gait u8, stride u8, flags u8 (bit0 controller connected, bit1 emergency stop), clear counter u8, and 2 reserved bytes.
+- **Command payload** (12 bytes): mode u8, translate x i8, translate y i8, rotate i8, height u8, speed u8, gait u8, stride u8, flags u8 (bit0 controller connected, bit1 emergency stop), clear counter u8, mode-request counter u8, and 1 reserved byte.
+- **Mode-request counter:** the bridge increments it on every mode toggle or combination (Stand/Walk, Sleep, Calibrate). The robot feeds it to `protection::resumeGate` (added in `port-movement-to-servo2040`), so that after a fault the body stays asleep until the operator makes a new request. Clearing the fault alone never restarts motion, even though every frame repeats the desired mode.
 - **Telemetry payload** (fixed, about 32 bytes):
   - body mode u8, gait u8, outputs on u8, fault bitmask u16;
   - voltage mV u16, current mA u16;

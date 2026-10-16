@@ -88,13 +88,15 @@ test/                    Unity host tests (PlatformIO native env)
 
 ```
 reading   = power_monitor::read()          // averaged mux samples
-prot      = protection::step(...)
-cmd       = input command (serial, later bridge)
-if prot.forceSleep: cmd.mode = Sleep        // movement still owns transitions
-movementTick(now, cmd)                      // body may want outputs on/off
+prot      = protection::step(..., clearFromPreviousTick)   // first: nothing delays a trip
 servo_output.setInhibited(!prot.allowOutput)
-servo_output.apply(body state)              // honours inhibit
+input     = command source, bounded per tick (serial, later bridge)
+cmd.mode  = resumeGate(newlyLatched, forceSleep, input.mode, input.requestSeq)
+body::step(now, cmd)                       // movement still owns transitions
+servo_output.apply(body state)             // honours inhibit
 ```
+
+- **Resume gate** (`core/protection/resume_gate`): after any fault latches, the body stays asleep, even once the fault is cleared, until the input source reports a new explicit mode request. Each source counts these in `requestSeq`. A source that keeps repeating its last request (the serial hook's held mode, or the bridge's desired-state frames) therefore cannot restart motion through a clear alone.
 
 - **Body start:** `main` starts the body (`body::init` and the first step) only when protection first allows output. Otherwise Initialise and most of the Stand transition would run while output is still held off, and the legs would snap to a mid-transition pose when output first comes on.
 - This keeps the locomotion rule that movement alone changes body mode: protection only rewrites the request. It also keeps output cut-off independent of movement.

@@ -4,6 +4,7 @@
 #include "config.h"
 #include "movement/body.h"
 #include "protection/protection.h"
+#include "protection/resume_gate.h"
 #include "power_monitor.h"
 #include "serial_commands.h"
 #include "servo_output.h"
@@ -16,6 +17,7 @@ constexpr uint32_t REPORT_PERIOD_MS = 1000;
 
 static body::BodyState bodyState;
 static protection::State protectionState;
+static protection::ResumeGate resumeGate;
 
 static const char *faultName(uint16_t fault)
 {
@@ -87,6 +89,7 @@ int main()
   // The body starts only once protection first allows output, so Initialise
   // runs with the servos live instead of while output is still held off.
   bool bodyStarted = false;
+  bool clearRequested = false; // from the previous tick's input
   uint32_t lastReportMs = 0;
   absolute_time_t next = get_absolute_time();
 
@@ -94,13 +97,22 @@ int main()
   {
     uint32_t now = nowMs();
 
+    // Protection first, so nothing else in the tick can delay a trip.
     protection::Reading reading = power_monitor::read();
-    serial_commands::Input input = serial_commands::poll(now);
-    protection::Result prot = protection::step(protectionState, reading, now, input.clearFaults);
+    protection::Result prot = protection::step(protectionState, reading, now, clearRequested);
+    servo_output::setInhibited(!prot.allowOutput);
     if (prot.newlyLatched)
       reportFaults(prot.newlyLatched, reading);
 
-    servo_output::setInhibited(!prot.allowOutput);
+    serial_commands::Input input = serial_commands::poll(now); // bounded
+    clearRequested = input.clearFaults;
+
+    // Protection only rewrites the request; movement still owns transitions.
+    // After a fault the body stays asleep until a new request is made. The gate
+    // sees every latch, including ones before the body has started.
+    MovementCommand cmd = input.command;
+    cmd.mode = protection::resumeGate(resumeGate, prot.newlyLatched != 0, prot.forceSleep, cmd.mode,
+                                      input.requestSeq);
 
     if (!bodyStarted && prot.allowOutput)
     {
@@ -111,10 +123,6 @@ int main()
 
     if (bodyStarted)
     {
-      // Protection only rewrites the request; movement still owns transitions.
-      MovementCommand cmd = input.command;
-      if (prot.forceSleep)
-        cmd.mode = RequestedMode::Sleep;
       body::step(bodyState, cmd, now);
       reportRejections();
       servo_output::apply(bodyState);

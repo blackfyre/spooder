@@ -9,15 +9,19 @@
 namespace serial_commands
 {
 
+constexpr int MAX_CHARS_PER_POLL = 4;
+
 struct Input
 {
   MovementCommand command; // stamped with the time it was read
+  uint32_t requestSeq;     // incremented on every mode key (s w r x z c)
   bool clearFaults;        // '!' pressed since the last poll
   bool printReadings;      // 'p' pressed since the last poll
 };
 
 /**
- * @brief Reads pending characters without blocking.
+ * @brief Reads at most MAX_CHARS_PER_POLL pending characters without blocking,
+ * so a flood of input cannot hold up the control loop.
  *
  *   s  stand            w  walk forward      r  walk rotating
  *   x  walk, no input   g  next gait         f  toggle fixed stride

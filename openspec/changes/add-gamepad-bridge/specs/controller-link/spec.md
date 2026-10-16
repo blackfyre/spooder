@@ -18,7 +18,7 @@ Every frame on the link SHALL carry a start marker, a protocol version, a frame 
 - **THEN** both valid frames are accepted
 
 ### Requirement: Command frames
-The bridge SHALL send a command frame at least every 20 ms while it runs. Each frame SHALL carry the complete desired state: requested mode, translate vector, rotate amount, body height, speed, gait, stride mode, whether a controller is connected, the emergency-stop state and a fault-clear counter. It SHALL carry no events. The robot SHALL apply only the newest valid frame, and SHALL stamp it with its own arrival time as the command's issue time.
+The bridge SHALL send a command frame at least every 20 ms while it runs. Each frame SHALL carry the complete desired state: requested mode, translate vector, rotate amount, body height, speed, gait, stride mode, whether a controller is connected, the emergency-stop state, a fault-clear counter and a mode-request counter that the bridge increments on every explicit mode request. It SHALL carry no events. The robot SHALL apply only the newest valid frame, and SHALL stamp it with its own arrival time as the command's issue time.
 
 #### Scenario: Lost frame loses nothing
 - **WHEN** one command frame is lost and the next arrives
@@ -38,6 +38,17 @@ A fault-clear request SHALL be signalled by the bridge incrementing the fault-cl
 #### Scenario: Counter increments
 - **WHEN** a frame arrives with a counter value one higher than the last one seen
 - **THEN** exactly one clear request is issued
+
+### Requirement: Resuming after a fault
+After a fault is cleared, the robot SHALL keep the body asleep until a command frame arrives with a mode-request counter different from the one in effect when the fault latched. A frame that only repeats the previous desired mode SHALL NOT restart motion.
+
+#### Scenario: Clear while the bridge still requests Walk
+- **WHEN** a fault latched while walking is cleared, and the bridge keeps sending Walk with an unchanged mode-request counter
+- **THEN** the body stays asleep
+
+#### Scenario: New request after clearing
+- **WHEN** the operator toggles the mode after clearing, so the mode-request counter changes
+- **THEN** the body wakes through Stand and follows the new request
 
 ### Requirement: Emergency stop
 When a command frame signals emergency stop, the robot SHALL inhibit servo output within one 20 ms period and latch an emergency-stop fault. The fault SHALL clear only through a fault-clear request while emergency stop is no longer signalled.

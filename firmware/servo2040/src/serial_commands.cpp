@@ -8,6 +8,7 @@ namespace serial_commands
 {
 
 static MovementCommand current;
+static uint32_t requestSeq = 0;
 
 static void report(const char *what)
 {
@@ -20,9 +21,24 @@ Input poll(uint32_t nowMs)
   in.clearFaults = false;
   in.printReadings = false;
 
-  int c;
-  while ((c = getchar_timeout_us(0)) != PICO_ERROR_TIMEOUT)
+  for (int n = 0; n < MAX_CHARS_PER_POLL; n++)
   {
+    int c = getchar_timeout_us(0);
+    if (c == PICO_ERROR_TIMEOUT)
+      break;
+    switch (c)
+    {
+    case 's':
+    case 'w':
+    case 'r':
+    case 'x':
+    case 'z':
+    case 'c':
+      requestSeq++; // an explicit mode request
+      break;
+    default:
+      break;
+    }
     switch (c)
     {
     case 's':
@@ -86,6 +102,7 @@ Input poll(uint32_t nowMs)
   }
   current.issuedAtMs = nowMs;
   in.command = current;
+  in.requestSeq = requestSeq;
   return in;
 }
 
