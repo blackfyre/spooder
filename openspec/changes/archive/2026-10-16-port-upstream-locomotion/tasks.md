@@ -27,5 +27,5 @@
 ## 4. Verification
 
 - [x] 4.1 Run `mise run build` and `mise run test`; verify both pass with no new warnings in `src/`
-- [ ] 4.2 Hardware check per `spooder-hardware-check`, with the robot on a stand (requires the user at the robot): boot runs Initialise then Stand without stalling the OLED; loop period and one servo pulse width measured (2450–2550 µs at 2500 µs requested); serial hook exercises Walk, gait change, Sleep (servos go limp) and wake, Calibrate; record results in the change
+- [ ] 4.2 (Superseded, not performed: the Nano RP2040 Connect/PCA9685 robot was dismantled before a hardware check was possible; on-board verification moves to the Servo 2040 port.) Hardware check per `spooder-hardware-check`, with the robot on a stand (requires the user at the robot): boot runs Initialise then Stand without stalling the OLED; loop period and one servo pulse width measured (2450–2550 µs at 2500 µs requested); serial hook exercises Walk, gait change, Sleep (servos go limp) and wake, Calibrate; record results in the change
 - [x] 4.3 Update `.claude/skills/spooder-leg-kinematics` and `spooder-firmware-shape` to the new module layout, API and rates; verify the skills reference only symbols that exist (`grep`)
