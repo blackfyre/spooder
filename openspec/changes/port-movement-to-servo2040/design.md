@@ -96,6 +96,7 @@ servo_output.setInhibited(!prot.allowOutput)
 servo_output.apply(body state)              // honours inhibit
 ```
 
+- **Body start:** `main` starts the body (`body::init` and the first step) only when protection first allows output. Otherwise Initialise and most of the Stand transition would run while output is still held off, and the legs would snap to a mid-transition pose when output first comes on.
 - This keeps the locomotion rule that movement alone changes body mode: protection only rewrites the request. It also keeps output cut-off independent of movement.
 
 ### D5. Measurement

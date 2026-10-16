@@ -16,6 +16,16 @@ constexpr float TIBIA_LENGTH = 183;
 constexpr float LEG_REACH = COXA_LENGTH + FEMUR_LENGTH + TIBIA_LENGTH;
 
 constexpr int LEG_COUNT = 6;
+constexpr int JOINTS_PER_LEG = 3; // coxa, femur, tibia
+
+/**
+ * @brief Servo output (0-based; output 1 on the board is index 0) driving a
+ * joint: legs in order, coxa, femur, tibia within each leg.
+ */
+constexpr int servoOutputIndex(int leg, int joint)
+{
+  return leg * JOINTS_PER_LEG + joint;
+}
 
 // Per-leg calibration offsets in degrees (coxa, femur, tibia), indexed by leg.
 // Inherited from upstream Aecert's Hexapod V1; not yet measured on this robot.

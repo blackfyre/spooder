@@ -57,6 +57,14 @@ void test_angle_to_microseconds_range_and_clamp()
   TEST_ASSERT_EQUAL_UINT16(2500, angleToMicroseconds(200));
 }
 
+void test_servo_output_mapping()
+{
+  // Spec scenario: leg 5's femur is servo output 14 (GPIO13).
+  TEST_ASSERT_EQUAL_INT(13, servoOutputIndex(4, 1));
+  TEST_ASSERT_EQUAL_INT(0, servoOutputIndex(0, 0));
+  TEST_ASSERT_EQUAL_INT(17, servoOutputIndex(5, 2));
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -66,5 +74,6 @@ int main()
   RUN_TEST(test_target_at_reach_is_accepted);
   RUN_TEST(test_nan_target_is_rejected);
   RUN_TEST(test_angle_to_microseconds_range_and_clamp);
+  RUN_TEST(test_servo_output_mapping);
   return UNITY_END();
 }

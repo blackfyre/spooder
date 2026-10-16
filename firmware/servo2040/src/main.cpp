@@ -1,36 +1,137 @@
 #include <cstdio>
 #include "pico/stdlib.h"
-#include "servo2040.hpp"
+
+#include "config.h"
 #include "movement/body.h"
+#include "protection/protection.h"
+#include "power_monitor.h"
+#include "serial_commands.h"
+#include "servo_output.h"
+#include "status_leds.h"
 
-using namespace plasma;
-using namespace servo;
+// Control loop period. Movement advances by elapsed time, so this is a target,
+// not a hard deadline.
+constexpr uint32_t LOOP_PERIOD_MS = 20;
+constexpr uint32_t REPORT_PERIOD_MS = 1000;
 
-// Six on-board RGB LEDs on PIO 1, state machine 0 (PIO 0 is reserved for the servos).
-static WS2812 leds(servo2040::NUM_LEDS, pio1, 0, servo2040::LED_DATA);
+static body::BodyState bodyState;
+static protection::State protectionState;
+
+static const char *faultName(uint16_t fault)
+{
+  switch (fault)
+  {
+  case protection::OVERCURRENT:
+    return "overcurrent";
+  case protection::SUSTAINED_CURRENT:
+    return "sustained current";
+  case protection::UNDERVOLTAGE:
+    return "undervoltage";
+  case protection::BROWNOUT:
+    return "brown-out";
+  case protection::OVERVOLTAGE:
+    return "overvoltage";
+  default:
+    return "unknown";
+  }
+}
+
+static void reportFaults(uint16_t faults, const protection::Reading &r)
+{
+  for (uint16_t bit = 1; bit != 0; bit <<= 1)
+    if (faults & bit)
+      printf("fault latched: %s (%.2f A, %.2f V)\n", faultName(bit), r.currentA, r.voltageV);
+}
+
+static void reportStatus(const protection::Reading &r, const protection::Result &p, bool outputsOn)
+{
+  printf("supply %.2f A (avg %.2f A), %.2f V%s; output %s; mode %d; faults 0x%02x\n", r.currentA,
+         p.averageCurrentA, r.voltageV, p.supplyValid ? "" : " (out of range or absent)",
+         outputsOn ? "on" : "off", (int)bodyState.mode, p.faults);
+}
+
+static void reportRejections()
+{
+  for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
+  {
+    if (!bodyState.newlyRejected[leg])
+      continue;
+    const Vector3 &t = bodyState.rejectedTarget[leg];
+    printf("point impossible to reach: (%.1f, %.1f, %.1f) leg %d\n", t.x, t.y, t.z, leg);
+  }
+}
+
+static uint32_t nowMs()
+{
+  return to_ms_since_boot(get_absolute_time());
+}
 
 int main()
 {
   stdio_init_all();
-  leds.start();
+  status_leds::setup();
+  power_monitor::setup();
+  protection::init(protectionState, config::POWER_LIMITS);
 
-  // Exercise the movement core so it is linked and measured on the target.
-  static body::BodyState state;
-  body::init(state);
-  MovementCommand cmd;
+  if (!servo_output::setup())
+  {
+    // Without the servo cluster nothing may move; report and stay here.
+    while (true)
+    {
+      printf("servo output failed to initialise\n");
+      status_leds::show(nowMs(), true, 0xFFFF, body::Mode::Initialise);
+      sleep_ms(REPORT_PERIOD_MS);
+    }
+  }
 
-  bool on = false;
+  // The body starts only once protection first allows output, so Initialise
+  // runs with the servos live instead of while output is still held off.
+  bool bodyStarted = false;
+  uint32_t lastReportMs = 0;
+  absolute_time_t next = get_absolute_time();
+
   while (true)
   {
-    on = !on;
-    for (uint i = 0; i < servo2040::NUM_LEDS; i++)
-      leds.set_rgb(i, 0, on ? 32 : 0, 0);
-    uint32_t now = to_ms_since_boot(get_absolute_time());
-    cmd.issuedAtMs = now;
-    uint64_t t0 = time_us_64();
-    body::step(state, cmd, now);
-    uint32_t stepUs = (uint32_t)(time_us_64() - t0);
-    printf("spooder: alive, mode %d, step %lu us\n", (int)state.mode, (unsigned long)stepUs);
-    sleep_ms(500);
+    uint32_t now = nowMs();
+
+    protection::Reading reading = power_monitor::read();
+    serial_commands::Input input = serial_commands::poll(now);
+    protection::Result prot = protection::step(protectionState, reading, now, input.clearFaults);
+    if (prot.newlyLatched)
+      reportFaults(prot.newlyLatched, reading);
+
+    servo_output::setInhibited(!prot.allowOutput);
+
+    if (!bodyStarted && prot.allowOutput)
+    {
+      body::init(bodyState);
+      bodyStarted = true;
+      printf("supply accepted: starting movement\n");
+    }
+
+    if (bodyStarted)
+    {
+      // Protection only rewrites the request; movement still owns transitions.
+      MovementCommand cmd = input.command;
+      if (prot.forceSleep)
+        cmd.mode = RequestedMode::Sleep;
+      body::step(bodyState, cmd, now);
+      reportRejections();
+      servo_output::apply(bodyState);
+    }
+
+    status_leds::show(now, prot.allowOutput, prot.faults, bodyState.mode);
+
+    if (input.printReadings || now - lastReportMs >= REPORT_PERIOD_MS)
+    {
+      reportStatus(reading, prot, servo_output::outputsOn());
+      lastReportMs = now;
+    }
+
+    next = delayed_by_ms(next, LOOP_PERIOD_MS);
+    if (absolute_time_diff_us(get_absolute_time(), next) > 0)
+      sleep_until(next);
+    else
+      next = get_absolute_time(); // overran: start the next period now
   }
 }

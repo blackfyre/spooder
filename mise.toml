@@ -21,7 +21,7 @@ run = [
 [tasks.build]
 description = "Build the Servo 2040 firmware (.uf2 in build/servo2040)"
 run = [
-  "cmake -S firmware/servo2040 -B build/servo2040 -G Ninja -DCMAKE_BUILD_TYPE=Release",
+  "cmake -S firmware/servo2040 -B build/servo2040 -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPOODER_POWER_LIMITS=${SPOODER_POWER_LIMITS:-$PWD/firmware/servo2040/src/power_limits.h}",
   "cmake --build build/servo2040",
 ]
 

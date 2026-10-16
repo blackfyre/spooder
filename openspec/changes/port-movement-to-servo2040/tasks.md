@@ -20,18 +20,18 @@
 
 ## 3. Servo 2040 integration
 
-- [ ] 3.1 Add `firmware/servo2040/src/config.h` with `#error` unless the power limits are defined, plus `config.example.h` holding the design's starting values for a 6.0 V supply. Verify that the build fails without a config and succeeds with the example copied in.
-- [ ] 3.2 Implement `servo_output` over `ServoCluster(pio0, 0, SERVO_1, 18)`:
+- [x] 3.1 Add `firmware/servo2040/src/config.h` with `#error` unless the power limits are defined, plus `config.example.h` holding the design's starting values for a 6.0 V supply. Verify that the build fails without a config and succeeds with the example copied in.
+- [x] 3.2 Implement `servo_output` over `ServoCluster(pio0, 0, SERVO_1, 18)`:
   - batched `pulse(..., false)` plus a single `load()` per step;
   - output index = 3·leg + joint;
   - `enable_all`/`disable_all`;
   - an `inhibited` flag that blocks the implicit wake.
   
   Verify the build, and that the mapping unit (index function) is host-tested against the spec's leg 5 femur → output 14 scenario.
-- [ ] 3.3 Implement `power_monitor` with `AnalogMux` and `Analog` (current at address 7, voltage at address 6, 8 samples each per tick). Verify the build. On hardware with USB only, the reported voltage must be near 0 V and the current near 0 A (recorded in 4.2).
-- [ ] 3.4 Implement `status_leds` (WS2812 on GPIO18, pio1) for the waiting, healthy and per-fault indications, at ≤10 Hz. Verify that the build succeeds and that the fault-to-colour table is defined as constants.
-- [ ] 3.5 Port `serial_commands` to pico stdio (non-blocking), with the existing keys plus `!` (clear faults) and `p` (print readings). Verify the build. A host test of the key-to-command mapping must pass if the mapping is split into `core/`.
-- [ ] 3.6 Write `main`:
+- [x] 3.3 Implement `power_monitor` with `AnalogMux` and `Analog` (current at address 7, voltage at address 6, 8 samples each per tick). Verify the build. On hardware with USB only, the reported voltage must be near 0 V and the current near 0 A (recorded in 4.2).
+- [x] 3.4 Implement `status_leds` (WS2812 on GPIO18, pio1) for the waiting, healthy and per-fault indications, at ≤10 Hz. Verify that the build succeeds and that the fault-to-colour table is defined as constants.
+- [x] 3.5 Port `serial_commands` to pico stdio (non-blocking), with the existing keys plus `!` (clear faults) and `p` (print readings). Verify the build. A host test of the key-to-command mapping must pass if the mapping is split into `core/`.
+- [x] 3.6 Write `main`:
   - set up the cluster, monitor and LEDs on core 0;
   - run a 20 ms period loop doing read → protection → command override → `movementTick` → inhibit → `servo_output.apply`;
   - report readings and any latched fault once per second, and each fault once when it latches.
