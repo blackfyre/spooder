@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <mbed.h>
 #include "logo.h"
 #include "display.h"
 #include "../globals/wiring.h"
@@ -7,11 +8,17 @@
 // keep both at the shared bus speed (400 kHz) instead of the 100 kHz default.
 Adafruit_SH1107 display = Adafruit_SH1107(SCREEN_HEIGHT, SCREEN_WIDTH, globalWire, -1, 400000, 400000);
 
-char logBuffer[BUFFER_SIZE][80];
-int logIndex = 0;
-// Set by addToLogBuffer, which is also called from the gamepad loop.
-volatile bool logChanged = true;
-volatile uint32_t lastLogMs = 0;
+#define LOG_LINE_LENGTH 80
+#define VISIBLE_LINES (SCREEN_HEIGHT / 8)
+
+// The log is written from both loops (gamepad callbacks run in loop2), so the
+// buffer, index, change flag and timestamp are only touched under logMutex.
+static rtos::Mutex logMutex;
+static char logBuffer[BUFFER_SIZE][LOG_LINE_LENGTH];
+static int logIndex = 0;
+static bool logChanged = true;
+static uint32_t lastLogMs = 0;
+
 uint32_t lastRedrawMs = 0;
 bool showingLogo = false;
 
@@ -21,13 +28,13 @@ bool showingLogo = false;
  * @param message The message to be added.
  */
 void addToLogBuffer(const char* message) {
+  logMutex.lock();
   strncpy(logBuffer[logIndex], message, sizeof(logBuffer[logIndex]) - 1);
   logBuffer[logIndex][sizeof(logBuffer[logIndex]) - 1] = '\0';  // Ensure null-termination
   logIndex = (logIndex + 1) % BUFFER_SIZE;
-  // Publish after the buffer is updated, so a redraw that clears the flag
-  // cannot miss this message.
   lastLogMs = millis();
   logChanged = true;
+  logMutex.unlock();
 }
 
 /**
@@ -62,23 +69,14 @@ void setupDisplay() {
 }
 
 /**
- * Displays log messages on the screen.
+ * Draws a snapshot of the most recent log lines, newest first.
  */
-void displayLogMessages() {
+void displayLogMessages(const char lines[VISIBLE_LINES][LOG_LINE_LENGTH]) {
   display.clearDisplay();
 
-  int currentLine = 0;
-  int offset = 0;  // Adjust the offset to control how many lines to skip for the display
-
-  for (int i = 0; i < SCREEN_HEIGHT / 8; ++i) {
-    int bufferIndex = (logIndex - 1 - offset + BUFFER_SIZE) % BUFFER_SIZE;
-
-    int yOffset = currentLine * 8;  // Assuming 8 pixels per line
-    display.setCursor(0, yOffset);
-    display.print(logBuffer[bufferIndex]);
-
-    currentLine = (currentLine + 1) % (SCREEN_HEIGHT / 8);
-    offset = (offset + 1) % BUFFER_SIZE;  // Increase the offset for the next line
+  for (int i = 0; i < VISIBLE_LINES; ++i) {
+    display.setCursor(0, i * 8);  // 8 pixels per line
+    display.print(lines[i]);
   }
 
   display.display();
@@ -109,7 +107,24 @@ void loopDisplay() {
   if (now - lastRedrawMs < MIN_REDRAW_INTERVAL_MS)
     return;
 
+  // Take what we need under the lock, then draw without holding it: a frame
+  // is ~25 ms of I2C and the gamepad thread must not wait on it.
+  char lines[VISIBLE_LINES][LOG_LINE_LENGTH];
+  logMutex.lock();
+  // Sample under the lock: a message logged after the earlier read would
+  // otherwise be newer than `now` and wrap the idle check.
+  now = millis();
   bool idle = now - lastLogMs >= IDLE_LOGO_MS;
+  bool redrawLog = !idle && (logChanged || showingLogo);
+  if (redrawLog) {
+    logChanged = false;
+    for (int i = 0; i < VISIBLE_LINES; ++i) {
+      int bufferIndex = (logIndex - 1 - i + BUFFER_SIZE * 2) % BUFFER_SIZE;
+      memcpy(lines[i], logBuffer[bufferIndex], LOG_LINE_LENGTH);
+    }
+  }
+  logMutex.unlock();
+
   if (idle) {
     if (!showingLogo) {
       displayLogo();
@@ -119,10 +134,9 @@ void loopDisplay() {
     return;
   }
 
-  if (logChanged || showingLogo) {
-    logChanged = false;
+  if (redrawLog) {
     showingLogo = false;
-    displayLogMessages();
+    displayLogMessages(lines);
     lastRedrawMs = now;
   }
 }

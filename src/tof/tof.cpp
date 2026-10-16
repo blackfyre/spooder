@@ -6,6 +6,8 @@ Adafruit_VL6180X vl = Adafruit_VL6180X();
 
 uint8_t lastRangeFromGround = 0;
 bool tofSensorAvailable = false;
+// false after a failed reading, so the next valid range is always logged.
+static bool haveRange = false;
 
 
 /**
@@ -38,7 +40,7 @@ void loopTOF() {
     uint8_t status = vl.readRangeStatus();
 
     if (status == VL6180X_ERROR_NONE) {
-      if (range == lastRangeFromGround) {
+      if (haveRange && range == lastRangeFromGround) {
 
       } else {
 
@@ -49,9 +51,10 @@ void loopTOF() {
         addToLogBuffer(rangeString.c_str());        
 
         lastRangeFromGround = range;
+        haveRange = true;
       }
     } else {
-      lastRangeFromGround = static_cast<uint8_t>(999);
+      haveRange = false;
     }
 
 
