@@ -78,6 +78,24 @@ void test_request_during_settling_restarts_once_allowed()
   TEST_ASSERT_TRUE(d.mode == RequestedMode::Stand);
 }
 
+void test_sleep_request_does_not_restart_stopped_body()
+{
+  supervise(sv, HEALTHY, RequestedMode::Walk, 0);
+  supervise(sv, result(false, OVERCURRENT, OVERCURRENT), RequestedMode::Walk, 0);
+  supervise(sv, SETTLING, RequestedMode::Walk, 0);
+  // Cleared and settled; the operator presses Sleep: a new request, but Sleep.
+  for (int i = 0; i < 5; i++)
+    TEST_ASSERT_FALSE(supervise(sv, HEALTHY, RequestedMode::Sleep, 1).runBody);
+  // A later request to move does restart it.
+  TEST_ASSERT_TRUE(supervise(sv, HEALTHY, RequestedMode::Stand, 2).startBody);
+}
+
+void test_sleep_at_boot_does_not_start_body()
+{
+  TEST_ASSERT_FALSE(supervise(sv, HEALTHY, RequestedMode::Sleep, 0).runBody);
+  TEST_ASSERT_TRUE(supervise(sv, HEALTHY, RequestedMode::Stand, 1).startBody);
+}
+
 void test_sleep_only_fault_keeps_body_running_asleep()
 {
   supervise(sv, HEALTHY, RequestedMode::Walk, 0);
@@ -100,6 +118,8 @@ int main()
   RUN_TEST(test_inhibiting_fault_stops_the_body);
   RUN_TEST(test_clear_alone_does_not_restart);
   RUN_TEST(test_request_during_settling_restarts_once_allowed);
+  RUN_TEST(test_sleep_request_does_not_restart_stopped_body);
+  RUN_TEST(test_sleep_at_boot_does_not_start_body);
   RUN_TEST(test_sleep_only_fault_keeps_body_running_asleep);
   return UNITY_END();
 }

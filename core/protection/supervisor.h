@@ -6,8 +6,9 @@
 //
 // - A fault that inhibits output stops the body. Recovery is a restart through
 //   the boot sequence (Initialise, then Stand), exactly like power-up.
-// - The body (re)starts only when output is allowed and no fault is waiting
-//   for a new operator request (see resume_gate).
+// - The body (re)starts only when output is allowed, no fault is waiting for a
+//   new operator request (see resume_gate), and the request is not Sleep:
+//   starting drives the servos, so Sleep must never start a stopped body.
 // - Faults that only force Sleep keep the body running; it folds and wakes
 //   through the normal Sleep path once a new request arrives.
 // Hardware-free: compiled for the board and for host tests.

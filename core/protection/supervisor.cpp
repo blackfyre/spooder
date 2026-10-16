@@ -15,7 +15,9 @@ Decision supervise(Supervisor &sv, const Result &prot, RequestedMode requested, 
     sv.bodyRunning = false;
     d.stopBody = true;
   }
-  if (!sv.bodyRunning && prot.allowOutput && !sv.gate.waiting)
+  // Starting the body drives the servos (Initialise), so only a request to
+  // move may start it: a Sleep request leaves a stopped body stopped.
+  if (!sv.bodyRunning && prot.allowOutput && !sv.gate.waiting && d.mode != RequestedMode::Sleep)
   {
     sv.bodyRunning = true;
     d.startBody = true;
