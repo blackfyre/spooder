@@ -40,7 +40,7 @@
 
 ## 4. Verification and documentation
 
-- [ ] 4.1 Run `mise run test` and `mise run build` from a clean checkout (`git submodule update --init --recursive`). Verify both pass.
+- [x] 4.1 Run `mise run test` and `mise run build` from a clean checkout (`git submodule update --init --recursive`). Verify both pass.
 - [ ] 4.2 Hardware bring-up per the rewritten `spooder-hardware-check` (requires the user at the hardware), recording results in this change:
   - USB only: output off, absent supply reported;
   - a current-limited bench supply with no servos: supply accepted after 500 ms, healthy LEDs;
