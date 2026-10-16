@@ -239,8 +239,22 @@ void test_rotate_only_walk_is_finite()
   bootToStand();
   MovementCommand c = command(RequestedMode::Walk);
   c.rotate = 70;
-  run(c, 3000);
+  run(c, 20);
+  TEST_ASSERT_TRUE(s.mode == Mode::Walk);
+  // Recorded feet stay finite even when targets are rejected, so also check
+  // that every generated target was accepted and the legs actually moved.
+  Vector3 start = s.feet[0];
+  for (int i = 0; i < 150; i++)
+  {
+    run(c, 20);
+    for (int leg = 0; leg < LEG_COUNT; leg++)
+    {
+      TEST_ASSERT_FALSE(s.rejected[leg]);
+      TEST_ASSERT_TRUE(s.legUpdated[leg]);
+    }
+  }
   TEST_ASSERT_TRUE(allFinite());
+  TEST_ASSERT_TRUE(s.feet[0].distanceTo(start) > 1);
 }
 
 // --- 2.4 smoothing ---------------------------------------------------------
@@ -415,6 +429,48 @@ void test_rejected_target_keeps_position_and_reports_once()
   TEST_ASSERT_TRUE(s.feet[1].z > groundForHeight(0));
 }
 
+// --- review regressions ----------------------------------------------------
+
+void test_initialise_holds_second_pose_for_full_duration()
+{
+  init(s);
+  now = 1000;
+  step(s, command(RequestedMode::Stand), now);
+  // First hold (25 ms), then the second pose must be written on the tick its
+  // hold starts and held for 500 ms before Stand begins.
+  uint32_t secondPoseAt = 0;
+  for (int i = 0; i < 100 && s.mode == Mode::Initialise; i++)
+  {
+    run(command(RequestedMode::Stand), 20);
+    if (secondPoseAt == 0 && s.initialiseStep == 1)
+    {
+      secondPoseAt = now;
+      TEST_ASSERT_TRUE(s.legUpdated[0]);
+      TEST_ASSERT_TRUE(s.feet[0] == Vector3(225, 0, 115));
+    }
+  }
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+  TEST_ASSERT_TRUE(now - secondPoseAt >= 500);
+}
+
+void test_stand_from_walk_finishes_at_current_height()
+{
+  bootToStand();
+  MovementCommand walk = command(RequestedMode::Walk);
+  walk.translate = Vector2(0, 80);
+  run(walk, 1300);
+  MovementCommand stand = command(RequestedMode::Stand);
+  stand.height = 60; // height changes while the transition runs
+  int steps = 0;
+  run(stand, 20);
+  while (transitionActive(s) && steps++ < 500)
+    run(stand, 20);
+  TEST_ASSERT_FALSE(transitionActive(s));
+  float expectedZ = groundForHeight(s.height);
+  for (int i = 0; i < LEG_COUNT; i++)
+    TEST_ASSERT_FLOAT_WITHIN(0.01, expectedZ, s.feet[i].z);
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -441,5 +497,7 @@ int main()
   RUN_TEST(test_leaving_calibrate_passes_through_stand);
   RUN_TEST(test_large_elapsed_time_is_bounded);
   RUN_TEST(test_rejected_target_keeps_position_and_reports_once);
+  RUN_TEST(test_initialise_holds_second_pose_for_full_duration);
+  RUN_TEST(test_stand_from_walk_finishes_at_current_height);
   return UNITY_END();
 }

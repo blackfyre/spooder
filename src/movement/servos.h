@@ -19,6 +19,8 @@ void writeLeg(int leg, const kinematics::JointAngles &angles);
 
 /**
  * @brief Switches all eighteen channels off (joints unpowered) or back on.
+ * If any channel fails to switch off, outputsEnabled() stays true so the
+ * caller retries.
  */
 void setOutputsEnabled(bool enabled);
 

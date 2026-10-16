@@ -52,8 +52,9 @@ static void writeChannel(int leg, int joint, const ServoChannel &ch, uint16_t mi
     count = FULL_OFF - 1;
   if (lastCount[leg][joint] == count)
     return;
-  ch.driver->setPWM(ch.channel, 0, count);
-  lastCount[leg][joint] = count;
+  // setPWM returns 0 on success; a failed write stays uncached and is retried.
+  if (ch.driver->setPWM(ch.channel, 0, count) == 0)
+    lastCount[leg][joint] = count;
 }
 
 void setup()
@@ -95,16 +96,23 @@ void setOutputsEnabled(bool on)
 {
   if (on == enabled)
     return;
-  enabled = on;
   invalidateCache();
   if (on)
+  {
+    enabled = true;
     return;
+  }
+  // Only report outputs as off once every channel accepted full-off; otherwise
+  // the caller retries on the next tick.
+  bool allOff = true;
   for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
   {
     const ServoChannel *chs[JOINTS_PER_LEG] = {&legs[leg].coxa, &legs[leg].femur, &legs[leg].tibia};
     for (int j = 0; j < JOINTS_PER_LEG; j++)
-      chs[j]->driver->setPWM(chs[j]->channel, 0, FULL_OFF);
+      if (chs[j]->driver->setPWM(chs[j]->channel, 0, FULL_OFF) != 0)
+        allOff = false;
   }
+  enabled = !allOff;
 }
 
 bool outputsEnabled()

@@ -3,7 +3,9 @@
 #include "display.h"
 #include "../globals/wiring.h"
 
-Adafruit_SH1107 display = Adafruit_SH1107(SCREEN_HEIGHT, SCREEN_WIDTH, globalWire);
+// The driver switches the bus to preclk for a frame and to postclk after it;
+// keep both at the shared bus speed (400 kHz) instead of the 100 kHz default.
+Adafruit_SH1107 display = Adafruit_SH1107(SCREEN_HEIGHT, SCREEN_WIDTH, globalWire, -1, 400000, 400000);
 
 char logBuffer[BUFFER_SIZE][80];
 int logIndex = 0;
@@ -19,11 +21,13 @@ bool showingLogo = false;
  * @param message The message to be added.
  */
 void addToLogBuffer(const char* message) {
-  lastLogMs = millis();
-  logChanged = true;
   strncpy(logBuffer[logIndex], message, sizeof(logBuffer[logIndex]) - 1);
   logBuffer[logIndex][sizeof(logBuffer[logIndex]) - 1] = '\0';  // Ensure null-termination
   logIndex = (logIndex + 1) % BUFFER_SIZE;
+  // Publish after the buffer is updated, so a redraw that clears the flag
+  // cannot miss this message.
+  lastLogMs = millis();
+  logChanged = true;
 }
 
 /**

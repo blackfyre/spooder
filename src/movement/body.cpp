@@ -113,7 +113,7 @@ static void pickHighestLegs(BodyState &s)
     {
       if (st.currentLegs[0] == i || st.currentLegs[1] == i || st.currentLegs[2] == i)
         continue;
-      if (atPosition(s.feet[i], end))
+      if (st.legDone[i] || atPosition(s.feet[i], end))
         continue;
       if (st.currentLegs[j] == -1 || s.feet[i].z > s.feet[st.currentLegs[j]].z)
         st.currentLegs[j] = i;
@@ -128,6 +128,8 @@ static void enterStand(BodyState &s, Mode from)
   st.moveAllAtOnce = (from == Mode::Initialise || from == Mode::Sleep || from == Mode::Calibrate);
   st.legsDone = 0;
   st.progress = 0;
+  for (int i = 0; i < LEG_COUNT; i++)
+    st.legDone[i] = false;
 
   Vector3 end = standingPoint(s);
   for (int i = 0; i < LEG_COUNT; i++)
@@ -179,9 +181,17 @@ static void stepStand(BodyState &s, float dtS)
     if (leg != -1)
       setFoot(s, leg, gait::bezier(st.controlPoints[leg], 3, t));
   }
+  // Legs from earlier groups slide with height changes instead of being left
+  // at the height they landed at.
+  for (int i = 0; i < LEG_COUNT; i++)
+    if (st.legDone[i])
+      setFoot(s, i, end);
 
   if (st.progress >= CYCLE_POINTS)
   {
+    for (int j = 0; j < 3; j++)
+      if (st.currentLegs[j] != -1)
+        st.legDone[st.currentLegs[j]] = true;
     st.progress = 0;
     st.legsDone += 3;
     pickHighestLegs(s);
@@ -318,18 +328,19 @@ static void stepCalibrate(BodyState &s, float dtS)
 
 static void stepInitialise(BodyState &s, uint32_t nowMs)
 {
-  if (s.initialiseStep < 2)
+  if (nowMs - s.modeEnteredMs >= INIT_HOLD_MS[s.initialiseStep])
   {
-    for (int i = 0; i < LEG_COUNT; i++)
-      setFoot(s, i, INIT_POSES[s.initialiseStep]);
-    if (nowMs - s.modeEnteredMs < INIT_HOLD_MS[s.initialiseStep])
-      return;
     s.initialiseStep++;
     s.modeEnteredMs = nowMs;
-    if (s.initialiseStep < 2)
+    if (s.initialiseStep >= 2)
+    {
+      enterStand(s, Mode::Initialise);
       return;
+    }
   }
-  enterStand(s, Mode::Initialise);
+  // Issue the current pose every tick, including the tick its hold starts.
+  for (int i = 0; i < LEG_COUNT; i++)
+    setFoot(s, i, INIT_POSES[s.initialiseStep]);
 }
 
 // --- State machine ---------------------------------------------------------

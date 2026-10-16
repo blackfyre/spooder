@@ -40,6 +40,7 @@ struct StandTransition
   bool moveAllAtOnce;
   int legsDone;           // legs moved so far when moving three at a time
   int currentLegs[3];     // -1 when unused
+  bool legDone[LEG_COUNT]; // reached the standing point; tracks height from then on
   float progress;         // progress units, 0..CYCLE_POINTS
   Vector3 controlPoints[LEG_COUNT][3];
 };
