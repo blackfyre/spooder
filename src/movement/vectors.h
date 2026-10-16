@@ -1,7 +1,8 @@
 #ifndef VECTORS_H
 #define VECTORS_H
 
-#include "../main.h"
+// Hardware-free: compiled for the board and for host tests. Do not include
+// Arduino headers here; string formatting lives in reporting/.
 #include <math.h>
 
 /**
@@ -13,256 +14,165 @@ public:
   float x; /**< The x-coordinate of the vector. */
   float y; /**< The y-coordinate of the vector. */
 
-  /**
-   * @brief Default constructor.
-   * Initializes the vector with x = 0 and y = 0.
-   */
-  Vector2()
+  Vector2() : x(0), y(0) {}
+
+  Vector2(float newX, float newY) : x(newX), y(newY) {}
+
+  float magnitude() const
   {
-    x = 0;
-    y = 0;
+    return sqrtf(x * x + y * y);
   }
 
   /**
-   * @brief Constructor with specified coordinates.
-   * @param newX The x-coordinate of the vector.
-   * @param newY The y-coordinate of the vector.
+   * @brief Scales the vector to unit length. A zero vector is left unchanged.
    */
-  Vector2(float newX, float newY)
+  void normalize()
   {
-    x = newX;
-    y = newY;
+    float mag = magnitude();
+    if (mag > 0)
+    {
+      x /= mag;
+      y /= mag;
+    }
   }
 
-  /**
-   * @brief Converts the vector to a string representation.
-   * @return The string representation of the vector in the format "(x, y)".
-   */
-  String toString()
+  Vector2 operator+(Vector2 val) const
   {
-    String xs = String(x);
-    String ys = String(y);
-
-    String ret = "(" + xs + "," + ys + ")";
-    return ret;
+    return Vector2(x + val.x, y + val.y);
   }
 
-  /**
-   * @brief Adds two vectors together.
-   * @param val The vector to be added.
-   * @return The resulting vector after addition.
-   */
-  Vector2 operator+(Vector2 val)
+  Vector2 operator*(float val) const
   {
-    Vector2 result;
-    result.x = x + val.x;
-    result.y = y + val.y;
-    return result;
+    return Vector2(x * val, y * val);
   }
 
-  /**
-   * @brief Multiplies the vector by a scalar value.
-   * @param val The scalar value to multiply the vector by.
-   * @return The resulting vector after multiplication.
-   */
-  Vector2 operator*(float val)
+  Vector2 operator*(Vector2 val) const
   {
-    Vector2 result;
-    result.x = x * val;
-    result.y = y * val;
-    return result;
-  }
-
-  /**
-   * @brief Multiplies the vector component-wise with another vector.
-   * @param val The vector to multiply with.
-   * @return The resulting vector after multiplication.
-   */
-  Vector2 operator*(Vector2 val)
-  {
-    Vector2 result;
-    result.x = x * val.x;
-    result.y = y * val.y;
-    return result;
-  }
-
-  /**
-   * @brief Rotates the vector around a pivot point.
-   * @param angle The angle of rotation in degrees.
-   * @param pivot The pivot point to rotate around.
-   * @return The resulting vector after rotation.
-   */
-  Vector2 rotate(int angle, Vector2 pivot)
-  {
-    x -= pivot.x;
-    y -= pivot.y;
-
-    int x_rotated = x * cos(angle) - y * sin(angle);
-    int y_rotated = x * sin(angle) + y * cos(angle);
-
-    x = x_rotated + pivot.x;
-    y = y_rotated + pivot.y;
-    return Vector2(x, y);
+    return Vector2(x * val.x, y * val.y);
   }
 };
 
 /**
- * @brief Represents a 3D vector with x, y, and z components.
+ * @brief Represents a 3D vector.
  */
 class Vector3
 {
 public:
-  float x; /**< The x component of the vector. */
-  float y; /**< The y component of the vector. */
-  float z; /**< The z component of the vector. */
+  float x; /**< The x-coordinate of the vector. */
+  float y; /**< The y-coordinate of the vector. */
+  float z; /**< The z-coordinate of the vector. */
 
-  /**
-   * @brief Default constructor that initializes the vector to (0, 0, 0).
-   */
-  Vector3()
-  {
-    x = 0;
-    y = 0;
-    z = 0;
-  }
+  Vector3() : x(0), y(0), z(0) {}
 
-  /**
-   * @brief Constructor that initializes the vector with the given x, y, and z values.
-   * @param newX The x component of the vector.
-   * @param newY The y component of the vector.
-   * @param newZ The z component of the vector.
-   */
-  Vector3(float newX, float newY, float newZ)
-  {
-    x = newX;
-    y = newY;
-    z = newZ;
-  }
+  Vector3(float newX, float newY, float newZ) : x(newX), y(newY), z(newZ) {}
 
-  /**
-   * @brief Overloaded inequality operator.
-   * @param val The vector to compare against.
-   * @return True if the vectors are not equal, false otherwise.
-   */
-  bool operator!=(Vector3 val)
+  bool operator!=(Vector3 val) const
   {
     return (x != val.x || y != val.y || z != val.z);
   }
 
-  /**
-   * @brief Overloaded equality operator.
-   * @param val The vector to compare against.
-   * @return True if the vectors are equal, false otherwise.
-   */
-  bool operator==(Vector3 val)
+  bool operator==(Vector3 val) const
   {
     return (x == val.x && y == val.y && z == val.z);
   }
 
-  /**
-   * @brief Overloaded multiplication operator.
-   * @param val The scalar value to multiply the vector by.
-   * @return The resulting vector after multiplication.
-   */
-  Vector3 operator*(float val)
+  Vector3 operator*(float val) const
   {
     return Vector3(x * val, y * val, z * val);
   }
 
-  /**
-   * @brief Overloaded multiplication operator.
-   * @param val The vector to multiply with.
-   * @return The resulting vector after element-wise multiplication.
-   */
-  Vector3 operator*(Vector3 val)
+  Vector3 operator*(Vector3 val) const
   {
     return Vector3(x * val.x, y * val.y, z * val.z);
   }
 
-  /**
-   * @brief Overloaded division operator.
-   * @param val The vector to divide by.
-   * @return The resulting vector after element-wise division.
-   */
-  Vector3 operator/(Vector3 val)
+  Vector3 operator/(Vector3 val) const
   {
     return Vector3(x / val.x, y / val.y, z / val.z);
   }
 
-  /**
-   * @brief Overloaded division operator.
-   * @param val The scalar value to divide the vector by.
-   * @return The resulting vector after division.
-   */
-  Vector3 operator/(float val)
+  Vector3 operator/(float val) const
   {
     return Vector3(x / val, y / val, z / val);
   }
 
-  /**
-   * @brief Overloaded addition operator.
-   * @param val The vector to add.
-   * @return The resulting vector after addition.
-   */
-  Vector3 operator+(Vector3 val)
+  Vector3 operator+(Vector3 val) const
   {
     return Vector3(x + val.x, y + val.y, z + val.z);
   }
 
-  /**
-   * @brief Converts the vector to a string representation.
-   * @return The string representation of the vector.
-   */
-  String toString()
+  Vector3 operator-(Vector3 val) const
   {
-    String xs = String(x);
-    String ys = String(y);
-    String zs = String(z);
-
-    String ret = "(" + xs + "," + ys + "," + zs + ")";
-    return ret;
+    return Vector3(x - val.x, y - val.y, z - val.z);
   }
 
   /**
-   * @brief Rotates the vector around a pivot point by a given angle.
-   * @param angle The angle of rotation in degrees.
-   * @param pivot The pivot point to rotate around.
-   * @return The resulting rotated vector.
+   * @brief Rotates the point around a pivot in the XY plane.
+   *
+   * The rotated x and y are truncated to whole millimetres, as in the
+   * original gait code.
+   *
+   * @param angle Rotation in degrees.
+   * @param pivot The pivot point.
    */
-  Vector3 rotate(int angle, Vector2 pivot)
+  Vector3 rotate(int angle, Vector2 pivot) const
   {
-    // Translate line so pivot point is at the origin
     if (angle == 0)
-      return Vector3(x, y, z);
+      return *this;
 
-    x -= pivot.x;
-    y -= pivot.y;
-    float angleRad = radians(angle);
+    float px = x - pivot.x;
+    float py = y - pivot.y;
+    float angleRad = angle * (float)M_PI / 180.0f;
 
-    // Rotate point by angle
-    int x_rotated = x * cos(angleRad) - y * sin(angleRad);
-    int y_rotated = x * sin(angleRad) + y * cos(angleRad);
+    int x_rotated = px * cosf(angleRad) - py * sinf(angleRad);
+    int y_rotated = px * sinf(angleRad) + py * cosf(angleRad);
 
-    // Translate point back to original position
-    x = x_rotated + pivot.x;
-    y = y_rotated + pivot.y;
-
-    return Vector3(x, y, z);
+    return Vector3(x_rotated + pivot.x, y_rotated + pivot.y, z);
   }
 
-  /**
-   * @brief Calculates the Euclidean distance between this vector and another vector.
-   * @param v The vector to calculate the distance to.
-   * @return The Euclidean distance between the two vectors.
-   */
-  float distanceTo(Vector3 v)
+  float distanceTo(Vector3 v) const
   {
     double dx = v.x - x;
     double dy = v.y - y;
     double dz = v.z - z;
     return sqrt(dx * dx + dy * dy + dz * dz);
   }
+
+  float magnitude() const
+  {
+    return Vector3().distanceTo(*this);
+  }
+
+  bool isFinite() const
+  {
+    return isfinite(x) && isfinite(y) && isfinite(z);
+  }
 };
 
+/**
+ * @brief Linearly interpolates between two values (f from 0.0 to 1.0).
+ */
+inline float lerp(float a, float b, float f)
+{
+  return a * (1.0f - f) + (b * f);
+}
+
+inline Vector2 lerp(Vector2 a, Vector2 b, float f)
+{
+  return Vector2(lerp(a.x, b.x, f), lerp(a.y, b.y, f));
+}
+
+inline Vector3 lerp(Vector3 a, Vector3 b, float f)
+{
+  return Vector3(lerp(a.x, b.x, f), lerp(a.y, b.y, f), lerp(a.z, b.z, f));
+}
+
+/**
+ * @brief Maps a value from one range to another range.
+ */
+inline float mapFloat(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 #endif

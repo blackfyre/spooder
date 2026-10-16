@@ -4,6 +4,8 @@
 #include <Arduino.h>
 #include "../movement/vectors.h"
 
+String vectorToString(Vector3 value);
+
 void print_value(String name, float value, bool newLine);
 
 void print_value(String name, String value, bool newLine);

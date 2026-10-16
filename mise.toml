@@ -17,3 +17,7 @@ run = "pio device monitor"
 [tasks.clean]
 description = "Remove build artefacts"
 run = "pio run --target clean"
+
+[tasks.test]
+description = "Run host-side unit tests"
+run = "pio test -e native"

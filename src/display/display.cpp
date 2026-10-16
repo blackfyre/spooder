@@ -6,8 +6,12 @@
 Adafruit_SH1107 display = Adafruit_SH1107(SCREEN_HEIGHT, SCREEN_WIDTH, globalWire);
 
 char logBuffer[BUFFER_SIZE][80];
-int idleLoopCount = 0;
 int logIndex = 0;
+// Set by addToLogBuffer, which is also called from the gamepad loop.
+volatile bool logChanged = true;
+volatile uint32_t lastLogMs = 0;
+uint32_t lastRedrawMs = 0;
+bool showingLogo = false;
 
 /**
  * @brief Adds a message to the log buffer.
@@ -15,7 +19,8 @@ int logIndex = 0;
  * @param message The message to be added.
  */
 void addToLogBuffer(const char* message) {
-  idleLoopCount = 0;
+  lastLogMs = millis();
+  logChanged = true;
   strncpy(logBuffer[logIndex], message, sizeof(logBuffer[logIndex]) - 1);
   logBuffer[logIndex][sizeof(logBuffer[logIndex]) - 1] = '\0';  // Ensure null-termination
   logIndex = (logIndex + 1) % BUFFER_SIZE;
@@ -90,20 +95,30 @@ void displayLogo() {
 
 
 /**
- * @brief This function is responsible for the continuous display operation.
- * 
- * It is called repeatedly in the main loop to update the display.
+ * @brief Redraws the display when the log has changed or the idle logo is due,
+ * at most every MIN_REDRAW_INTERVAL_MS.
+ *
+ * It is called repeatedly in the main loop.
  */
 void loopDisplay() {
-  display.clearDisplay();
-  idleLoopCount++;
+  uint32_t now = millis();
+  if (now - lastRedrawMs < MIN_REDRAW_INTERVAL_MS)
+    return;
 
-  // Check if it's time to display the logo
-  if (idleLoopCount >= MAX_IDLE_LOOPS) {
-    displayLogo();                       // Implement a function to display your logo
-    idleLoopCount = MAX_IDLE_LOOPS + 1;  // prevent overflow
-  } else {
+  bool idle = now - lastLogMs >= IDLE_LOGO_MS;
+  if (idle) {
+    if (!showingLogo) {
+      displayLogo();
+      showingLogo = true;
+      lastRedrawMs = now;
+    }
+    return;
+  }
+
+  if (logChanged || showingLogo) {
+    logChanged = false;
+    showingLogo = false;
     displayLogMessages();
-    display.display();
+    lastRedrawMs = now;
   }
 }

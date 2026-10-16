@@ -18,7 +18,10 @@ extern void loopDisplay();
 
 #define BUFFER_SIZE 10
 
-#define MAX_IDLE_LOOPS 1000
+// Show the logo after this long without a new log line.
+#define IDLE_LOGO_MS 50000
+// Minimum time between full-frame redraws (each is ~25 ms of I2C at 400 kHz).
+#define MIN_REDRAW_INTERVAL_MS 200
 
 // Display
 extern Adafruit_SH1107 display;
