@@ -23,7 +23,7 @@ add_library(spooder_core STATIC
   ${SPOODER_CORE}/movement/kinematics.cpp
   ${SPOODER_CORE}/protection/protection.cpp
   ${SPOODER_CORE}/protection/resume_gate.cpp
-  ${SPOODER_CORE}/protection/output_hold.cpp
+  ${SPOODER_CORE}/protection/supervisor.cpp
 )
 target_include_directories(spooder_core PUBLIC ${SPOODER_CORE})
 target_compile_options(spooder_core PRIVATE -Wall -Wextra)

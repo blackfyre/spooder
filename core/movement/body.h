@@ -68,10 +68,6 @@ struct BodyState
 
   // false once Sleep has folded the legs: servo output should be off.
   bool outputsEnabled;
-  // Incremented each time the body wakes from Sleep. Several sub-steps run per
-  // step, so a fold and a wake can both happen inside one step; observers that
-  // need to see the wake use this counter rather than outputsEnabled edges.
-  uint32_t wakeCount;
 
   // Once a command goes stale, that issuedAtMs stays stale; only a command
   // with a different stamp can wake the body. Avoids millis() wrap making an

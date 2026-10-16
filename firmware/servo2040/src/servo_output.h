@@ -26,6 +26,12 @@ void setInhibited(bool inhibited);
  */
 void apply(const body::BodyState &body);
 
+/**
+ * @brief Switches output off immediately (the body has stopped). Output comes
+ * back only through apply() after the body restarts.
+ */
+void stop();
+
 bool outputsOn();
 
 } // namespace servo_output

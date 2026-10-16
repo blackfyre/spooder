@@ -41,7 +41,8 @@ mise run monitor          # USB serial; Ctrl+C to exit
 
 **Serial (USB):**
 - once per second: `supply <A> A (avg <A> A), <V> V; output on|off; mode <n>; faults 0x..`;
-- `supply accepted: starting movement` when protection first allows output;
+- `output allowed: starting movement` when the body starts (boot, or restart after a fault);
+- `movement stopped: waiting for the fault to clear and a new request` when a fault cuts output;
 - `fault latched: <name> (<A> A, <V> V)` once per fault;
 - `point impossible to reach: (...) leg n` once per rejection.
 
@@ -82,7 +83,7 @@ Stop at the first stage that misbehaves.
    - Expect no faults: an absent supply isn't a fault.
 2. **Bench supply, no servos, current-limited.**
    - Raise it into the configured voltage window.
-   - Within 500 ms, expect `supply accepted`, and the LEDs turn green.
+   - Within 500 ms, expect `output allowed: starting movement`, and the LEDs turn green.
    - Check the reported voltage against a meter (±2 %).
 3. **Overvoltage and undervoltage.**
    - With no servos: raise the supply above `SPOODER_MAX_V`. Expect an overvoltage fault immediately, with output off. Restore, then `!` clears it.
@@ -93,7 +94,7 @@ Stop at the first stage that misbehaves.
 5. **Overcurrent.**
    - Stall the servo by hand, briefly, or set the bench limit to just above the trip current.
    - Expect output off within 20 ms, and the overcurrent LEDs.
-   - Clear with `!` once the current is normal. Output returns only after 500 ms of valid supply.
+   - Clear with `!` once the current is normal. Nothing moves until you also give a new command (for example `s`), and the supply has been valid for 500 ms. The body then restarts from Initialise.
 6. **One leg, then all 18,** with the robot on a stand, feet off the ground.
    - Boot runs Initialise, then Stand.
    - Then `w`, `g`, `r`, `z` (legs fold, then go limp), `s` (wakes through Stand) and `c`.

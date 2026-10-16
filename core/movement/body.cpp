@@ -311,7 +311,6 @@ static void stepSleep(BodyState &s, float dtS)
 
 static void wake(BodyState &s)
 {
-  s.wakeCount++;
   s.outputsEnabled = true;
   s.sleepFolded = false;
   enterStand(s, Mode::Sleep);

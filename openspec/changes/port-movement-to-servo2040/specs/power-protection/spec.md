@@ -58,7 +58,7 @@ If the supply voltage stays below the minimum voltage for the debounce time, mov
 - **THEN** servo output is switched off within 20 ms and the overvoltage fault is latched
 
 ### Requirement: Fault latching and clearing
-A latched fault SHALL persist until a clear request is received and the condition that caused it is no longer present. While any fault is latched, every movement command SHALL be treated as a Sleep request, and faults that inhibit output SHALL keep output inhibited. Clearing a fault SHALL NOT move the legs by itself. Movement resumes through the normal Sleep wake path once a non-Sleep command arrives.
+A latched fault SHALL persist until a clear request is received and the condition that caused it is no longer present. While any fault is latched, every movement command SHALL be treated as a Sleep request, and faults that inhibit output SHALL keep output inhibited. Clearing a fault SHALL NOT move the legs by itself: movement resumes only after a new movement request made since the fault latched. Repeating the request that was in effect when the fault latched does not count. After a fault that only forced Sleep, the body resumes through the normal Sleep wake path. A fault that inhibited output SHALL stop movement altogether, and the body SHALL restart through the boot sequence (Initialise, then Stand) once output is allowed again and a new request has been made.
 
 #### Scenario: Clear while the condition persists
 - **WHEN** a clear request arrives while the voltage is still below the minimum
@@ -66,7 +66,15 @@ A latched fault SHALL persist until a clear request is received and the conditio
 
 #### Scenario: Clear after recovery
 - **WHEN** the condition has gone and a clear request arrives
-- **THEN** the fault is cleared, and the body stays asleep until a non-Sleep command arrives
+- **THEN** the fault is cleared, and the body stays asleep until a new non-Sleep request arrives
+
+#### Scenario: Restart after an output-inhibiting fault
+- **WHEN** an overcurrent fault stopped movement, has been cleared, the supply has settled, and a new request arrives
+- **THEN** the body restarts from Initialise, then Stand, and then follows the request
+
+#### Scenario: Fault before the supply is first accepted
+- **WHEN** an overvoltage fault latches before movement has ever started and is then cleared, with no new request
+- **THEN** the body does not start and no servo moves
 
 ### Requirement: Fault indication
 The board's RGB LEDs SHALL show whether the robot is healthy, waiting for a valid supply, or has a latched fault. Each fault type SHALL have a distinct indication. Every fault SHALL also be reported once on the debug output when it latches, with the reading that caused it.

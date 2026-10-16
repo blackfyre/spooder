@@ -3,7 +3,6 @@
 #include "hardware/gpio.h"
 #include "pico/time.h"
 #include "servo2040.hpp"
-#include "protection/output_hold.h"
 
 using namespace servo;
 
@@ -27,7 +26,6 @@ static ServoCluster cluster(pio0, 0, servo2040::SERVO_1, OUTPUT_COUNT);
 static uint16_t desiredUs[OUTPUT_COUNT];
 static bool on = false;
 static bool inhibited = true;
-static protection::OutputHold hold;
 // Pins are forced low through the GPIO output override while output is off.
 static bool pinsForcedLow = false;
 static absolute_time_t switchedOffAt;
@@ -113,8 +111,7 @@ void apply(const body::BodyState &body)
     }
   }
 
-  // After an inhibit, output returns only at a body wake (see output_hold).
-  bool wantOn = protection::outputAllowed(hold, inhibited, body.outputsEnabled, body.wakeCount);
+  bool wantOn = !inhibited && body.outputsEnabled;
   if (!wantOn)
   {
     if (on)
@@ -143,6 +140,12 @@ void apply(const body::BodyState &body)
   on = true;
   if (any)
     cluster.load();
+}
+
+void stop()
+{
+  if (on)
+    switchOff();
 }
 
 bool outputsOn()

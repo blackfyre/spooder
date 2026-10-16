@@ -4,7 +4,7 @@
 #include "config.h"
 #include "movement/body.h"
 #include "protection/protection.h"
-#include "protection/resume_gate.h"
+#include "protection/supervisor.h"
 #include "power_monitor.h"
 #include "serial_commands.h"
 #include "servo_output.h"
@@ -17,7 +17,7 @@ constexpr uint32_t REPORT_PERIOD_MS = 1000;
 
 static body::BodyState bodyState;
 static protection::State protectionState;
-static protection::ResumeGate resumeGate;
+static protection::Supervisor supervisor;
 
 static const char *faultName(uint16_t fault)
 {
@@ -45,11 +45,12 @@ static void reportFaults(uint16_t faults, const protection::Reading &r)
       printf("fault latched: %s (%.2f A, %.2f V)\n", faultName(bit), r.currentA, r.voltageV);
 }
 
-static void reportStatus(const protection::Reading &r, const protection::Result &p, bool outputsOn)
+static void reportStatus(const protection::Reading &r, const protection::Result &p, bool outputsOn,
+                         bool bodyRunning)
 {
-  printf("supply %.2f A (avg %.2f A), %.2f V%s; output %s; mode %d; faults 0x%02x\n", r.currentA,
+  printf("supply %.2f A (avg %.2f A), %.2f V%s; output %s; body %s, mode %d; faults 0x%02x\n", r.currentA,
          p.averageCurrentA, r.voltageV, p.supplyValid ? "" : " (out of range or absent)",
-         outputsOn ? "on" : "off", (int)bodyState.mode, p.faults);
+         outputsOn ? "on" : "off", bodyRunning ? "running" : "stopped", (int)bodyState.mode, p.faults);
 }
 
 static void reportRejections()
@@ -86,9 +87,6 @@ int main()
     }
   }
 
-  // The body starts only once protection first allows output, so Initialise
-  // runs with the servos live instead of while output is still held off.
-  bool bodyStarted = false;
   bool clearRequested = false; // from the previous tick's input
   uint32_t lastReportMs = 0;
   absolute_time_t next = get_absolute_time();
@@ -107,22 +105,24 @@ int main()
     serial_commands::Input input = serial_commands::poll(now); // bounded
     clearRequested = input.clearFaults;
 
-    // Protection only rewrites the request; movement still owns transitions.
-    // After a fault the body stays asleep until a new request is made. The gate
-    // sees every latch, including ones before the body has started.
-    MovementCommand cmd = input.command;
-    cmd.mode = protection::resumeGate(resumeGate, prot.newlyLatched != 0, prot.forceSleep, cmd.mode,
-                                      input.requestSeq);
-
-    if (!bodyStarted && prot.allowOutput)
+    // The supervisor decides whether the body runs: a fault that cuts output
+    // stops it, and it restarts through the boot sequence only once output is
+    // allowed and the operator has made a new request since the fault.
+    protection::Decision run = protection::supervise(supervisor, prot, input.command.mode, input.requestSeq);
+    if (run.stopBody)
+    {
+      servo_output::stop();
+      printf("movement stopped: waiting for the fault to clear and a new request\n");
+    }
+    if (run.startBody)
     {
       body::init(bodyState);
-      bodyStarted = true;
-      printf("supply accepted: starting movement\n");
+      printf("output allowed: starting movement\n");
     }
-
-    if (bodyStarted)
+    if (run.runBody)
     {
+      MovementCommand cmd = input.command;
+      cmd.mode = run.mode; // protection only rewrites the request
       body::step(bodyState, cmd, now);
       reportRejections();
       servo_output::apply(bodyState);
@@ -132,7 +132,7 @@ int main()
 
     if (input.printReadings || now - lastReportMs >= REPORT_PERIOD_MS)
     {
-      reportStatus(reading, prot, servo_output::outputsOn());
+      reportStatus(reading, prot, servo_output::outputsOn(), run.runBody);
       lastReportMs = now;
     }
 

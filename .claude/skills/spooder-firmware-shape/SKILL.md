@@ -25,18 +25,22 @@ reading = power_monitor::read()
 prot    = protection::step(state, reading, now, clearFromPreviousTick)  // first, always
 servo_output::setInhibited(!prot.allowOutput)
 input   = serial_commands::poll(now)          // bounded per tick; later: the bridge link
-cmd.mode = protection::resumeGate(gate, prot.newlyLatched, prot.forceSleep, input.mode, input.requestSeq)
-if body started:
-    body::step(bodyState, cmd, now)
-    servo_output::apply(bodyState)
+run     = protection::supervise(supervisor, prot, input.mode, input.requestSeq)
+if run.stopBody:  servo_output::stop()                 // output-cutting fault: body stops
+if run.startBody: body::init(bodyState)                // boot, and restart after such a fault
+if run.runBody:   body::step(bodyState, cmd with run.mode, now); servo_output::apply(bodyState)
 status_leds::show(...)
 ```
 
 - **Protection runs first in the tick.** Nothing in the tick can delay a trip, and input reading is bounded (`MAX_CHARS_PER_POLL`).
-- **Input sources count explicit mode requests (`requestSeq`).** After a fault, `resumeGate` keeps the body asleep until the count changes, so clearing a fault never restarts motion by itself.
+- **Input sources count explicit mode requests (`requestSeq`).** After any fault, nothing moves until the count changes, so clearing a fault never restarts motion by itself.
+- **Recovery:**
+  - Faults that cut output stop the body; it restarts through Initialise once output is allowed and a new request has been made.
+  - Sleep-only faults wake through Stand.
+  - `core/protection/supervisor` owns this; don't add parallel start/stop logic elsewhere.
 
 - **Protection rewrites requests and gates output, but never changes body mode itself.** Movement owns all transitions (`locomotion` spec).
-- **The body starts only when output is first allowed,** so Initialise runs with the servos live.
+- **The body starts only when output is allowed,** so Initialise runs with the servos live.
 - **Nothing in the loop may block.** Debug output is USB stdio with `PICO_STDIO_USB_STDOUT_TIMEOUT_US=1000`, so a host that isn't reading drops output instead of stalling the loop. Don't add `sleep_ms` or blocking I/O.
 - **One core today.** The `add-body-sensing` change introduces core 1 for sensor I/O. Data then crosses cores only through a single-writer seqlock snapshot that is never shared mutably. Construct `ServoCluster` and everything else that allocates on core 0, *before* launching core 1 (pimoroni's `pwm_alloc` warning).
 

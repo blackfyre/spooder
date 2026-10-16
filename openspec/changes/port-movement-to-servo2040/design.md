@@ -75,7 +75,10 @@ test/                    Unity host tests (PlatformIO native env)
   - It forces each servo pin low, but only once that pin is low, sweeping all 18 pins. No pulse is truncated, and a truncated pulse would itself be a valid-looking position command. The whole cut-off is bounded by one pulse length (≤2.7 ms).
   - The cluster is then loaded with zero pulses.
   - The override is released at the next switch-on, and no earlier than 25 ms after switch-off, by which time the zero-pulse sequence is certainly active.
-- **Output hold** (`core/protection/output_hold`, host-tested). After any inhibit, output returns only once the body has woken from Sleep, detected through `BodyState::wakeCount`. A completed fold and a wake can both happen inside one step's sub-steps, so edges of `outputsEnabled` between steps can be missed. Without the hold, a fault cleared while the body was still folding in software would switch output back on mid-fold, and the legs would jump without a new request.
+- **Supervisor** (`core/protection/supervisor`, host-tested). It decides each tick whether the body runs.
+  - A fault that inhibits output **stops the body**. Recovery is a restart through the boot sequence, exactly like power-up, once output is allowed again and the resume gate has seen a new request.
+  - Faults that only force Sleep keep the body running, asleep.
+  - An earlier design kept the body running while output was cut, and released output at the next "wake". That kept producing edge cases in review: a clear during a software-only fold, a fold and a wake inside one step, a wake during supply settling, a fault before start-up. Stopping the body removes the state those cases depended on.
 - The angle→µs conversion stays in `kinematics::angleToMicroseconds`. `ServoCluster` is used in raw-pulse mode, and its own calibration objects stay at the defaults.
 
 ### D4. Power protection as a pure state machine
@@ -96,8 +99,10 @@ reading   = power_monitor::read()          // averaged mux samples
 prot      = protection::step(..., clearFromPreviousTick)   // first: nothing delays a trip
 servo_output.setInhibited(!prot.allowOutput)
 input     = command source, bounded per tick (serial, later bridge)
-cmd.mode  = resumeGate(newlyLatched, forceSleep, input.mode, input.requestSeq)
-body::step(now, cmd)                       // movement still owns transitions
+run       = supervise(prot, input.mode, input.requestSeq)   // resume gate + start/stop
+if run.stopBody:  servo_output.stop()      // immediate cut-off
+if run.startBody: body::init()             // boot sequence, also after inhibiting faults
+if run.runBody:   body::step(now, cmd with run.mode)      // movement still owns transitions
 servo_output.apply(body state)             // honours inhibit
 ```
 
