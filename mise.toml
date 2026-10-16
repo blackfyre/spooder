@@ -1,22 +1,49 @@
 [tools]
 python = "3.13"
 "pipx:platformio" = "6.2.0"
+cmake = "3.31.12"
+ninja = "1.13.2"
+# The vfox plugin publishes per-architecture builds; this pin is for x86-64 Linux.
+gcc-arm-none-eabi = "13.3.Rel1~amd64"
+
+[env]
+PICO_SDK_PATH = "{{config_root}}/external/pico-sdk"
+PIMORONI_PICO_PATH = "{{config_root}}/external/pimoroni-pico"
+PICO_BOARD = "pimoroni_servo2040"
+
+[tasks.setup]
+description = "Fetch the pinned SDKs (only the sub-submodules the firmware needs)"
+run = [
+  "git submodule update --init external/pico-sdk external/pimoroni-pico",
+  "git -C external/pico-sdk submodule update --init lib/tinyusb",
+]
 
 [tasks.build]
-description = "Compile the firmware"
-run = "pio run"
+description = "Build the Servo 2040 firmware (.uf2 in build/servo2040)"
+run = [
+  "cmake -S firmware/servo2040 -B build/servo2040 -G Ninja -DCMAKE_BUILD_TYPE=Release",
+  "cmake --build build/servo2040",
+]
 
 [tasks.upload]
-description = "Build and flash the firmware to the board"
-run = "pio run --target upload"
+description = "Copy the firmware to a Servo 2040 in BOOTSEL mode (mounted RPI-RP2 drive)"
+depends = ["build"]
+run = '''
+drive=$(findmnt -rn -S LABEL=RPI-RP2 -o TARGET | head -n1)
+if [ -z "$drive" ]; then
+  echo "No RPI-RP2 drive mounted: hold BOOT, tap RESET, and mount the drive." >&2
+  exit 1
+fi
+cp build/servo2040/spooder.uf2 "$drive"/ && sync
+'''
 
 [tasks.monitor]
-description = "Open the serial monitor"
-run = "pio device monitor"
+description = "Open the Servo 2040 USB serial console"
+run = "pio device monitor -b 115200"
 
 [tasks.clean]
 description = "Remove build artefacts"
-run = "pio run --target clean"
+run = "rm -rf build .pio/build"
 
 [tasks.test]
 description = "Run host-side unit tests"

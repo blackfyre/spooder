@@ -2,11 +2,11 @@
 
 ## 1. Repository and toolchain
 
-- [ ] 1.1 Move `src/movement/{body,gait,kinematics}.{h,cpp}`, `vectors.h` and `movement_command.h` to `core/movement/` unchanged. Point the PlatformIO `native` env at `core/` (`src_dir`, `build_src_filter`), and remove the `nanorp2040connect` env and its `lib_deps`. Verify that `mise run test` passes all existing host tests.
-- [ ] 1.2 Remove the remaining Nano firmware under `src/` (main, control, display, mlc, tof, reporting, globals, movement `servos`/`movement`). Verify with `git grep` that no Arduino, mbed, Bluepad32 or PCA9685 symbols remain outside the archived OpenSpec change.
-- [ ] 1.3 Add `external/pico-sdk` (tag 2.2.0) and `external/pimoroni-pico` (tag v1.29.0-2) as git submodules. Add `cmake`, `ninja` and `gcc-arm-none-eabi` to `mise.toml`, with `PICO_SDK_PATH`/`PIMORONI_PICO_PATH` env vars. Verify that `mise install` succeeds and `arm-none-eabi-gcc --version` runs.
-- [ ] 1.4 Create `firmware/servo2040/` (CMakeLists, the SDK and pimoroni import scripts, `PICO_BOARD=pimoroni_servo2040`) with a minimal `main` that blinks the WS2812 LEDs and prints over USB stdio. Add the `build`/`upload`/`monitor` mise tasks. Verify that `mise run build` produces a `.uf2`. If the pinned pair fails to build, pin the SDK version used by the pimoroni tag's CI and record it in `design.md`.
-- [ ] 1.5 Compile `core/movement` into the firmware target with `-Wall`. Verify the build has no warnings from `core/`, and that a map-file check (`arm-none-eabi-nm`) shows the pico_float wrappers (`__wrap___aeabi_fmul` or equivalent) linked.
+- [x] 1.1 Move `src/movement/{body,gait,kinematics}.{h,cpp}`, `vectors.h` and `movement_command.h` to `core/movement/` unchanged. Point the PlatformIO `native` env at `core/` (`src_dir`, `build_src_filter`), and remove the `nanorp2040connect` env and its `lib_deps`. Verify that `mise run test` passes all existing host tests.
+- [x] 1.2 Remove the remaining Nano firmware under `src/` (main, control, display, mlc, tof, reporting, globals, movement `servos`/`movement`). Verify with `git grep` that no Arduino, mbed, Bluepad32 or PCA9685 symbols remain outside the archived OpenSpec change.
+- [x] 1.3 Add `external/pico-sdk` (tag 2.2.0) and `external/pimoroni-pico` (tag v1.29.0-2) as git submodules. Add `cmake`, `ninja` and `gcc-arm-none-eabi` to `mise.toml`, with `PICO_SDK_PATH`/`PIMORONI_PICO_PATH` env vars. Verify that `mise install` succeeds and `arm-none-eabi-gcc --version` runs.
+- [x] 1.4 Create `firmware/servo2040/` (CMakeLists, the SDK and pimoroni import scripts, `PICO_BOARD=pimoroni_servo2040`) with a minimal `main` that blinks the WS2812 LEDs and prints over USB stdio. Add the `build`/`upload`/`monitor` mise tasks. Verify that `mise run build` produces a `.uf2`. If the pinned pair fails to build, pin the SDK version used by the pimoroni tag's CI and record it in `design.md`.
+- [x] 1.5 Compile `core/movement` into the firmware target with `-Wall`. Verify the build has no warnings from `core/`, and that a map-file check (`arm-none-eabi-nm`) shows the pico_float wrappers (`__wrap___aeabi_fmul` or equivalent) linked.
 
 ## 2. Power protection core (host-tested)
 
