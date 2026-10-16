@@ -20,6 +20,11 @@ static uint32_t windowMs(const State &s)
   return (uint32_t)s.bucketCount * BUCKET_MS;
 }
 
+static int slotCount(const State &s)
+{
+  return s.bucketCount + 1;
+}
+
 // Adds current·dt to the window and recomputes the average once the window has
 // filled. Long gaps are split across buckets.
 static void accumulate(State &s, float currentA, uint32_t dtMs)
@@ -31,14 +36,14 @@ static void accumulate(State &s, float currentA, uint32_t dtMs)
     s.bucketCharge[s.bucketIndex] += currentA * (float)h;
     s.bucketFillMs += h;
     dtMs -= h;
-    if (s.bucketFillMs >= BUCKET_MS)
-    {
-      s.bucketIndex = (s.bucketIndex + 1) % s.bucketCount;
-      s.bucketCharge[s.bucketIndex] = 0; // oldest bucket leaves the window
-      s.bucketFillMs = 0;
-    }
     if (s.windowFillMs < windowMs(s))
       s.windowFillMs += h;
+    if (s.bucketFillMs >= BUCKET_MS)
+    {
+      s.bucketIndex = (s.bucketIndex + 1) % slotCount(s);
+      s.bucketCharge[s.bucketIndex] = 0; // reuses the slot that just left the window
+      s.bucketFillMs = 0;
+    }
   }
 
   if (s.windowFillMs < windowMs(s))
@@ -46,14 +51,17 @@ static void accumulate(State &s, float currentA, uint32_t dtMs)
     s.averageCurrentA = 0;
     return;
   }
-  // The current (partial) bucket plus the other full buckets span exactly one
-  // window minus the unfilled part of the current bucket's slot, which was
-  // zeroed when it became current; divide by the time actually covered.
+  // The window is exactly windowMs: the current partial bucket, the
+  // bucketCount - 1 full buckets before it, and the part of the oldest full
+  // bucket still inside the window (current assumed uniform within a bucket).
+  int slots = slotCount(s);
   float charge = 0;
-  for (int i = 0; i < s.bucketCount; i++)
-    charge += s.bucketCharge[i];
-  uint32_t covered = windowMs(s) - BUCKET_MS + s.bucketFillMs;
-  s.averageCurrentA = covered > 0 ? charge / (float)covered : 0;
+  for (int k = 0; k < s.bucketCount; k++)
+    charge += s.bucketCharge[(s.bucketIndex - k + slots) % slots];
+  int oldest = (s.bucketIndex - s.bucketCount + slots) % slots;
+  float oldestShare = (float)(BUCKET_MS - s.bucketFillMs) / (float)BUCKET_MS;
+  charge += s.bucketCharge[oldest] * oldestShare;
+  s.averageCurrentA = charge / (float)windowMs(s);
 }
 
 // Whether the condition behind each fault is present in this reading.

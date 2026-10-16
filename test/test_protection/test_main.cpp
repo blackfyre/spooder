@@ -113,6 +113,22 @@ void test_short_peak_does_not_trip()
   TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
 }
 
+void test_sustained_threshold_uses_exactly_the_window()
+{
+  // After a long idle, a pulse whose true 2 s average is just below 6 A must
+  // not trip, and one just above must.
+  powerUp();
+  feed(0, 6.0f, 3000);
+  feed(8.5f, 6.0f, 1400); // 2 s average 5.95 A
+  TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
+  TEST_ASSERT_FLOAT_WITHIN(0.02f, 5.95f, last.averageCurrentA);
+
+  powerUp();
+  feed(0, 6.0f, 3000);
+  feed(8.5f, 6.0f, 1440); // 2 s average 6.12 A
+  TEST_ASSERT_TRUE(last.faults & SUSTAINED_CURRENT);
+}
+
 void test_sustained_window_must_fill_before_tripping()
 {
   powerUp(); // 600 ms of low current so far
@@ -219,6 +235,7 @@ int main()
   RUN_TEST(test_overcurrent_inhibits_on_the_same_step);
   RUN_TEST(test_sustained_current_puts_body_to_sleep);
   RUN_TEST(test_short_peak_does_not_trip);
+  RUN_TEST(test_sustained_threshold_uses_exactly_the_window);
   RUN_TEST(test_sustained_window_must_fill_before_tripping);
   RUN_TEST(test_undervoltage_debounced);
   RUN_TEST(test_transient_sag_tolerated);

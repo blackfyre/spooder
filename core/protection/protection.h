@@ -71,8 +71,10 @@ struct State
   uint32_t belowMinSinceMs;
 
   // Sustained-current window: per-bucket integral of current over time (A·ms).
-  float bucketCharge[MAX_BUCKETS];
-  int bucketCount;
+  // One slot more than the window's buckets: the oldest full bucket is still
+  // partly inside the window while the current one fills.
+  float bucketCharge[MAX_BUCKETS + 1];
+  int bucketCount; // buckets per window
   int bucketIndex;
   uint32_t bucketFillMs;  // time accumulated in the current bucket
   uint32_t windowFillMs;  // total time covered, capped at the window length
