@@ -92,6 +92,14 @@ float inputWeight(const GaitInput &in);
 float progressRate(const GaitParams &p, const GaitInput &in);
 
 /**
+ * @brief Updates the leg's phase and segment start for cycle position t
+ * without evaluating the foot path. Call after every integration sub-step so
+ * a phase shorter than a tick is not skipped. No-op below MIN_INPUT.
+ */
+void trackPhase(int leg, float t, const GaitParams &p, const GaitInput &in,
+                LegCycle &cycle, Vector3 current);
+
+/**
  * @brief Foot target for one leg at cycle position t (0..1).
  *
  * Updates @p cycle when the leg changes phase. Returns @p current unchanged

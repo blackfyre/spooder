@@ -27,6 +27,9 @@ enum class Mode : uint8_t
 
 // A command older than this is stale and puts the body to sleep.
 constexpr uint32_t COMMAND_TIMEOUT_MS = 1000;
+// A command stamped up to this far after nowMs (another thread read millis()
+// later) still counts as fresh.
+constexpr uint32_t MAX_COMMAND_LEAD_MS = 100;
 // Longest time a single step may advance.
 constexpr uint32_t MAX_STEP_MS = 100;
 
@@ -38,7 +41,6 @@ struct StandTransition
 {
   bool active;
   bool moveAllAtOnce;
-  int legsDone;           // legs moved so far when moving three at a time
   int currentLegs[3];     // -1 when unused
   bool legDone[LEG_COUNT]; // reached the standing point; tracks height from then on
   float progress;         // progress units, 0..CYCLE_POINTS
@@ -50,13 +52,14 @@ struct BodyState
   Mode mode;
   uint32_t lastStepMs;
   bool started;
-  uint32_t modeEnteredMs;
 
   // Recorded (accepted) foot positions and the matching joint angles.
   Vector3 feet[LEG_COUNT];
   JointAngles angles[LEG_COUNT];
   // Set for a leg whose angles changed in the last step.
   bool legUpdated[LEG_COUNT];
+  // Feet recorded during this step's sub-steps, solved once at the end.
+  bool pendingSolve[LEG_COUNT];
   // Rejection tracking: newlyRejected is set only on the step a leg goes from
   // accepted to rejected, so reports are not repeated every step.
   bool rejected[LEG_COUNT];
@@ -65,6 +68,12 @@ struct BodyState
 
   // false once Sleep has folded the legs: servo output should be off.
   bool outputsEnabled;
+
+  // Once a command goes stale, that issuedAtMs stays stale; only a command
+  // with a different stamp can wake the body. Avoids millis() wrap making an
+  // old command look fresh again.
+  bool staleLatched;
+  uint32_t staleStamp;
 
   // Smoothed command values.
   Vector2 translate;
@@ -76,6 +85,7 @@ struct BodyState
   gait::LegCycle legCycles[LEG_COUNT];
 
   int initialiseStep;
+  uint32_t initialiseElapsedMs; // time spent in the current Initialise pose
   StandTransition stand;
   bool sleepFolded;
 };
@@ -87,7 +97,11 @@ void init(BodyState &s);
 
 /**
  * @brief Advances the body by the time since the previous step (clamped to
- * MAX_STEP_MS) and returns. Never loops internally.
+ * MAX_STEP_MS) and returns.
+ *
+ * The whole state machine runs in fixed internal sub-steps, so transitions,
+ * holds and smoothing land on the same time grid whatever the tick length.
+ * Joint angles are solved once per step for the legs that moved.
  */
 void step(BodyState &s, const MovementCommand &cmd, uint32_t nowMs);
 

@@ -81,99 +81,151 @@ float progressRate(const GaitParams &p, const GaitInput &in)
   return perStep * REFERENCE_STEPS_PER_SECOND;
 }
 
-Vector3 footTarget(int leg, float t, const GaitParams &p, const GaitInput &in,
-                   LegCycle &cycle, Vector3 current)
+// Stride geometry for one leg, shared by phase tracking and path evaluation.
+struct Stride
 {
-  float forwardAmount = in.translate.magnitude();
-  float turnAmount = in.rotate;
-  float weightSum = fabsf(forwardAmount) + fabsf(turnAmount);
-  if (weightSum < MIN_INPUT)
-    return current;
+  float forwardAmount;
+  float turnAmount;
+  float weightSum;
+  Vector2 v;
+  float rotateStrideLength;
+  float ground;
+  float lift;
+  float side;
+  int placement;
+  Vector2 pivot;
+};
 
-  float rotateStrideLength = in.rotate * in.rotationScale;
-  Vector2 v = in.translate;
+static Stride strideFor(int leg, const GaitParams &p, const GaitInput &in)
+{
+  Stride st;
+  st.forwardAmount = in.translate.magnitude();
+  st.turnAmount = in.rotate;
+  st.weightSum = fabsf(st.forwardAmount) + fabsf(st.turnAmount);
+  st.rotateStrideLength = in.rotate * in.rotationScale;
+  st.v = in.translate;
 
   if (in.fixedStride)
   {
-    v.normalize();
-    v = v * FIXED_STRIDE_LENGTH;
-    rotateStrideLength = rotateStrideLength < 0 ? -FIXED_STRIDE_LENGTH : FIXED_STRIDE_LENGTH;
+    st.v.normalize();
+    st.v = st.v * FIXED_STRIDE_LENGTH;
+    st.rotateStrideLength = st.rotateStrideLength < 0 ? -FIXED_STRIDE_LENGTH : FIXED_STRIDE_LENGTH;
   }
 
-  v = v * Vector2(1, p.strideLengthMultiplier);
-  v.y = clampf(v.y, -p.maxStrideLength / 2, p.maxStrideLength / 2);
-  v = v * in.speedScale;
+  st.v = st.v * Vector2(1, p.strideLengthMultiplier);
+  st.v.y = clampf(st.v.y, -p.maxStrideLength / 2, p.maxStrideLength / 2);
+  st.v = st.v * in.speedScale;
 
-  const float ground = in.distanceFromGround;
-  const float lift = LIFT_HEIGHT * p.liftHeightMultiplier;
-  const float stride = STRIDE_MULTIPLIER[leg];
-  const int placement = (int)(LEG_PLACEMENT_ANGLE * ROTATION_MULTIPLIER[leg]);
-  const Vector2 pivot(STANCE_DISTANCE, 0);
+  st.ground = in.distanceFromGround;
+  st.lift = LIFT_HEIGHT * p.liftHeightMultiplier;
+  st.side = STRIDE_MULTIPLIER[leg];
+  st.placement = (int)(LEG_PLACEMENT_ANGLE * ROTATION_MULTIPLIER[leg]);
+  st.pivot = Vector2(STANCE_DISTANCE, 0);
+  return st;
+}
 
-  // End points of each phase's path. A leg changing phase starts the new
-  // segment from the end of the previous one rather than from wherever the
-  // last step left it, so the path does not depend on step size.
-  auto blend = [&](Vector3 straightEnd, Vector3 rotateEnd) {
-    return (straightEnd * fabsf(forwardAmount) + rotateEnd * fabsf(turnAmount)) / weightSum;
-  };
-  const Vector3 propelEnd = blend(
-      Vector3(v.x * stride + STANCE_DISTANCE, -v.y * stride, ground).rotate(placement, pivot),
-      Vector3(STANCE_DISTANCE, rotateStrideLength, ground));
-  const Vector3 liftEnd = blend(
-      Vector3(-v.x * stride + STANCE_DISTANCE, v.y * stride, ground).rotate(placement, pivot),
-      Vector3(STANCE_DISTANCE, -rotateStrideLength, ground));
+static Vector3 blend(const Stride &st, Vector3 straightPoint, Vector3 rotatePoint)
+{
+  return (straightPoint * fabsf(st.forwardAmount) + rotatePoint * fabsf(st.turnAmount)) / st.weightSum;
+}
+
+// End of the ground path (start of the swing).
+static Vector3 propelEnd(const Stride &st)
+{
+  return blend(st,
+               Vector3(st.v.x * st.side + STANCE_DISTANCE, -st.v.y * st.side, st.ground).rotate(st.placement, st.pivot),
+               Vector3(STANCE_DISTANCE, st.rotateStrideLength, st.ground));
+}
+
+// End of the swing path (start of the next ground phase).
+static Vector3 liftEnd(const Stride &st)
+{
+  return blend(st,
+               Vector3(-st.v.x * st.side + STANCE_DISTANCE, st.v.y * st.side, st.ground).rotate(st.placement, st.pivot),
+               Vector3(STANCE_DISTANCE, -st.rotateStrideLength, st.ground));
+}
+
+// Updates the leg's phase and segment start for cycle position t. A leg
+// changing between ground and swing starts the new segment from the end of
+// the previous one rather than from wherever the last step left it, so the
+// path does not depend on step size.
+static void trackPhase(float t, const GaitParams &p, const Stride &st, LegCycle &cycle, Vector3 current)
+{
+  if (t < p.pushFraction)
+  {
+    if (cycle.phase == LegPhase::Lifting)
+      cycle.start = liftEnd(st);
+    else if (cycle.phase != LegPhase::Propelling)
+      cycle.start = current;
+    cycle.phase = LegPhase::Propelling;
+  }
+  else
+  {
+    if (cycle.phase == LegPhase::Propelling)
+      cycle.start = propelEnd(st);
+    else if (cycle.phase != LegPhase::Lifting)
+      cycle.start = current;
+    cycle.phase = LegPhase::Lifting;
+  }
+}
+
+void trackPhase(int leg, float t, const GaitParams &p, const GaitInput &in,
+                LegCycle &cycle, Vector3 current)
+{
+  Stride st = strideFor(leg, p, in);
+  if (st.weightSum < MIN_INPUT)
+    return;
+  trackPhase(t, p, st, cycle, current);
+}
+
+Vector3 footTarget(int leg, float t, const GaitParams &p, const GaitInput &in,
+                   LegCycle &cycle, Vector3 current)
+{
+  Stride st = strideFor(leg, p, in);
+  if (st.weightSum < MIN_INPUT)
+    return current;
+
+  trackPhase(t, p, st, cycle, current);
 
   Vector3 straight[4];
   Vector3 rotation[5];
   Vector3 straightPoint;
   Vector3 rotatePoint;
 
-  if (t < p.pushFraction)
+  if (cycle.phase == LegPhase::Propelling)
   {
     // Propelling: foot on the ground.
-    if (cycle.phase == LegPhase::Lifting)
-      cycle.start = liftEnd;
-    else if (cycle.phase != LegPhase::Propelling)
-      cycle.start = current;
-    cycle.phase = LegPhase::Propelling;
-
     float s = mapFloat(t, 0, p.pushFraction, 0, 1);
 
     straight[0] = cycle.start;
-    straight[1] = Vector3(v.x * stride + STANCE_DISTANCE, -v.y * stride, ground).rotate(placement, pivot);
+    straight[1] = Vector3(st.v.x * st.side + STANCE_DISTANCE, -st.v.y * st.side, st.ground).rotate(st.placement, st.pivot);
     straightPoint = bezier(straight, 2, s);
 
     rotation[0] = cycle.start;
-    rotation[1] = Vector3(STANCE_DISTANCE + 40, 0, ground);
-    rotation[2] = Vector3(STANCE_DISTANCE, rotateStrideLength, ground);
+    rotation[1] = Vector3(STANCE_DISTANCE + 40, 0, st.ground);
+    rotation[2] = Vector3(STANCE_DISTANCE, st.rotateStrideLength, st.ground);
     rotatePoint = bezier(rotation, 3, s);
   }
   else
   {
     // Lifting: swing the foot to the next stride start.
-    if (cycle.phase == LegPhase::Propelling)
-      cycle.start = propelEnd;
-    else if (cycle.phase != LegPhase::Lifting)
-      cycle.start = current;
-    cycle.phase = LegPhase::Lifting;
-
     float s = mapFloat(t, p.pushFraction, 1, 0, 1);
 
     straight[0] = cycle.start;
-    straight[1] = cycle.start + Vector3(0, 0, lift);
-    straight[2] = Vector3(-v.x * stride + STANCE_DISTANCE, (v.y + STRIDE_OVERSHOOT) * stride, ground + LAND_HEIGHT).rotate(placement, pivot);
-    straight[3] = Vector3(-v.x * stride + STANCE_DISTANCE, v.y * stride, ground).rotate(placement, pivot);
+    straight[1] = cycle.start + Vector3(0, 0, st.lift);
+    straight[2] = Vector3(-st.v.x * st.side + STANCE_DISTANCE, (st.v.y + STRIDE_OVERSHOOT) * st.side, st.ground + LAND_HEIGHT).rotate(st.placement, st.pivot);
+    straight[3] = Vector3(-st.v.x * st.side + STANCE_DISTANCE, st.v.y * st.side, st.ground).rotate(st.placement, st.pivot);
     straightPoint = bezier(straight, 4, s);
 
     rotation[0] = cycle.start;
-    rotation[1] = cycle.start + Vector3(0, 0, lift);
-    rotation[2] = Vector3(STANCE_DISTANCE + 40, 0, ground + lift);
-    rotation[3] = Vector3(STANCE_DISTANCE, -(rotateStrideLength + STRIDE_OVERSHOOT), ground + LAND_HEIGHT);
-    rotation[4] = Vector3(STANCE_DISTANCE, -rotateStrideLength, ground);
+    rotation[1] = cycle.start + Vector3(0, 0, st.lift);
+    rotation[2] = Vector3(STANCE_DISTANCE + 40, 0, st.ground + st.lift);
+    rotation[3] = Vector3(STANCE_DISTANCE, -(st.rotateStrideLength + STRIDE_OVERSHOOT), st.ground + LAND_HEIGHT);
+    rotation[4] = Vector3(STANCE_DISTANCE, -st.rotateStrideLength, st.ground);
     rotatePoint = bezier(rotation, 5, s);
   }
 
-  return (straightPoint * fabsf(forwardAmount) + rotatePoint * fabsf(turnAmount)) / weightSum;
+  return blend(st, straightPoint, rotatePoint);
 }
 
 } // namespace gait

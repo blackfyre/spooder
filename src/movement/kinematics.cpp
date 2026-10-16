@@ -22,9 +22,14 @@ static float toDegrees(float radians)
   return radians * 180.0f / (float)M_PI;
 }
 
+bool isValidTarget(Vector3 target)
+{
+  return target.isFinite() && target.magnitude() <= LEG_REACH;
+}
+
 bool solveLeg(Vector3 target, Vector3 offsets, JointAngles &out)
 {
-  if (!target.isFinite() || target.magnitude() > LEG_REACH)
+  if (!isValidTarget(target))
     return false;
 
   const float a1 = COXA_LENGTH;

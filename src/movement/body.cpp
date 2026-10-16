@@ -27,6 +27,8 @@ constexpr float CALIBRATION_RATE = 50;        // mm per second
 constexpr float CALIBRATION_INBETWEEN_Z = -20;
 constexpr float STAND_LIFT_CLEARANCE = 50;    // minimum lift of the in-between point
 constexpr float AT_POSITION_MM = 0.01f;
+// Internal sub-step: the state machine advances in these increments.
+constexpr uint32_t INTEGRATION_STEP_MS = 5;
 
 // Speed dial 0..100 → speed scale, as upstream; rotation scale is fixed.
 constexpr float ROTATION_SCALE = 0.55f;
@@ -67,15 +69,14 @@ MovementCommand clampCommand(const MovementCommand &cmd)
   return c;
 }
 
-// Records a foot target only when the leg can reach it.
+// Records a foot target only when the leg can reach it. The joint angles are
+// solved once at the end of the step (solveAngles).
 static void setFoot(BodyState &s, int leg, Vector3 target)
 {
-  JointAngles angles;
-  if (kinematics::solveLeg(target, kinematics::LEG_OFFSETS[leg], angles))
+  if (kinematics::isValidTarget(target))
   {
     s.feet[leg] = target;
-    s.angles[leg] = angles;
-    s.legUpdated[leg] = true;
+    s.pendingSolve[leg] = true;
     s.rejected[leg] = false;
     return;
   }
@@ -126,7 +127,6 @@ static void enterStand(BodyState &s, Mode from)
   StandTransition &st = s.stand;
   st.active = true;
   st.moveAllAtOnce = (from == Mode::Initialise || from == Mode::Sleep || from == Mode::Calibrate);
-  st.legsDone = 0;
   st.progress = 0;
   for (int i = 0; i < LEG_COUNT; i++)
     st.legDone[i] = false;
@@ -192,10 +192,11 @@ static void stepStand(BodyState &s, float dtS)
     for (int j = 0; j < 3; j++)
       if (st.currentLegs[j] != -1)
         st.legDone[st.currentLegs[j]] = true;
-    st.progress = 0;
-    st.legsDone += 3;
+    st.progress -= CYCLE_POINTS;
+    // Done when no unfinished leg is left. Each non-empty group marks at
+    // least one leg done, and an empty group picks again, so this ends.
     pickHighestLegs(s);
-    if (st.legsDone >= LEG_COUNT || st.currentLegs[0] == -1)
+    if (st.currentLegs[0] == -1)
       st.active = false;
   }
 }
@@ -230,29 +231,47 @@ static gait::GaitInput gaitInput(const BodyState &s, const MovementCommand &cmd)
   return in;
 }
 
-static void stepWalk(BodyState &s, const MovementCommand &cmd, float dtS)
+// Advances gait progress over one integration sub-step. Zero input stops
+// progress; footTarget then holds every leg.
+static void advanceWalk(BodyState &s, const MovementCommand &cmd, float dtS)
 {
   const gait::GaitParams &p = gait::params(s.currentGait);
   gait::GaitInput in = gaitInput(s, cmd);
+  if (gait::inputWeight(in) < gait::MIN_INPUT)
+    return;
 
-  // Advance first, so the foot targets correspond to the current time and do
-  // not lag by one step. Zero input stops progress; footTarget then holds.
-  if (gait::inputWeight(in) >= gait::MIN_INPUT)
+  float advance = gait::progressRate(p, in) * dtS;
+  for (int i = 0; i < LEG_COUNT; i++)
   {
-    float advance = gait::progressRate(p, in) * dtS;
-    for (int i = 0; i < LEG_COUNT; i++)
-    {
-      s.cycleProgress[i] += advance;
-      while (s.cycleProgress[i] >= CYCLE_POINTS)
-        s.cycleProgress[i] -= CYCLE_POINTS;
-    }
+    s.cycleProgress[i] += advance;
+    while (s.cycleProgress[i] >= CYCLE_POINTS)
+      s.cycleProgress[i] -= CYCLE_POINTS;
+    // Record phase changes at sub-step resolution; a fast gait's ground phase
+    // can be shorter than one tick.
+    gait::trackPhase(i, s.cycleProgress[i] / CYCLE_POINTS, p, in, s.legCycles[i], s.feet[i]);
   }
+}
+
+// Writes foot targets for the current progress. Called after advanceWalk, so
+// targets correspond to the current time rather than lagging by one step.
+static void stepWalk(BodyState &s, const MovementCommand &cmd)
+{
+  const gait::GaitParams &p = gait::params(s.currentGait);
+  gait::GaitInput in = gaitInput(s, cmd);
 
   for (int i = 0; i < LEG_COUNT; i++)
   {
     float t = s.cycleProgress[i] / CYCLE_POINTS;
     setFoot(s, i, gait::footTarget(i, t, p, in, s.legCycles[i], s.feet[i]));
   }
+}
+
+// Before leaving Walk mid-step, bring the feet to where the gait has them
+// now, so the next transition starts from the current position.
+static void leaveWalk(BodyState &s, const MovementCommand &cmd)
+{
+  if (s.mode == Mode::Walk)
+    stepWalk(s, cmd);
 }
 
 // --- Sleep -----------------------------------------------------------------
@@ -326,19 +345,20 @@ static void stepCalibrate(BodyState &s, float dtS)
 
 // --- Initialise ------------------------------------------------------------
 
-static void stepInitialise(BodyState &s, uint32_t nowMs)
+static void stepInitialise(BodyState &s, uint32_t dtMs)
 {
-  if (nowMs - s.modeEnteredMs >= INIT_HOLD_MS[s.initialiseStep])
+  s.initialiseElapsedMs += dtMs;
+  if (s.initialiseElapsedMs >= INIT_HOLD_MS[s.initialiseStep])
   {
+    s.initialiseElapsedMs -= INIT_HOLD_MS[s.initialiseStep];
     s.initialiseStep++;
-    s.modeEnteredMs = nowMs;
     if (s.initialiseStep >= 2)
     {
       enterStand(s, Mode::Initialise);
       return;
     }
   }
-  // Issue the current pose every tick, including the tick its hold starts.
+  // Issue the current pose, including on the sub-step its hold starts.
   for (int i = 0; i < LEG_COUNT; i++)
     setFoot(s, i, INIT_POSES[s.initialiseStep]);
 }
@@ -353,6 +373,7 @@ void init(BodyState &s)
   s.outputsEnabled = true;
   s.currentGait = Gait::Tri;
   s.initialiseStep = 0;
+  s.initialiseElapsedMs = 0;
   for (int i = 0; i < LEG_COUNT; i++)
   {
     s.feet[i] = INIT_POSES[1];
@@ -387,18 +408,23 @@ static void smoothCommand(BodyState &s, const MovementCommand &cmd, float dtS)
 
 // Resolves the requested mode against the current mode. Sleep (requested or
 // stale) pre-empts everything; other requests wait for transitions to finish.
-static void resolveMode(BodyState &s, RequestedMode req)
+static void resolveMode(BodyState &s, RequestedMode req, const MovementCommand &cmd)
 {
   if (req == RequestedMode::Sleep)
   {
     if (s.mode != Mode::Sleep)
+    {
+      leaveWalk(s, cmd);
       enterSleep(s);
+    }
     return;
   }
 
   if (s.mode == Mode::Sleep)
   {
-    wake(s);
+    // Like every other transition, the fold completes before waking.
+    if (s.sleepFolded)
+      wake(s);
     return;
   }
 
@@ -415,7 +441,10 @@ static void resolveMode(BodyState &s, RequestedMode req)
     break;
   case Mode::Walk:
     if (req != RequestedMode::Walk)
+    {
+      leaveWalk(s, cmd);
       enterStand(s, Mode::Walk);
+    }
     break;
   case Mode::Calibrate:
     if (req != RequestedMode::Calibrate)
@@ -438,28 +467,27 @@ static void selectGait(BodyState &s, int requested)
     rephase(s);
 }
 
-void step(BodyState &s, const MovementCommand &rawCmd, uint32_t nowMs)
+static bool isStale(BodyState &s, uint32_t issuedAtMs, uint32_t nowMs)
 {
-  uint32_t dtMs = s.started ? nowMs - s.lastStepMs : 0;
-  if (dtMs > MAX_STEP_MS)
-    dtMs = MAX_STEP_MS;
-  if (!s.started)
-    s.modeEnteredMs = nowMs;
-  s.started = true;
-  s.lastStepMs = nowMs;
+  if (s.staleLatched && issuedAtMs == s.staleStamp)
+    return true;
+  s.staleLatched = false;
+
+  bool aheadOfNow = issuedAtMs - nowMs <= MAX_COMMAND_LEAD_MS;
+  if (aheadOfNow || nowMs - issuedAtMs <= COMMAND_TIMEOUT_MS)
+    return false;
+
+  s.staleLatched = true;
+  s.staleStamp = issuedAtMs;
+  return true;
+}
+
+// One fixed sub-step of the whole state machine.
+static void subStep(BodyState &s, const MovementCommand &cmd, RequestedMode req, uint32_t dtMs)
+{
   float dtS = dtMs / 1000.0f;
 
-  for (int i = 0; i < LEG_COUNT; i++)
-  {
-    s.legUpdated[i] = false;
-    s.newlyRejected[i] = false;
-  }
-
-  MovementCommand cmd = clampCommand(rawCmd);
-  bool stale = nowMs - cmd.issuedAtMs > COMMAND_TIMEOUT_MS;
-  RequestedMode req = stale ? RequestedMode::Sleep : cmd.mode;
-
-  resolveMode(s, req);
+  resolveMode(s, req, cmd);
   selectGait(s, cmd.gait);
   if (s.mode != Mode::Sleep)
     smoothCommand(s, cmd, dtS);
@@ -467,13 +495,13 @@ void step(BodyState &s, const MovementCommand &rawCmd, uint32_t nowMs)
   switch (s.mode)
   {
   case Mode::Initialise:
-    stepInitialise(s, nowMs);
+    stepInitialise(s, dtMs);
     break;
   case Mode::Stand:
     stepStand(s, dtS);
     break;
   case Mode::Walk:
-    stepWalk(s, cmd, dtS);
+    advanceWalk(s, cmd, dtS);
     break;
   case Mode::Sleep:
     stepSleep(s, dtS);
@@ -482,6 +510,55 @@ void step(BodyState &s, const MovementCommand &rawCmd, uint32_t nowMs)
     stepCalibrate(s, dtS);
     break;
   }
+}
+
+// Solves joint angles for every leg recorded during this step.
+static void solveAngles(BodyState &s)
+{
+  for (int i = 0; i < LEG_COUNT; i++)
+  {
+    if (!s.pendingSolve[i])
+      continue;
+    s.pendingSolve[i] = false;
+    // setFoot only records targets solveLeg accepts, so this succeeds.
+    if (kinematics::solveLeg(s.feet[i], kinematics::LEG_OFFSETS[i], s.angles[i]))
+      s.legUpdated[i] = true;
+  }
+}
+
+void step(BodyState &s, const MovementCommand &rawCmd, uint32_t nowMs)
+{
+  uint32_t dtMs = s.started ? nowMs - s.lastStepMs : 0;
+  if (dtMs > MAX_STEP_MS)
+    dtMs = MAX_STEP_MS;
+  s.started = true;
+  s.lastStepMs = nowMs;
+
+  for (int i = 0; i < LEG_COUNT; i++)
+  {
+    s.legUpdated[i] = false;
+    s.newlyRejected[i] = false;
+    s.pendingSolve[i] = false;
+  }
+
+  MovementCommand cmd = clampCommand(rawCmd);
+  bool stale = isStale(s, cmd.issuedAtMs, nowMs);
+  RequestedMode req = stale ? RequestedMode::Sleep : cmd.mode;
+
+  // At least one (possibly zero-length) sub-step, so the first call acts.
+  uint32_t done = 0;
+  do
+  {
+    uint32_t h = dtMs - done < INTEGRATION_STEP_MS ? dtMs - done : INTEGRATION_STEP_MS;
+    subStep(s, cmd, req, h);
+    done += h;
+  } while (done < dtMs);
+
+  // Walk evaluates its foot paths once per step; phases were tracked per sub-step.
+  if (s.mode == Mode::Walk)
+    stepWalk(s, cmd);
+
+  solveAngles(s);
 }
 
 } // namespace body

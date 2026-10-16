@@ -29,6 +29,12 @@ struct JointAngles
 };
 
 /**
+ * @brief True when solveLeg would accept the target: finite and within
+ * LEG_REACH of the coxa pivot. Cheap; no trigonometry.
+ */
+bool isValidTarget(Vector3 target);
+
+/**
  * @brief Solves the joint angles for a foot target in the leg's own frame
  * (origin at the coxa pivot, x outward, z up, millimetres).
  *

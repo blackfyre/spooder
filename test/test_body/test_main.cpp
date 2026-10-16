@@ -177,12 +177,15 @@ void test_height_change_while_standing()
 
 // --- 2.3 walk --------------------------------------------------------------
 
-static void walkFor(uint32_t stepMs, Vector3 out[LEG_COUNT])
+static void walkFor(uint32_t stepMs, Vector3 out[LEG_COUNT], Vector2 translate = Vector2(20, 40), float rotate = 10,
+                    int gaitIndex = 0, float speed = 44)
 {
   bootToStand();
   MovementCommand walk = command(RequestedMode::Walk);
-  walk.translate = Vector2(20, 40);
-  walk.rotate = 10;
+  walk.translate = translate;
+  walk.rotate = rotate;
+  walk.gait = gaitIndex;
+  walk.speed = speed;
   run(walk, 20);  // enter Walk on an aligned step
   run(walk, 2000, stepMs);
   for (int i = 0; i < LEG_COUNT; i++)
@@ -195,6 +198,49 @@ void test_walk_is_tick_rate_independent()
   Vector3 at50[LEG_COUNT];
   walkFor(20, at20);
   walkFor(50, at50);
+  for (int i = 0; i < LEG_COUNT; i++)
+    TEST_ASSERT_FLOAT_WITHIN(5, 0, at20[i].distanceTo(at50[i]));
+}
+
+// Settle full input while standing, then walk Bi at full speed for a short
+// time: its ground phase (~49 ms) is shorter than a 50 ms tick.
+static void fastBiWalk(uint32_t stepMs, uint32_t walkMs, Vector3 out[LEG_COUNT])
+{
+  bootToStand();
+  MovementCommand c = command(RequestedMode::Stand);
+  c.translate = Vector2(0, 100);
+  c.speed = 100;
+  c.gait = static_cast<int>(gait::Gait::Bi);
+  run(c, 1500);
+  c.mode = RequestedMode::Walk;
+  // Enter Walk on a tick of the size under test: a 50 ms first tick jumps
+  // past the whole ground phase.
+  run(c, walkMs, stepMs);
+  for (int i = 0; i < LEG_COUNT; i++)
+    out[i] = s.feet[i];
+}
+
+void test_fast_gait_is_tick_rate_independent()
+{
+  const uint32_t durations[] = {100, 300, 1000};
+  for (uint32_t ms : durations)
+  {
+    Vector3 at20[LEG_COUNT];
+    Vector3 at50[LEG_COUNT];
+    fastBiWalk(20, ms, at20);
+    fastBiWalk(50, ms, at50);
+    for (int i = 0; i < LEG_COUNT; i++)
+      TEST_ASSERT_FLOAT_WITHIN(5, 0, at20[i].distanceTo(at50[i]));
+  }
+}
+
+void test_walk_is_tick_rate_independent_at_full_input()
+{
+  // Full input accelerates hardest from rest, where coarse integration errs most.
+  Vector3 at20[LEG_COUNT];
+  Vector3 at50[LEG_COUNT];
+  walkFor(20, at20, Vector2(0, 100), 0);
+  walkFor(50, at50, Vector2(0, 100), 0);
   for (int i = 0; i < LEG_COUNT; i++)
     TEST_ASSERT_FLOAT_WITHIN(5, 0, at20[i].distanceTo(at50[i]));
 }
@@ -471,6 +517,127 @@ void test_stand_from_walk_finishes_at_current_height()
     TEST_ASSERT_FLOAT_WITHIN(0.01, expectedZ, s.feet[i].z);
 }
 
+void test_stand_with_empty_first_group_moves_every_leg()
+{
+  bootToStand();
+  // Walk with no input: feet stay exactly at the standing point.
+  run(command(RequestedMode::Walk), 100);
+  TEST_ASSERT_TRUE(s.mode == Mode::Walk);
+  MovementCommand stand = command(RequestedMode::Stand);
+  stand.height = 60;
+  int steps = 0;
+  run(stand, 20);
+  while (transitionActive(s) && steps++ < 1000)
+  {
+    Vector3 before[LEG_COUNT];
+    for (int i = 0; i < LEG_COUNT; i++)
+      before[i] = s.feet[i];
+    run(stand, 20);
+    for (int i = 0; i < LEG_COUNT; i++)
+      TEST_ASSERT_TRUE(s.feet[i].distanceTo(before[i]) < 30); // no jumps
+  }
+  TEST_ASSERT_FALSE(transitionActive(s));
+  // The step after the transition must not jump either.
+  Vector3 before[LEG_COUNT];
+  for (int i = 0; i < LEG_COUNT; i++)
+    before[i] = s.feet[i];
+  run(stand, 20);
+  for (int i = 0; i < LEG_COUNT; i++)
+    TEST_ASSERT_TRUE(s.feet[i].distanceTo(before[i]) < 5);
+}
+
+void test_wake_waits_for_sleep_fold()
+{
+  bootToStand();
+  MovementCommand walk = command(RequestedMode::Walk);
+  walk.translate = Vector2(0, 60);
+  run(walk, 500);
+  run(command(RequestedMode::Sleep), 20);
+  TEST_ASSERT_TRUE(s.mode == Mode::Sleep);
+  // A wake request on the very next tick must not abandon the fold.
+  run(walk, 20);
+  TEST_ASSERT_TRUE(s.mode == Mode::Sleep);
+  int steps = 0;
+  while (s.mode == Mode::Sleep && steps++ < 500)
+  {
+    run(walk, 20);
+    if (s.mode == Mode::Sleep)
+      TEST_ASSERT_TRUE(transitionActive(s) || !s.outputsEnabled);
+  }
+  // Woke only after folding completed and outputs were switched off.
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+  TEST_ASSERT_TRUE(s.outputsEnabled);
+}
+
+void test_command_stamped_after_now_is_not_stale()
+{
+  bootToStand();
+  MovementCommand c = command(RequestedMode::Stand);
+  c.issuedAtMs = now + 25; // produced by another thread after we read millis()
+  now += 20;
+  step(s, c, now);
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+}
+
+void test_stale_command_never_becomes_fresh_again()
+{
+  bootToStand();
+  MovementCommand walk = command(RequestedMode::Walk);
+  walk.translate = Vector2(0, 50);
+  run(walk, 500);
+  // The controller stops; its last command keeps its stamp.
+  for (int i = 0; i < 300; i++)
+  {
+    now += 20;
+    step(s, walk, now);
+  }
+  // Fully folded and limp, so a revived command could wake it immediately.
+  TEST_ASSERT_TRUE(s.mode == Mode::Sleep);
+  TEST_ASSERT_FALSE(s.outputsEnabled);
+  // Days later, including past the signed and unsigned wrap points of millis().
+  const uint32_t laterOffsets[] = {0x7FFFFFFFu, 0x80000010u, 0xC0000000u, 0xFFFFFF00u};
+  for (uint32_t offset : laterOffsets)
+  {
+    uint32_t t = walk.issuedAtMs + offset;
+    for (int i = 0; i < 5; i++)
+      step(s, walk, t + i * 20);
+    TEST_ASSERT_TRUE(s.mode == Mode::Sleep);
+    TEST_ASSERT_FALSE(s.outputsEnabled);
+  }
+  // A genuinely new command wakes it.
+  now = walk.issuedAtMs + 0xFFFFFFFFu + 200;
+  run(walk, 5000);
+  TEST_ASSERT_TRUE(s.mode == Mode::Walk);
+}
+
+// Boot and walk entirely at one tick size: transitions (Initialise holds,
+// Stand groups, entering Walk) must land on the same time grid.
+static void bootAndWalk(uint32_t stepMs, Vector3 out[LEG_COUNT])
+{
+  init(s);
+  now = 0;
+  MovementCommand c = command(RequestedMode::Walk);
+  c.translate = Vector2(0, 100);
+  c.speed = 100;
+  c.gait = static_cast<int>(gait::Gait::Bi);
+  step(s, c, now);
+  run(c, 3000, stepMs);
+  for (int i = 0; i < LEG_COUNT; i++)
+    out[i] = s.feet[i];
+}
+
+void test_boot_and_walk_is_tick_rate_independent()
+{
+  Vector3 at20[LEG_COUNT];
+  Vector3 at50[LEG_COUNT];
+  bootAndWalk(20, at20);
+  TEST_ASSERT_TRUE(s.mode == Mode::Walk);
+  bootAndWalk(50, at50);
+  TEST_ASSERT_TRUE(s.mode == Mode::Walk);
+  for (int i = 0; i < LEG_COUNT; i++)
+    TEST_ASSERT_FLOAT_WITHIN(5, 0, at20[i].distanceTo(at50[i]));
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -483,6 +650,9 @@ int main()
   RUN_TEST(test_stand_transition_spans_several_steps);
   RUN_TEST(test_height_change_while_standing);
   RUN_TEST(test_walk_is_tick_rate_independent);
+  RUN_TEST(test_walk_is_tick_rate_independent_at_full_input);
+  RUN_TEST(test_fast_gait_is_tick_rate_independent);
+  RUN_TEST(test_boot_and_walk_is_tick_rate_independent);
   RUN_TEST(test_gait_change_rephases_legs);
   RUN_TEST(test_zero_input_walk_holds_and_stays_finite);
   RUN_TEST(test_rotate_only_walk_is_finite);
@@ -499,5 +669,9 @@ int main()
   RUN_TEST(test_rejected_target_keeps_position_and_reports_once);
   RUN_TEST(test_initialise_holds_second_pose_for_full_duration);
   RUN_TEST(test_stand_from_walk_finishes_at_current_height);
+  RUN_TEST(test_stand_with_empty_first_group_moves_every_leg);
+  RUN_TEST(test_wake_waits_for_sleep_fold);
+  RUN_TEST(test_command_stamped_after_now_is_not_stale);
+  RUN_TEST(test_stale_command_never_becomes_fresh_again);
   return UNITY_END();
 }

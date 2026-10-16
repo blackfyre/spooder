@@ -42,13 +42,14 @@ Initialise --> Stand <--> Walk
      Sleep --> Stand on any other request (outputs re-enabled)
 ```
 
-- **Pre-emption:** Sleep and stale commands pre-empt everything. Other requests wait until `transitionActive()` is false (Initialise, an active Stand transition, a Sleep fold).
+- **Pre-emption:** Sleep and stale commands pre-empt everything. Other requests, including waking, wait until `transitionActive()` is false (Initialise, an active Stand transition, a Sleep fold). A command stamped up to `MAX_COMMAND_LEAD_MS` (100 ms) after `nowMs` is fresh. Once a command is stale, that `issuedAtMs` stays stale (latched), so `millis()` wrap can never revive it; only a new stamp wakes the body.
 - **Initialise:** holds (160,0,0) for 25 ms, then (225,0,115) for 500 ms, then enters Stand.
 - **Stand:** a Bézier move from each foot's position, through a lifted midpoint, to (190, 0, ground).
   - Coming from Walk, it moves three legs at a time, highest first.
   - Coming from Initialise, Sleep or Calibrate, it moves all legs at once.
   - Once settled, the feet track height changes.
-- **Walk:** each step advances gait progress *before* computing targets.
+- **Time grid:** `body::step` runs the whole state machine in 5 ms sub-steps (`INTEGRATION_STEP_MS`), carrying leftover time across transitions, so behaviour does not depend on tick length. Sub-steps only record feet (cheap `isValidTarget` check); IK is solved once per step (`solveAngles`) for legs that moved.
+- **Walk:** gait progress and phase tracking (`gait::trackPhase`) advance per sub-step, so a ground phase shorter than a tick is not skipped. Foot paths are evaluated once per step, after progress.
   - On a ground↔swing phase change, a leg starts its new segment from the previous segment's end point, which keeps the path independent of step size.
   - Zero input stops progress and holds every foot.
 - **Sleep:** feet ease to `REST_POSE` (130,0,−46), snap within 1 mm, then `outputsEnabled` goes false and `servos` switches every channel off. Waking re-enables output and passes through Stand.
