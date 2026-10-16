@@ -358,6 +358,44 @@ void test_wake_goes_through_stand_before_walk()
   TEST_ASSERT_TRUE(s.mode == Mode::Walk);
 }
 
+void test_wake_count_increments_on_each_wake()
+{
+  bootToStand();
+  uint32_t before = s.wakeCount;
+  run(command(RequestedMode::Sleep), 5000);
+  TEST_ASSERT_EQUAL_UINT32(before, s.wakeCount); // sleeping is not waking
+  run(command(RequestedMode::Stand), 20);
+  TEST_ASSERT_EQUAL_UINT32(before + 1, s.wakeCount);
+}
+
+void test_fold_and_wake_inside_one_step_counts_a_wake()
+{
+  bootToStand();
+  run(command(RequestedMode::Sleep), 20);
+  // Advance the fold until it is one sub-step from completing, then make a
+  // single long step that finishes it and wakes on a later sub-step.
+  int guard = 0;
+  while (guard++ < 2000)
+  {
+    BodyState probe = s;
+    now += 5;
+    step(probe, command(RequestedMode::Sleep), now);
+    now -= 5;
+    if (probe.sleepFolded)
+      break;
+    run(command(RequestedMode::Sleep), 5, 5);
+  }
+  uint32_t before = s.wakeCount;
+  // 20 ms step: the first sub-step completes the fold (Sleep request), and the
+  // wake request below is resolved on the following sub-steps.
+  MovementCommand stand = command(RequestedMode::Stand);
+  now += 20;
+  stand.issuedAtMs = now;
+  step(s, stand, now);
+  TEST_ASSERT_TRUE(s.outputsEnabled);
+  TEST_ASSERT_EQUAL_UINT32(before + 1, s.wakeCount);
+}
+
 void test_stale_command_puts_walking_body_to_sleep()
 {
   bootToStand();
@@ -660,6 +698,8 @@ int main()
   RUN_TEST(test_sleep_resets_smoothing);
   RUN_TEST(test_sleep_folds_then_disables_outputs);
   RUN_TEST(test_wake_goes_through_stand_before_walk);
+  RUN_TEST(test_wake_count_increments_on_each_wake);
+  RUN_TEST(test_fold_and_wake_inside_one_step_counts_a_wake);
   RUN_TEST(test_stale_command_puts_walking_body_to_sleep);
   RUN_TEST(test_stale_sleep_interrupts_stand_transition);
   RUN_TEST(test_calibrate_raises_only_low_legs_first);

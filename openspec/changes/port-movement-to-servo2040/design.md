@@ -75,7 +75,7 @@ test/                    Unity host tests (PlatformIO native env)
   - It forces each servo pin low, but only once that pin is low, sweeping all 18 pins. No pulse is truncated, and a truncated pulse would itself be a valid-looking position command. The whole cut-off is bounded by one pulse length (≤2.7 ms).
   - The cluster is then loaded with zero pulses.
   - The override is released at the next switch-on, and no earlier than 25 ms after switch-off, by which time the zero-pulse sequence is certainly active.
-- **Output hold** (`core/protection/output_hold`, host-tested). After any inhibit, output returns only at a body wake: `outputsEnabled` going false, through a completed Sleep fold, and then true again. Without the hold, a fault cleared while the body was still folding in software would switch output back on mid-fold, and the legs would jump without a new request.
+- **Output hold** (`core/protection/output_hold`, host-tested). After any inhibit, output returns only once the body has woken from Sleep, detected through `BodyState::wakeCount`. A completed fold and a wake can both happen inside one step's sub-steps, so edges of `outputsEnabled` between steps can be missed. Without the hold, a fault cleared while the body was still folding in software would switch output back on mid-fold, and the legs would jump without a new request.
 - The angle→µs conversion stays in `kinematics::angleToMicroseconds`. `ServoCluster` is used in raw-pulse mode, and its own calibration objects stay at the defaults.
 
 ### D4. Power protection as a pure state machine

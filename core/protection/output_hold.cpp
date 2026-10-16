@@ -3,17 +3,15 @@
 namespace protection
 {
 
-bool outputAllowed(OutputHold &h, bool inhibited, bool bodyWants)
+bool outputAllowed(OutputHold &h, bool inhibited, bool bodyWants, uint32_t wakeCount)
 {
-  bool wake = bodyWants && !h.lastBodyWants;
-  h.lastBodyWants = bodyWants;
-
   if (inhibited)
   {
     h.held = true;
+    h.wakeCountAtInhibit = wakeCount;
     return false;
   }
-  if (h.held && wake)
+  if (h.held && wakeCount != h.wakeCountAtInhibit)
     h.held = false;
   return !h.held && bodyWants;
 }

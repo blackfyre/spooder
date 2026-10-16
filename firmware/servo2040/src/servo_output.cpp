@@ -114,7 +114,7 @@ void apply(const body::BodyState &body)
   }
 
   // After an inhibit, output returns only at a body wake (see output_hold).
-  bool wantOn = protection::outputAllowed(hold, inhibited, body.outputsEnabled);
+  bool wantOn = protection::outputAllowed(hold, inhibited, body.outputsEnabled, body.wakeCount);
   if (!wantOn)
   {
     if (on)

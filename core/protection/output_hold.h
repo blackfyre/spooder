@@ -2,18 +2,19 @@
 #define OUTPUT_HOLD_H
 
 // Once servo output has been inhibited by protection, it may only come back
-// on at a wake: the body must first stop asking for output (Sleep folded)
-// and then ask again. Clearing a fault therefore never resumes output in the
-// middle of whatever the body was doing while output was off.
+// on after the body has woken from Sleep. Clearing a fault therefore never
+// resumes output in the middle of whatever the body was doing while output
+// was off.
 // Hardware-free: compiled for the board and for host tests.
+#include <stdint.h>
 
 namespace protection
 {
 
 struct OutputHold
 {
-  bool held = false;          // inhibited since the last wake
-  bool lastBodyWants = false; // body.outputsEnabled at the previous step
+  bool held = false;          // inhibited, and the body has not woken since
+  uint32_t wakeCountAtInhibit = 0;
 };
 
 /**
@@ -21,8 +22,10 @@ struct OutputHold
  *
  * @param inhibited protection currently inhibits output
  * @param bodyWants the body wants output on (body::BodyState::outputsEnabled)
+ * @param wakeCount body::BodyState::wakeCount; any change since the inhibit
+ *        means the body has woken, even within a single step
  */
-bool outputAllowed(OutputHold &h, bool inhibited, bool bodyWants);
+bool outputAllowed(OutputHold &h, bool inhibited, bool bodyWants, uint32_t wakeCount);
 
 } // namespace protection
 
