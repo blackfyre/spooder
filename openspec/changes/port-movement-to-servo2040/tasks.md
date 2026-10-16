@@ -10,13 +10,13 @@
 
 ## 2. Power protection core (host-tested)
 
-- [ ] 2.1 Create `core/protection/` with the reading/limits/state types and `protection::step` (design D4). Verify that host tests cover the power-on gate (500 ms of continuous valid voltage) and that USB-only power (≈0 V) keeps output disallowed.
-- [ ] 2.2 Implement the overcurrent trip, the sustained-current average over a window, undervoltage with debounce, the brown-out and overvoltage instant trips, and fault latching. Verify that host tests cover:
+- [x] 2.1 Create `core/protection/` with the reading/limits/state types and `protection::step` (design D4). Verify that host tests cover the power-on gate (500 ms of continuous valid voltage) and that USB-only power (≈0 V) keeps output disallowed.
+- [x] 2.2 Implement the overcurrent trip, the sustained-current average over a window, undervoltage with debounce, the brown-out and overvoltage instant trips, and fault latching. Verify that host tests cover:
   - each trip;
   - a short peak and a transient sag not tripping;
   - trips taking effect on the evaluation tick;
   - `forceSleep`/`allowOutput` for each fault type.
-- [ ] 2.3 Implement clearing: a clear request succeeds only when the condition is absent, and clearing does not change movement on its own. Verify host tests for clearing while the condition persists, clearing after recovery, and forceSleep staying set until cleared.
+- [x] 2.3 Implement clearing: a clear request succeeds only when the condition is absent, and clearing does not change movement on its own. Verify host tests for clearing while the condition persists, clearing after recovery, and forceSleep staying set until cleared.
 
 ## 3. Servo 2040 integration
 
