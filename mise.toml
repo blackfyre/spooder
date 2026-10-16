@@ -1,0 +1,19 @@
+[tools]
+python = "3.13"
+"pipx:platformio" = "6.2.0"
+
+[tasks.build]
+description = "Compile the firmware"
+run = "pio run"
+
+[tasks.upload]
+description = "Build and flash the firmware to the board"
+run = "pio run --target upload"
+
+[tasks.monitor]
+description = "Open the serial monitor"
+run = "pio device monitor"
+
+[tasks.clean]
+description = "Remove build artefacts"
+run = "pio run --target clean"
