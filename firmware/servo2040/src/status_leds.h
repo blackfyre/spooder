@@ -1,9 +1,9 @@
 #ifndef STATUS_LEDS_H
 #define STATUS_LEDS_H
 
-// Robot state on the Servo 2040's six RGB LEDs.
-#include <stdint.h>
-#include "movement/body.h"
+// Robot state on the Servo 2040's six RGB LEDs. The pattern itself is computed
+// by core/status/led_pattern (host-tested); this adapter only drives the LEDs.
+#include "status/led_pattern.h"
 
 namespace status_leds
 {
@@ -11,12 +11,9 @@ namespace status_leds
 void setup();
 
 /**
- * @brief Shows the current state. Call every tick; the pattern is time-based.
- *
- * @param supplyAccepted false while protection is still waiting for a valid supply
- * @param faults latched protection faults (protection::Fault bits)
+ * @brief Shows the given state. Call every tick; patterns are time-based.
  */
-void show(uint32_t nowMs, bool supplyAccepted, uint16_t faults, body::Mode mode);
+void show(const led_pattern::State &state);
 
 } // namespace status_leds
 

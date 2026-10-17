@@ -36,12 +36,13 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
     - `body`: the non-blocking state machine (Initialise, Stand, Walk, Sleep, Calibrate) on a fixed 5 ms internal grid.
     - `gait`, `kinematics` (IK, target validation, `servoOutputIndex`) and `vectors`.
     - `movement_command.h`: the request a controller hands to movement.
-  - `protection/`: power protection. It turns supply readings into "output allowed" and "force Sleep", with latched faults.
+  - `protection/`: power protection. It turns supply readings into "output allowed" and "force Sleep", with latched faults; `supervisor` decides when the body runs, stops or restarts.
+  - `status/led_pattern`: what the six status LEDs show for a given robot state.
 - `firmware/servo2040/`: the pico-sdk CMake project.
   - `main.cpp`: the core 0 loop, every 20 ms: power read → protection → command override → `body::step` → inhibit → servo output.
   - `servo_output`: `ServoCluster` on PIO 0, GPIO0–17.
   - `power_monitor`: current and voltage via the analog mux.
-  - `status_leds`: WS2812 on PIO 1.
+  - `status_leds`: WS2812 on PIO 1, drawing `core/status/led_pattern`.
   - `serial_commands`: the USB bring-up input.
   - `config.h` + `power_limits*.h`: build-time limits.
 - `test/`: Unity host tests, one directory per area.

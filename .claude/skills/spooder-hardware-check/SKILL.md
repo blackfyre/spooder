@@ -46,17 +46,17 @@ mise run monitor          # USB serial; Ctrl+C to exit
 - `fault latched: <name> (<A> A, <V> V)` once per fault;
 - `point impossible to reach: (...) leg n` once per rejection.
 
-**LEDs:**
+**LEDs** (`core/status/led_pattern`; LEDs 1–5 = main indication, LED 6 = command source):
 
 | Pattern | Meaning |
 |---|---|
-| Pulsing amber | Waiting for a valid supply (USB only, supply off, or settling) |
-| Green, *n* LEDs lit | Healthy; *n* = mode + 1 (1 Initialise, 2 Stand, 3 Walk, 4 Sleep, 5 Calibrate) |
-| White ↔ red | Overcurrent |
-| Magenta ↔ red | Brown-out |
-| Blue ↔ red | Overvoltage |
-| Orange ↔ red | Sustained current |
-| Yellow ↔ red | Undervoltage |
+| All six pulsing amber | Waiting for a valid supply (USB only, supply off, or settling) |
+| All six alternating a colour with red, brighter | Latched fault: white overcurrent, magenta brown-out, blue overvoltage, orange sustained current, yellow undervoltage |
+| LEDs 1–5 slowly breathing blue | Body stopped: supply valid, waiting for a new command (after a fault, or a Sleep request at start) |
+| Green, *n* of LEDs 1–5 lit | Running; *n* = mode + 1 (1 Initialise, 2 Stand, 4 Sleep, 5 Calibrate) |
+| Load bar on LEDs 1–5 in the gait's colour | Walking: lit segments = supply current against the trip limit (1.8 A each at a 9 A trip); segments past the sustained limit are red. Gait colours: Tri green, Wave sky blue, Ripple violet, Bi yellow, Quad mint, Hop pink |
+| LED 6 dim white | Commands from the USB serial hook |
+| LED 6 cyan / blinking magenta / fast-blinking amber | Bridge link up with gamepad / without gamepad / link stale (once the bridge exists) |
 
 **Serial keys:**
 

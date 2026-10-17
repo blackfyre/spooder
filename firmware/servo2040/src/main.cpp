@@ -19,6 +19,28 @@ static body::BodyState bodyState;
 static protection::State protectionState;
 static protection::Supervisor supervisor;
 
+// The LED pattern mirrors body::Mode by value.
+static_assert((int)led_pattern::BodyMode::Walk == (int)body::Mode::Walk &&
+                  (int)led_pattern::BodyMode::Calibrate == (int)body::Mode::Calibrate,
+              "led_pattern::BodyMode must mirror body::Mode");
+
+static led_pattern::State ledState(uint32_t now, const protection::Result &prot, bool bodyRunning,
+                                   float currentA)
+{
+  led_pattern::State s;
+  s.nowMs = now;
+  s.faults = prot.faults;
+  s.supplyAccepted = prot.allowOutput;
+  s.bodyRunning = bodyRunning;
+  s.mode = (led_pattern::BodyMode)bodyState.mode;
+  s.gait = (int)bodyState.currentGait;
+  s.currentA = currentA;
+  s.tripCurrentA = config::POWER_LIMITS.tripCurrentA;
+  s.sustainedCurrentA = config::POWER_LIMITS.sustainedCurrentA;
+  s.input = led_pattern::Input::Serial; // the bridge link reports its own state once it exists
+  return s;
+}
+
 static const char *faultName(uint16_t fault)
 {
   switch (fault)
@@ -82,7 +104,10 @@ int main()
     while (true)
     {
       printf("servo output failed to initialise\n");
-      status_leds::show(nowMs(), true, 0xFFFF, body::Mode::Initialise);
+      led_pattern::State failed = {};
+      failed.nowMs = nowMs();
+      failed.faults = 0xFFFF; // shown as a fault: nothing may move
+      status_leds::show(failed);
       sleep_ms(REPORT_PERIOD_MS);
     }
   }
@@ -128,7 +153,7 @@ int main()
       servo_output::apply(bodyState);
     }
 
-    status_leds::show(now, prot.allowOutput, prot.faults, bodyState.mode);
+    status_leds::show(ledState(now, prot, run.runBody, reading.currentA));
 
     if (input.printReadings || now - lastReportMs >= REPORT_PERIOD_MS)
     {

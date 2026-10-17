@@ -128,12 +128,17 @@ servo_output.apply(body state)             // honours inhibit
 
 ### D7. Status LEDs
 
-The six WS2812 LEDs (pimoroni `plasma::WS2812` on GPIO18, pio1) show one of:
-- waiting for a valid supply: pulsing amber;
-- healthy: green, with the mode shown by LED count;
-- a latched fault: one colour per fault, flashing red/colour.
+The six WS2812 LEDs (pimoroni `plasma::WS2812` on GPIO18, pio1, refreshed at 10 fps) show a pattern computed by the hardware-free, host-tested `core/status/led_pattern`. LEDs 1–5 carry the main indication; LED 6 shows the command source. In priority order:
 
-They update at no more than 10 Hz.
+- **Latched fault:** all six alternate the fault's colour with red, at higher brightness.
+- **Waiting for a valid supply:** all six pulse amber.
+- **Body stopped** (supply valid, waiting for a new request): LEDs 1–5 breathe blue.
+- **Walking:** a load bar of supply current against the trip limit in the gait's colour, with segments past the sustained limit in red.
+- **Other running modes:** green, with the LED count showing the mode.
+- **LED 6:**
+  - dim white for the USB serial hook;
+  - cyan, blinking magenta or fast-blinking amber for bridge connected, no gamepad and stale link. The bridge states are rendered and tested now; `add-gamepad-bridge` feeds them.
+- **Brightness:** normal patterns are dim (8 %) to save power; faults use 35 %.
 
 ### D8. Serial bring-up hook
 
