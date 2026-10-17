@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-servo2040-20261017-060557/candidate.json",
+    "sha256": "f6da6f022e39cb46a9b9fb713dd3d0e3845fd62734d9bfba1fce2b3f4c232c72",
+    "bytes": 6940
+  },
+  "artifact": {
+    "path": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-servo2040-20261017-060557/spooder-servo2040.html",
+    "sha256": "5f136367d7d8f73e1ed0467ebefe855c6c32e31c54ddc87b2ff893a919347b84",
+    "bytes": 833494
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-servo2040-20261017-060557/spooder-servo2040.finalize.json",
+    "summaryReceipt": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-servo2040-20261017-060557/spooder-servo2040.finalize-summary.json",
+    "browserCheckReceipt": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-servo2040-20261017-060557/spooder-servo2040.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.1.0",
+    "availableVersion": "3.1.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-17T04:06:22.808Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 1608
+}

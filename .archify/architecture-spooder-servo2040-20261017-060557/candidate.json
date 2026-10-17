@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Spooder firmware on the Servo 2040",
+    "output": ".archify/architecture-spooder-servo2040-20261017-060557/spooder-servo2040.html",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "repository": {
+      "url": "git@github.com:blackfyre/spooder.git",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "61f6b99a1bf6dbea5be9a480aa837ce5af9824c7"
+    }
+  },
+  "components": [
+    {
+      "id": "operator", "type": "external", "label": "Operator", "sublabel": "USB serial terminal",
+      "pos": [40, 40], "size": [150, 60]
+    },
+    {
+      "id": "serial", "type": "backend", "label": "serial_commands", "sublabel": "≤4 keys per tick",
+      "pos": [300, 40], "size": [150, 60],
+      "sources": [
+        { "path": "firmware/servo2040/src/serial_commands.cpp", "line": 18, "end_line": 40, "label": "bounded poll, requestSeq" }
+      ]
+    },
+    {
+      "id": "supervisor", "type": "security", "label": "Supervisor", "sublabel": "resume gate · start/stop",
+      "pos": [560, 40], "size": [160, 60],
+      "sources": [
+        { "path": "core/protection/supervisor.cpp", "line": 6, "end_line": 27, "label": "run, stop or restart body" },
+        { "path": "firmware/servo2040/src/main.cpp", "line": 111, "end_line": 129, "label": "decision applied per tick" }
+      ]
+    },
+    {
+      "id": "body", "type": "backend", "label": "Body state machine", "sublabel": "5 ms sub-steps",
+      "pos": [830, 40], "size": [160, 60],
+      "sources": [
+        { "path": "core/movement/body.cpp", "line": 486, "end_line": 547, "label": "sub-steps, IK once per step" }
+      ]
+    },
+    {
+      "id": "gait", "type": "backend", "label": "Gait planner", "sublabel": "6 gaits · Bézier paths",
+      "pos": [1080, 40], "size": [150, 60],
+      "sources": [
+        { "path": "core/movement/gait.cpp", "line": 15, "end_line": 56, "label": "gait table" },
+        { "path": "core/movement/body.cpp", "line": 265, "end_line": 265, "label": "footTarget call" }
+      ]
+    },
+    {
+      "id": "protection", "type": "security", "label": "Power protection", "sublabel": "gate · trips · latched faults",
+      "pos": [560, 230], "size": [160, 60],
+      "sources": [
+        { "path": "core/protection/protection.cpp", "line": 85, "end_line": 165, "label": "protection::step" },
+        { "path": "firmware/servo2040/src/main.cpp", "line": 99, "end_line": 103, "label": "evaluated first each tick" }
+      ]
+    },
+    {
+      "id": "kin", "type": "backend", "label": "Kinematics", "sublabel": "IK · reach ≤ 340 mm",
+      "pos": [830, 230], "size": [160, 60],
+      "sources": [
+        { "path": "core/movement/kinematics.cpp", "line": 25, "end_line": 63, "label": "validate, solve, µs" },
+        { "path": "core/movement/body.cpp", "line": 516, "end_line": 527, "label": "solveAngles" }
+      ]
+    },
+    {
+      "id": "supply", "type": "external", "label": "Servo supply", "sublabel": "screw terminals ≤ 10 A",
+      "pos": [40, 420], "size": [150, 60],
+      "sources": [
+        { "path": "firmware/servo2040/src/power_limits.example.h", "line": 1, "end_line": 17, "label": "board limits, example limits" }
+      ]
+    },
+    {
+      "id": "power", "type": "backend", "label": "power_monitor", "sublabel": "ADC mux · current, voltage",
+      "pos": [300, 420], "size": [150, 60],
+      "sources": [
+        { "path": "firmware/servo2040/src/power_monitor.cpp", "line": 28, "end_line": 45, "label": "mux addresses 7 and 6" }
+      ]
+    },
+    {
+      "id": "leds", "type": "frontend", "label": "Status LEDs", "sublabel": "6× WS2812 · PIO 1",
+      "pos": [560, 420], "size": [160, 60],
+      "sources": [
+        { "path": "firmware/servo2040/src/status_leds.cpp", "line": 41, "end_line": 89, "label": "waiting, healthy, fault colours" }
+      ]
+    },
+    {
+      "id": "servoout", "type": "backend", "label": "servo_output", "sublabel": "ServoCluster · PIO 0",
+      "pos": [830, 420], "size": [160, 60],
+      "sources": [
+        { "path": "firmware/servo2040/src/servo_output.cpp", "line": 21, "end_line": 21, "label": "18-output cluster" },
+        { "path": "firmware/servo2040/src/servo_output.cpp", "line": 51, "end_line": 91, "label": "immediate pin cut-off" },
+        { "path": "firmware/servo2040/src/servo_output.cpp", "line": 93, "end_line": 145, "label": "batched pulses, one load" }
+      ]
+    },
+    {
+      "id": "servos", "type": "external", "label": "18 hobby servos", "sublabel": "GPIO0–17 · 50 Hz",
+      "pos": [830, 600], "size": [160, 60]
+    }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Servo 2040 · core 0 · 20 ms loop", "wraps": ["serial", "supervisor", "body", "gait", "protection", "kin", "power", "leds", "servoout"] },
+    { "kind": "region", "label": "core/ · hardware-free, host-tested", "wraps": ["supervisor", "body", "gait", "protection", "kin"] }
+  ],
+  "connections": [
+    { "id": "keys", "from": "operator", "to": "serial", "label": "keys" },
+    { "id": "request", "from": "serial", "to": "supervisor", "label": "mode, seq #" },
+    { "id": "gated-mode", "from": "supervisor", "to": "body", "label": "gated mode", "variant": "emphasis" },
+    { "id": "paths", "from": "body", "to": "gait", "label": "foot paths" },
+    { "id": "solve", "from": "body", "to": "kin", "label": "foot targets" },
+    { "id": "angles", "from": "kin", "to": "servoout", "label": "joint angles", "variant": "emphasis" },
+    { "id": "pulses", "from": "servoout", "to": "servos", "label": "pulses", "variant": "emphasis" },
+    { "id": "sense", "from": "supply", "to": "power", "label": "shunt, divider" },
+    { "id": "reading", "from": "power", "to": "protection", "label": "A, V", "fromSide": "top", "toSide": "left" },
+    { "id": "allow", "from": "protection", "to": "supervisor", "label": "allow, force Sleep", "variant": "security" },
+    { "id": "inhibit", "from": "protection", "to": "servoout", "label": "inhibit", "variant": "security", "fromSide": "right", "toSide": "left" },
+    { "id": "faults", "from": "protection", "to": "leds", "label": "faults" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Protection rules", "items": [
+      "Output only after 500 ms of valid supply",
+      "Overcurrent, brown-out, overvoltage: output cut at once",
+      "Sustained current, undervoltage: Sleep",
+      "After any fault nothing moves until a new request"
+    ] },
+    { "dot": "emerald", "title": "Movement", "items": [
+      "Body owns every mode change; protection only rewrites the request",
+      "State machine runs on a fixed 5 ms grid, IK solved once per tick",
+      "Unreachable or non-finite targets are rejected, reported once"
+    ] },
+    { "dot": "slate", "title": "Planned (OpenSpec, not built)", "items": [
+      "TTGO T-Display Bluepad32 bridge on UART1, GPIO20/21",
+      "VL6180X + LSM6DSO on I²C1, GPIO26/27, read on core 1"
+    ] }
+  ]
+}

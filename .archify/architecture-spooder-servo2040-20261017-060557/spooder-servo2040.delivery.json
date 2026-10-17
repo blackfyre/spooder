@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "82a0d0d4-be13-4d64-8e87-0f0ebe9bb3b1",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-servo2040-20261017-060557/candidate.json",
+  "output": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-servo2040-20261017-060557/spooder-servo2040.html",
+  "specification": {
+    "sha256": "f6da6f022e39cb46a9b9fb713dd3d0e3845fd62734d9bfba1fce2b3f4c232c72",
+    "bytes": 6940
+  },
+  "artifact": {
+    "sha256": "5f136367d7d8f73e1ed0467ebefe855c6c32e31c54ddc87b2ff893a919347b84",
+    "bytes": 833494
+  }
+}

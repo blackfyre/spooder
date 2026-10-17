@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "ff2869be-f91d-4cc1-ad32-02f6eadd1b25",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-planned-20261017-061917/candidate.json",
+  "output": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-planned-20261017-061917/spooder-planned.html",
+  "specification": {
+    "sha256": "c25492dc9e104f1f74ef0c89a51c62eeebc0d0668ebc406971d21653117bd629",
+    "bytes": 12361
+  },
+  "artifact": {
+    "sha256": "122f518edec46cc362f44a8aaf4518790260cc95a34e36d5fa2a58064dd9b3af",
+    "bytes": 845326
+  }
+}
