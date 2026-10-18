@@ -12,29 +12,59 @@ static const char PORTAL_PAGE[] = R"PAGE(<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Spooder setup</title>
 <style>
-body{font:15px system-ui,sans-serif;margin:0;padding:8px;background:#111;color:#eee}
-h1{font-size:18px;margin:4px 0}h2{font-size:15px;margin:12px 0 4px}
-.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0}
-button{font:inherit;padding:8px 10px;border:0;border-radius:6px;background:#333;color:#eee;min-width:44px}
-button:disabled{opacity:.4}
-.sel{background:#2563eb}.ok{color:#4ade80}.warn{color:#fb923c}.bad{color:#f87171}
-#estop{display:none;background:#b91c1c;color:#fff;font-weight:bold;font-size:20px;text-align:center;padding:10px;border-radius:6px}
-table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:3px 4px;text-align:right}
-tr.cur{background:#1e3a8a}tr{cursor:pointer}td:first-child,th:first-child{text-align:left}
-.v{display:inline-block;min-width:76px;font-weight:bold}.lbl{display:inline-block;min-width:64px}
-textarea{width:100%;height:200px;font:12px monospace;background:#000;color:#eee}
+:root{--bg:#e6e4df;--card:#f3f2ee;--ink:#1b1b19;--muted:#5e5c56;--line:#d6d3cc;--sel:#ddd8cd;
+--btn:#dcd9d2;--btn-ink:#1b1b19;--btn-edge:#b9b5ac;--dark:#2c2c29;--dark-ink:#f3f2ee;--dark-edge:#0e0e0d;
+--acc:#e2551d;--acc-edge:#a93a0f;--ok:#3f6f1a;--warn:#8a5a0a;--bad:#a3390c;--well:#121211;--well-ink:#d9d6cf}
+@media (prefers-color-scheme:dark){:root{--bg:#1b1b19;--card:#242422;--ink:#f3f2ee;--muted:#a19e96;--line:#3a3935;
+--sel:#3a3935;--btn:#3a3935;--btn-ink:#f3f2ee;--btn-edge:#121211;--dark:#121211;--dark-edge:#000;
+--ok:#9ece6a;--warn:#e0af68;--bad:#ff8a4c}}
+*{box-sizing:border-box}
+body{margin:0;padding:12px;background:var(--bg);color:var(--ink);
+font:15px/1.45 Archivo,'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.mono,h1,h2,button,table,.lbl,.v,#req,textarea{font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace}
+h1{margin:2px 0 10px;font-size:18px;font-weight:400;letter-spacing:.12em;text-transform:uppercase}
+h1 small{display:block;font-size:10px;color:var(--muted);letter-spacing:.12em}
+h2{margin:0 0 8px;font-size:11px;font-weight:400;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin:0 0 10px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
+button{font-size:11px;letter-spacing:.08em;text-transform:uppercase;min-height:36px;min-width:44px;padding:0 12px;
+border:0;border-radius:7px;cursor:pointer;background:var(--btn);color:var(--btn-ink);box-shadow:0 2px 0 var(--btn-edge)}
+button:active{transform:translateY(2px);box-shadow:none}
+#n-p0 button,#n-p180 button{text-transform:none}
+button:disabled{opacity:.4;cursor:default;transform:none;box-shadow:0 2px 0 var(--btn-edge)}
+.primary button{background:var(--dark);color:var(--dark-ink);box-shadow:0 2px 0 var(--dark-edge)}
+button.sel,.primary button.sel{background:var(--acc);color:#1b1b19;box-shadow:0 2px 0 var(--acc-edge)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+#estop{display:none;margin:0 0 10px;padding:12px;border-radius:10px;background:var(--acc);color:#1b1b19;
+box-shadow:0 2px 0 var(--acc-edge);text-align:center;font:600 16px 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.14em}
+.status span{margin-right:10px}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th{font-size:10px;font-weight:400;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:4px;text-align:right}
+td{padding:5px 4px;text-align:right;border-top:1px solid var(--line)}
+td:first-child,th:first-child{text-align:left}
+tr{cursor:pointer}tr.cur td{background:var(--sel)}tr.cur td:first-child{box-shadow:inset 3px 0 0 var(--acc)}
+.lbl{display:inline-block;min-width:78px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.v{display:inline-block;min-width:84px;font-size:15px}
+#req{font-size:11px;color:var(--muted)}
+textarea{width:100%;height:220px;border:0;border-radius:8px;padding:12px;background:var(--well);color:var(--well-ink);
+font-size:11px;line-height:1.6;resize:vertical}
 #msg{min-height:1.2em}
 </style></head><body>
-<h1>Spooder setup</h1>
-<div class="row"><span id="bridge">Bridge: ...</span><span id="link"></span><span id="src"></span></div>
+<h1>Spooder<small>setup portal</small></h1>
 <div id="estop">EMERGENCY STOP</div>
-<div class="row"><span id="body"></span><span id="power"></span></div>
+<div class="card status">
+<div class="row"><span id="bridge">Bridge: ...</span><span id="link"></span><span id="src"></span></div>
+<div class="row mono"><span id="body"></span><span id="power"></span></div>
 <div class="row"><span id="faults"></span></div>
+</div>
+<div class="card">
 <h2>Mode</h2>
-<div class="row">
-<button onclick="mode('stand')">Stand</button><button onclick="mode('calibrate')">Calibrate</button>
-<button onclick="mode('sleep')">Sleep</button><button onclick="mode('clear')">Clear faults</button>
-<span id="req"></span></div>
+<div class="row primary">
+<button id="m-Stand" onclick="mode('stand')">Stand</button><button id="m-Calibrate" onclick="mode('calibrate')">Calibrate</button>
+<button id="m-Sleep" onclick="mode('sleep')">Sleep</button><button onclick="mode('clear')">Clear faults</button></div>
+<div class="row"><span id="req"></span></div>
+</div>
+<div class="card">
 <h2>Joint</h2>
 <div id="hint" class="warn"></div>
 <div class="row" id="legs"></div>
@@ -42,24 +72,31 @@ textarea{width:100%;height:200px;font:12px monospace;background:#000;color:#eee}
 <div id="editor">
 <div class="row"><span class="lbl">Offset</span><span class="v" id="e-offset"></span></div>
 <div class="row" id="n-offset"></div>
-<div class="row"><span class="lbl">0&deg;</span><span class="v" id="e-p0"></span></div>
+<div class="row"><span class="lbl">0&deg; pulse</span><span class="v" id="e-p0"></span></div>
 <div class="row" id="n-p0"></div>
-<div class="row"><span class="lbl">180&deg;</span><span class="v" id="e-p180"></span></div>
+<div class="row"><span class="lbl">180&deg; pulse</span><span class="v" id="e-p180"></span></div>
 <div class="row" id="n-p180"></div>
 <div class="row"><span class="lbl">Direction</span><span class="v" id="e-rev"></span>
 <button id="b-rev" onclick="change('rev',1)">Reverse</button></div>
 <div class="row"><span id="pend"></span><span id="res"></span></div>
 </div>
 <div id="msg" class="bad"></div>
+</div>
+<div class="card">
 <h2>Table</h2>
 <table><thead><tr><th>Joint</th><th>Offset</th><th>0&deg;</th><th>180&deg;</th><th>Dir</th><th></th></tr></thead>
 <tbody id="tbl"></tbody></table>
+</div>
+<div class="card">
 <h2>Export</h2>
 <div class="row"><button onclick="exportTable()">Export</button><button onclick="copyExport()">Copy</button>
 <span id="copied"></span></div>
 <textarea id="out" readonly placeholder="calibration_defaults.cpp"></textarea>
+</div>
+<div class="card">
 <h2>Leave setup mode</h2>
 <div class="row"><button onclick="leave()">Exit to normal operation</button></div>
+</div>
 <script>
 var MODES=['Initialise','Stand','Walk','Sleep','Calibrate'];
 var JOINTS=['coxa','femur','tibia'];
@@ -103,6 +140,7 @@ function render(){
   var names=[];for(var b=0;b<16;b++)if(t.faults&(1<<b))names.push(FAULTS[b]||('0x'+(1<<b).toString(16)));
   txt('faults',!s.link?'':names.length?'Faults: '+names.join(', '):'Faults: none',names.length?'bad':'ok');
   txt('req','Requesting '+s.req+(s.portal?'':' (not connected)'));
+  ['Stand','Calibrate','Sleep'].forEach(function(m){$('m-'+m).className=s.req==m?'sel':''});
   var c=s.cal,calib=s.link&&t.mode==4;
   txt('hint',!s.link?'Robot link lost.':!c?'No calibration table yet: press Calibrate (the robot reports it in Calibrate).':
       calib?'':'Changes are rejected outside Calibrate.','warn');
