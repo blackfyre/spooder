@@ -1,6 +1,6 @@
 ---
 name: spooder-firmware-shape
-description: Structural rules for the Spooder firmwares (robot on the Pimoroni Servo 2040, gamepad bridge on the TTGO T-Display) — core/ versus firmware/ split, the core 0 control loop, the power-protection layer between commands, movement and servo output, the bridge link boundary, J6 pin allocation, PIO/DMA/UART usage, the bridge's task layout, state machines, named constants and failure handling. Use before adding a module or sensor, moving code, using the second core, changing the link, or reviewing a change for structure.
+description: Structural rules for the Spooder firmwares (robot on the Pimoroni Servo 2040, gamepad bridge on the TTGO T-Display) — core/ versus firmware/ split, the core 0 control loop, the power-protection layer between commands, movement and servo output, the bridge link boundary, J6 pin allocation, PIO/DMA/UART usage, the bridge's task layout and setup mode, state machines, named constants and failure handling. Use before adding a module or sensor, moving code, using the second core, changing the link, or reviewing a change for structure.
 ---
 
 # Spooder firmware shape
@@ -11,7 +11,7 @@ Adapted from architecture guidance on modules, explicit state machines, named co
 
 | Layer | Where | Rules |
 |---|---|---|
-| Hardware-free core | `core/` (`movement/`, `protection/`, `protocol/`, `gamepad_mapping/`, `status/`) | Only `<math.h>`, `<stdint.h>` and other `core/` headers (`status/status_screen` also uses `<stdio.h>` for `snprintf`). No SDKs, no globals with hidden state; pass state structs explicitly. Every behaviour change needs host tests (`test/`, `mise run test`). Built into the robot as `spooder_core` with `-Wall -Wextra`; the bridge compiles the parts it uses into its `main` component. |
+| Hardware-free core | `core/` (`movement/`, `protection/`, `protocol/`, `gamepad_mapping/`, `status/`, `setup/`) | Only `<math.h>`, `<stdint.h>` and other `core/` headers (`status/status_screen`, `setup/calibration_export` and `setup/access_point` also use `<stdio.h>` for `snprintf`). No SDKs, no globals with hidden state; pass state structs explicitly. Every behaviour change needs host tests (`test/`, `mise run test`). Built into the robot as `spooder_core` with `-Wall -Wextra`; the bridge compiles the parts it uses into its `main` component. |
 | Hardware adapters | `firmware/servo2040/src/`, `firmware/bridge/main/` | Thin: read hardware into core inputs, or apply core outputs to hardware. No decisions that could live in `core/`. Each adapter exposes `setup()`/`start()` plus a small API in its header; file-local state is `static`. |
 
 New logic goes into `core/` unless it truly needs hardware. A controller mapping, a filter or a protocol parser is core logic.
@@ -96,8 +96,26 @@ The board has no pull-ups on GPIO19–21 or 26–28. Check for clashes before cl
 
 - Shared state between `loop()` and the link task is copied under one spinlock (`portMUX`); nothing else is shared.
 - The screen must never delay command frames: keep drawing in `loop()`, never in the link task.
-- One controller slot (`CONFIG_BLUEPAD32_MAX_DEVICES=1`, plus a refusal in `onConnected`). WiFi is never started.
-- Pins: link UART1 TX GPIO27, RX GPIO26; e-stop GPIO35 (input only, board pull-up); display SPI MOSI 19, SCLK 18, CS 5, DC 16, RST 23, backlight 4. GPIO0 is a strapping pin: leave it unused.
+- One controller slot (`CONFIG_BLUEPAD32_MAX_DEVICES=1`, plus a refusal in `onConnected`). WiFi is never started in normal operation.
+- Pins: link UART1 TX GPIO27, RX GPIO26; e-stop GPIO35 (input only, board pull-up); display SPI MOSI 19, SCLK 18, CS 5, DC 16, RST 23, backlight 4. GPIO0 (left button) is a strapping pin: it is read only while the logo is shown, for setup mode, never at reset.
+
+### Setup mode
+
+One radio at a time: setup mode is a boot path of its own and never starts Bluetooth.
+
+- **Entry:** GPIO0 held 1 s while the logo is shown (`setup_entry::update` in `loop()`; the logo stays up while the button is down). `setup_mode::restartIntoSetup()` writes `setup_entry::MAGIC` to an `RTC_NOINIT_ATTR` variable and calls `esp_restart()`.
+- **Boot:** `app_main` calls `setup_mode_requested()` first. Only the magic **and** `ESP_RST_SW` start setup mode, and the magic is cleared either way, so a power-up or reset always starts normally. `setup_mode_start()` releases the Bluetooth controller's memory, calls `initArduino()` (never `BP32`), and starts the link, the access point, the DNS and HTTP servers and the setup task.
+- **Leaving:** the portal's Exit or RST; both restart into normal operation.
+
+| Context | Core | Work |
+|---|---|---|
+| WiFi, lwIP (`CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0`), DNS server (async UDP) | 0 | the access point (one station), every DNS name → 192.168.4.1 |
+| `robot_link` task, priority 5 | 1 | as in normal operation, but the desired state is `portal_controller::desired()` judged every period; at most one calibration set per period after the command frame; reports into `calibration_sync` |
+| `setup` task, priority 1 | 1 | `WebServer::handleClient()` and the setup screen (≤ 4 Hz) |
+
+- The HTTP handlers reach the portal controller and calibration sync only through `robot_link`'s portal functions, under the link's spinlock. `GET /api/state`, mode posts and joint posts count as polls; captive-portal probes do not.
+- The portal page (`main/portal_page.h`) is one hand-written HTML file with plain JavaScript and no external resources, under 16 KB (a `static_assert`). It shares no code with the desktop calibrator.
+- The password is made once with `bootloader_random_enable()` and `esp_random()` (WiFi is not running yet) and kept in NVS (`spooder`/`ap_pass`).
 - The Bluepad32 console owns UART0 (the USB bridge); use `Console`, not `Serial`.
 
 ## State and constants

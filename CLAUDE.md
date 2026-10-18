@@ -2,7 +2,7 @@
 
 Spooder is firmware for a hexapod robot, derived from [Aecert's Hexapod V1](https://github.com/Ryan-Mirch/Aecerts_Hexapod_V1). There are two firmwares:
 - the robot, on a **Pimoroni Servo 2040** (RP2040), in C++ on the pico-sdk with pimoroni-pico;
-- the gamepad bridge, on a **LilyGO TTGO T-Display v1.1** (original ESP32), on ESP-IDF + Arduino + Bluepad32. It sends gamepad commands to the robot over a UART link and shows robot status on its screen.
+- the gamepad bridge, on a **LilyGO TTGO T-Display v1.1** (original ESP32), on ESP-IDF + Arduino + Bluepad32. It sends gamepad commands to the robot over a UART link and shows robot status on its screen. Its setup mode (left button held during the boot logo) replaces Bluetooth with a WiFi access point and captive portal, through which a phone calibrates the robot.
 
 A computer can speak the same link protocol on the robot's USB port, alongside the debug text, to calibrate, monitor and control the robot without the bridge. Joint calibration can be changed live (in RAM) and exported as the compiled defaults.
 
@@ -58,7 +58,8 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `protection/`: power protection and the emergency stop. It turns supply readings into "output allowed" and "force Sleep", with latched faults; `supervisor` decides when the body runs, stops or restarts.
   - `protocol/`: the link's frames (version 2: command, telemetry, calibration set and report), CRC and incremental decoder (both firmwares), pinned by `test/golden/protocol_v2.txt`. `link_receiver` is the robot's handling of decoded frames: arrival stamping, clear and mode-request counters, baselines after a link gap, the calibration guards and reports, and the arbitration between the bridge and USB links.
   - `gamepad_mapping/`: gamepad input to the desired command state (bridge).
-  - `status/led_pattern`: what the robot's six status LEDs show; `status/status_screen`: the bridge screen's text.
+  - `status/led_pattern`: what the robot's six status LEDs show; `status/status_screen`: the bridge screen's text (normal and setup mode).
+  - `setup/`: the bridge's setup mode. `portal_controller` (portal polls and buttons as the controller), `calibration_sync` (pending edits, one set in flight, confirmation by report), `calibration_export` (a reported table as `calibration_defaults.cpp`), `setup_entry` (the button hold and the boot decision) and `access_point` (SSID, password, QR text).
 - `firmware/servo2040/`: the pico-sdk CMake project.
   - `main.cpp`: the core 0 loop, every 20 ms: input (both links, arbitrated, or serial) → power read → protection → supervisor → calibration sets → calibration step → `body::step` → servo output → LEDs → telemetry every fifth tick and calibration reports, on both links.
   - `link`: UART1 on GPIO20/21 (J6), interrupt-driven RX ring and a 256-byte TX queue of whole frames.
@@ -69,9 +70,11 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `serial_commands`: the USB bring-up input (`SPOODER_SERIAL_COMMANDS`).
   - `config.h` + `power_limits*.h`: build-time limits.
 - `firmware/bridge/`: the ESP-IDF PlatformIO project for the TTGO T-Display.
-  - `main/bridge.cpp`: Bluepad32 callbacks (one controller slot) and `loop()`: gamepad → mapping → link, and the screen.
-  - `main/link`: `robot_link`, a FreeRTOS task above `loop()` that sends a command frame every 20 ms, samples the GPIO35 e-stop button and decodes telemetry and calibration reports.
-  - `main/display`: LovyanGFX ST7789 driver drawing `status_screen` lines, at most every 250 ms, changed lines only.
+  - `main/main.c`: `app_main`; a restart into setup mode skips BTstack and Bluepad32 there.
+  - `main/bridge.cpp`: Bluepad32 callbacks (one controller slot) and `loop()`: gamepad → mapping → link, the screen, and the GPIO0 hold into setup mode during the logo.
+  - `main/link`: `robot_link`, a FreeRTOS task above `loop()` that sends a command frame every 20 ms, samples the GPIO35 e-stop button and decodes telemetry and calibration reports. In setup mode its commands come from the portal controller, and it sends calibration sets.
+  - `main/display`: LovyanGFX ST7789 driver drawing `status_screen` lines, at most every 250 ms, changed lines only; in setup mode, the setup screen with the joining QR code.
+  - `main/setup_mode`: the setup-mode boot path (RTC magic), the WiFi access point, the DNS and HTTP servers and the setup task. `main/portal_page.h` is the portal page, one hand-written HTML file.
 - `test/`: Unity host tests, one directory per area. `test/golden/` holds the golden files other implementations (the desktop calibrator) test against; regenerate `protocol_v2.txt` only for a deliberate protocol change (`SPOODER_WRITE_GOLDEN=1 mise run test`).
 - `openspec/`: specifications (`specs/`) and changes (`changes/`). This is the source of truth for intended behaviour.
 
@@ -80,9 +83,11 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
 - Never enable stdio over UART on the Servo 2040. The SDK's default UART pins, GPIO0/1, are servo outputs 1 and 2. The link uses UART1 on GPIO20/21.
 - On ESP-IDF, POSIX `link()` and C++20 `std::lerp` are visible: hence `robot_link` on the bridge and `interpolate` in `core/movement/vectors.h`.
 - `ServoCluster::enable()` on a servo with no pulse set sends it to mid-travel, and `pulse()` enables a disabled servo. `servo_output` relies on both facts. It also turns off each channel's calibration limits (500–2500 µs by default), keeping the cluster's 400–2600 µs hard limits, so calibrated pulses pass unchanged. Read it before changing output handling.
+- The bridge never runs WiFi and Bluetooth together: setup mode is its own boot path and never starts Bluetooth; normal operation never starts WiFi.
+- Values already in the generated `firmware/bridge/sdkconfig.ttgo-t-display` win over `sdkconfig.defaults`. After changing the defaults, delete that file once so they apply (the setup portal needs `CONFIG_ESP_WIFI_IRAM_OPT=n` to link).
 - Debug text on the robot's USB port must stay printable ASCII (plus tab, CR, LF): the same port carries binary link frames.
 - Project skills in `.claude/skills/`:
   - `spooder-firmware-shape`: layout, loop, J6 pins, the protection layer, the link and the bridge.
   - `spooder-leg-kinematics`: the movement reference.
-  - `spooder-hardware-check`: flashing both boards, wiring, power, bring-up, and the gamepad controls.
+  - `spooder-hardware-check`: flashing both boards, wiring, power, bring-up, the gamepad controls, and setup mode with the portal calibration workflow.
 - A CodeGraph index lives in `.codegraph/` (git-ignored). Refresh it with `codegraph sync` after large changes.

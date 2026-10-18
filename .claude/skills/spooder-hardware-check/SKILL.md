@@ -1,6 +1,6 @@
 ---
 name: spooder-hardware-check
-description: Workflow for wiring, powering, flashing and bringing up the Spooder firmwares on the Pimoroni Servo 2040 and the TTGO T-Display gamepad bridge — power and ground rules, J6 header and link wiring, the staged bring-up order (USB only, bench supply, one servo, all servos, then the bridge), what the serial console, LEDs and bridge screen show, the gamepad controls, and how to exercise and verify power protection and the emergency stop. Use when a change must be confirmed on the robot or bridge, when flashing or boot fails, or when the user asks to flash, test on hardware or read a console.
+description: Workflow for wiring, powering, flashing and bringing up the Spooder firmwares on the Pimoroni Servo 2040 and the TTGO T-Display gamepad bridge — power and ground rules, J6 header and link wiring, the staged bring-up order (USB only, bench supply, one servo, all servos, then the bridge), what the serial console, LEDs and bridge screen show, the gamepad controls, and how to exercise and verify power protection and the emergency stop, and the bridge's setup mode with the portal calibration workflow. Use when a change must be confirmed on the robot or bridge, when flashing or boot fails, or when the user asks to flash, test on hardware or read a console.
 ---
 
 # Spooder hardware check
@@ -159,6 +159,25 @@ Robot on the bench supply with **no servos** until step 4; default (link) robot 
 6. **All 18 servos,** robot on a stand: walk through the controls again.
 
 Record results in `openspec/changes/add-gamepad-bridge/tasks.md` (task 4.2).
+
+## Setup mode and portal calibration
+
+Setup mode turns the bridge into a WiFi access point with a captive portal; Bluetooth is off throughout, so no gamepad can connect. The link and the bridge's e-stop button work as in normal operation.
+
+- **Enter:** power up or reset the bridge, and once the logo is up, hold the left button (GPIO0) for 1 s. Never hold it while pressing RST or plugging in: that enters the ROM download mode instead. The bridge restarts and shows `SETUP MODE`, the network name (`spooder-` and four hex digits), the password, `192.168.4.1`, `Portal: yes/no`, the link state, the e-stop and the body mode, with a joining QR code on the right.
+- **Leave:** Exit on the portal, or RST. Both restart into normal operation; a power-up always starts normally.
+- **Join:** scan the QR code with the phone's camera, or type the password. The password is made once and kept by the bridge. The phone's sign-in page opens the portal by itself (on Android, tap the "sign in to network" notification if it does not); otherwise browse to `http://192.168.4.1/`. One phone at a time.
+- **Console:** `mise run monitor-bridge` shows `spooder bridge: setup mode (Bluetooth off)` and the access point line; the Bluepad32 console is not running.
+
+**Calibration workflow** (robot on a stand, one servo, then one leg, then all):
+
+1. Press **Calibrate** on the portal. The robot reports its table, and the joint editor and table fill in. Edits are refused until the first report, and the robot rejects them outside Calibrate.
+2. Pick a leg and joint. Nudge the offset (±0.5°, ±1°, ±5°), the 0° and 180° pulses (±10, ±50 µs) or the direction. `Waiting for the robot...` shows until a report confirms the change; the shown values are always the robot's, and `Last change: clamped` or `rejected` says the robot changed or refused it. The joint follows at 60°/s at most.
+3. **E-stop:** the bridge's right button stops output as in normal operation, and the portal shows `EMERGENCY STOP`. The button toggles: press it again to release the stop, then press **Clear faults** and a mode button to move again.
+4. **Phone away:** close or lock the phone, or walk out of range. Within about 1 s the portal stops counting as a controller, and the robot sleeps. The portal's mode stays Sleep when it comes back, until a mode button is pressed.
+5. **Export:** press Export, then Copy (or select the text by hand). Paste it over `core/movement/calibration_defaults.cpp` whole, then copy it to `test/golden/calibration_defaults.cpp` too, as the host tests require both to be equal. Rebuild and flash the robot, then check in Calibrate that the robot reports the same table.
+
+Record results in `openspec/changes/add-bridge-setup-portal/tasks.md` (task 3.2).
 
 ## Gamepad controls
 

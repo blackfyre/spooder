@@ -18,7 +18,7 @@
 
 ## 3. Verification and documentation
 
-- [ ] 3.1 Run `mise run test`, `mise run build` and `mise run build-bridge` from a clean state. Verify all pass with no warnings in our sources.
+- [x] 3.1 Run `mise run test`, `mise run build` and `mise run build-bridge` from a clean state. Verify all pass with no warnings in our sources.
 - [ ] 3.2 Bring up on the hardware (requires the user), recording results here:
   - enter and leave setup mode; a power-up always starts normally;
   - a phone joins via the QR code and the portal opens by itself;
@@ -26,4 +26,4 @@
   - the e-stop, and a phone walking away (robot sleeps), during calibration;
   - export, paste into `calibration_defaults.cpp`, rebuild and flash, and confirm the robot reports the same table;
   - restart the bridge into normal operation and walk with the live values.
-- [ ] 3.3 Update `CLAUDE.md`, `spooder-firmware-shape` (setup mode) and `spooder-hardware-check` (setup mode and the portal calibration workflow). Verify that every symbol and path mentioned exists (`grep`).
+- [x] 3.3 Update `CLAUDE.md`, `spooder-firmware-shape` (setup mode) and `spooder-hardware-check` (setup mode and the portal calibration workflow). Verify that every symbol and path mentioned exists (`grep`).
