@@ -4,6 +4,7 @@
 #include "hardware/irq.h"
 #include "hardware/uart.h"
 #include "hardware/sync.h"
+#include "protocol/protocol.h"
 
 namespace link
 {
@@ -13,12 +14,12 @@ constexpr uint TX_PIN = 20;
 constexpr uint RX_PIN = 21;
 constexpr uint BAUD = 115200;
 
-// Receive ring, filled by the interrupt and drained by poll(). Several ticks
+// Receive ring, filled by the interrupt and drained by read(). Several ticks
 // of command frames fit, so a late tick loses nothing.
-constexpr uint32_t RX_SIZE = 256; // power of two
+constexpr uint32_t RX_SIZE = RX_BUFFER_SIZE; // power of two
 static volatile uint8_t rxBuf[RX_SIZE];
 static volatile uint32_t rxHead; // written by the interrupt
-static volatile uint32_t rxTail; // written by poll()
+static volatile uint32_t rxTail; // written by read()
 static volatile uint32_t rxDropped;
 
 // Transmit queue of whole frames, fed to the FIFO by the interrupt. Holds a
@@ -29,10 +30,6 @@ static_assert(TX_QUEUE_SIZE >= protocol::CALIBRATION_REPORT_FRAME_SIZE + protoco
 static volatile uint8_t txBuf[TX_QUEUE_SIZE];
 static volatile uint32_t txHead; // written by queueFrame()
 static volatile uint32_t txTail; // written by the interrupt (and queueFrame() with it masked)
-
-static protocol::Decoder decoder;
-static link_receiver::Receiver receiver;
-static uint8_t txSeq;
 
 static void fillTxFifo()
 {
@@ -58,7 +55,7 @@ static void onUartIrq()
     uint32_t head = rxHead;
     if (head - rxTail >= RX_SIZE)
     {
-      rxDropped = rxDropped + 1; // poll() fell behind
+      rxDropped = rxDropped + 1; // read() fell behind
       continue;
     }
     rxBuf[head % RX_SIZE] = (uint8_t)dr;
@@ -84,41 +81,17 @@ void setup()
   uart_set_irqs_enabled(UART, true, false);
 }
 
-static void handleFrames(uint32_t nowMs)
+int read(uint8_t *out, int max)
 {
-  protocol::Frame f;
-  while (decoder.next(f))
-  {
-    if (f.type == protocol::FrameType::Command)
-      link_receiver::accept(receiver, f.command, nowMs);
-    else if (f.type == protocol::FrameType::CalibrationSet)
-      link_receiver::acceptCalibration(receiver, f.calibrationSet);
-  }
-}
-
-link_receiver::Input poll(uint32_t nowMs)
-{
+  // Bytes that arrive meanwhile wait for the next tick.
   uint32_t head = rxHead;
-  bool received = head != rxTail;
-  while (rxTail != head)
+  int n = 0;
+  while (rxTail != head && n < max)
   {
-    decoder.push(rxBuf[rxTail % RX_SIZE]);
+    out[n++] = rxBuf[rxTail % RX_SIZE];
     rxTail = rxTail + 1;
-    handleFrames(nowMs);
   }
-  // A tick (20 ms) without a byte is longer than any gap inside a frame, so
-  // an incomplete candidate is a false start.
-  if (!received)
-  {
-    decoder.idle();
-    handleFrames(nowMs);
-  }
-  return link_receiver::take(receiver);
-}
-
-int processCalibration(joint_calibration::Table &requested, bool calibrating, bool allowOutput)
-{
-  return link_receiver::processCalibration(receiver, requested, calibrating, allowOutput);
+  return n;
 }
 
 static bool queueFrame(const uint8_t *frame, int n)
@@ -141,28 +114,11 @@ static bool queueFrame(const uint8_t *frame, int n)
   return fits;
 }
 
-bool sendTelemetry(const protocol::Telemetry &t)
+bool sendFrame(const uint8_t *frame, int length)
 {
-  uint8_t frame[protocol::MAX_FRAME_SIZE];
-  int n = protocol::encodeTelemetry(t, txSeq, frame);
-  if (!queueFrame(frame, n))
-    return false;
-  txSeq++;
-  return true;
+  return queueFrame(frame, length);
 }
 
-bool sendCalibrationReport(const joint_calibration::Table &table)
-{
-  uint8_t frame[protocol::MAX_FRAME_SIZE];
-  int n = protocol::encodeCalibrationReport(link_receiver::makeReport(receiver, table), txSeq, frame);
-  if (!queueFrame(frame, n))
-    return false;
-  txSeq++;
-  return true;
-}
-
-uint32_t validFrames() { return decoder.validFrames(); }
-uint32_t discardedFrames() { return decoder.discardedFrames(); }
 uint32_t droppedBytes() { return rxDropped; }
 
 } // namespace link

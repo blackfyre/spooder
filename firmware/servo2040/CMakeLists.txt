@@ -28,6 +28,7 @@ add_library(spooder_core STATIC
   ${SPOODER_CORE}/protection/protection.cpp
   ${SPOODER_CORE}/protection/resume_gate.cpp
   ${SPOODER_CORE}/protection/supervisor.cpp
+  ${SPOODER_CORE}/robot/robot_tick.cpp
   ${SPOODER_CORE}/status/led_pattern.cpp
 )
 target_include_directories(spooder_core PUBLIC ${SPOODER_CORE})
