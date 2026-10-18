@@ -45,8 +45,31 @@ fi
 cp build/servo2040/spooder.uf2 "$drive"/ && sync
 '''
 
+# The readable console (desktop/cmd/spooder-monitor): the robot's text with
+# timestamps, link frames kept out of it. It only observes; --keys forwards
+# typed keys for a --serial build. No Gio, and no cgo except on macOS.
 [tasks.monitor]
-description = "Open the Servo 2040 USB serial console"
+description = "Open the Servo 2040 USB console: timestamped text, frames decoded with --frames (observe only)"
+usage = '''
+flag "--frames" help="Also print a one-line decode of each link frame"
+flag "--telemetry-every <n>" help="With --frames, print every Nth telemetry frame (and any that changes)"
+flag "--keys" help="Forward typed keys to the robot (the --serial build's keyboard commands)"
+flag "--port <path>" help="Use this port or pseudo-terminal instead of the first Servo 2040"
+'''
+raw = true
+run = '''
+cgo=0; [ "$(uname)" = Darwin ] && cgo=1
+CGO_ENABLED=$cgo go build -C desktop -trimpath -o ../build/desktop/spooder-monitor ./cmd/spooder-monitor || exit 1
+set --
+[ "${usage_frames:-false}" = true ] && set -- "$@" --frames
+[ "${usage_keys:-false}" = true ] && set -- "$@" --keys
+[ -n "${usage_telemetry_every:-}" ] && set -- "$@" --telemetry-every "$usage_telemetry_every"
+[ -n "${usage_port:-}" ] && set -- "$@" --port "$usage_port"
+exec build/desktop/spooder-monitor "$@"
+'''
+
+[tasks.monitor-raw]
+description = "Open the Servo 2040 USB serial console raw (pio device monitor; frames show as junk)"
 run = "pio device monitor -b 115200"
 
 # Bridge firmware (TTGO T-Display). The pioarduino platform runs on its own

@@ -44,10 +44,14 @@ J6 (unpopulated 17-pin header), pin → signal: 1 GND, 2 USER_SW, 3 GND, 4 RESET
 mise run build            # commands from the bridge link (default)
 # put the board in BOOTSEL: hold BOOT/USER, tap RESET; the RPI-RP2 drive must be mounted
 mise run upload           # rebuilds, then copies the .uf2
-mise run monitor          # USB serial; Ctrl+C to exit
+mise run monitor          # USB console, timestamped text; Ctrl+C to exit
+mise run monitor --frames # plus one line per link frame (--telemetry-every 10 to thin telemetry)
 
 mise run upload --serial  # the USB serial keys instead of the link
+mise run monitor --keys   # the console for that build: typed keys go to the robot
 ```
+
+- `mise run monitor` only observes: it never sends a frame (no controller, no e-stop), so it can watch the robot while the bridge drives. Without `--keys` it writes nothing at all. `--port PATH` picks another port or a pseudo-terminal. `mise run monitor-raw` is the old raw console, in which frames show as junk.
 
 - The default build ignores serial keys and drives the robot from the bridge or a USB host speaking the link protocol. For movement bring-up without either, use `mise run upload --serial`. `upload` rebuilds first and passes the flag on, so give it to `upload` itself, not only to an earlier `build`.
 - In the default build, with no bridge and no USB host in control, the robot never leaves Sleep: LED 6 blinks amber fast (link stale).
@@ -78,7 +82,7 @@ mise run monitor-bridge                       # Bluepad32 console; type `help`
 - `point impossible to reach: (...) leg n` once per rejection;
 - `operator source: none|bridge|USB|conflict (bridge and USB): sleeping` on each change (default build).
 
-In the default build, a connected USB host also receives binary link frames (telemetry every 100 ms, calibration reports in Calibrate) between the text lines; a plain terminal shows them as stray characters. The text itself stays readable.
+In the default build, a connected USB host also receives binary link frames (telemetry every 100 ms, calibration reports in Calibrate) between the text lines. `mise run monitor` keeps them out of the text (and decodes them with `--frames`); a plain terminal (`monitor-raw`) shows them as stray characters. A text line marked `[n stray 0xA5]` held a byte 0xA5 outside a frame: debug text must stay ASCII.
 
 **LEDs** (`core/status/led_pattern`; LEDs 1–5 = main indication, LED 6 = command source):
 
@@ -95,7 +99,7 @@ In the default build, a connected USB host also receives binary link frames (tel
 | LED 6 blue | A USB host with a connected controller is in control |
 | LED 6 alternating magenta and cyan | Source conflict: the bridge and a USB host both claim control; the robot sleeps until one lets go |
 
-**Serial keys** (only in a `--serial` build):
+**Serial keys** (only in a `--serial` build; type them in `mise run monitor --keys`):
 
 | Key | Action |
 |---|---|
