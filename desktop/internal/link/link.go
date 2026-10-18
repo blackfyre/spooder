@@ -122,9 +122,9 @@ func New(sys System, h Handler, src Source, opts Options) *Link {
 // appears, and again after every loss, until Disconnect or Close. A previous
 // device is released first.
 func (l *Link) Connect(device PortInfo) {
-	l.Disconnect()
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.release()
 	l.stop = make(chan struct{})
 	l.done = make(chan struct{})
 	go l.supervise(device, l.stop, l.done)
@@ -135,14 +135,19 @@ func (l *Link) Connect(device PortInfo) {
 // port is closed.
 func (l *Link) Disconnect() {
 	l.mu.Lock()
-	stop, done := l.stop, l.done
-	l.stop, l.done = nil, nil
-	l.mu.Unlock()
-	if stop == nil {
+	defer l.mu.Unlock()
+	l.release()
+}
+
+// release stops the supervisor and waits for it; l.mu is held, so
+// connecting and disconnecting are serialised.
+func (l *Link) release() {
+	if l.stop == nil {
 		return
 	}
-	close(stop)
-	<-done
+	close(l.stop)
+	<-l.done
+	l.stop, l.done = nil, nil
 }
 
 // Close is Disconnect, for shutting down.
@@ -214,18 +219,27 @@ func (l *Link) run(port Port, stop chan struct{}) error {
 		readErr <- l.read(port)
 	}()
 
+	// A write that blocks (a stalled device) must not hold up a disconnect:
+	// once stop is closed, the writer gets CloseGrace to finish, then the
+	// port is closed under it, which ends any pending write.
+	writerDone := make(chan struct{})
+	defer close(writerDone)
+	go func() {
+		select {
+		case <-stop:
+			select {
+			case <-writerDone:
+			case <-time.After(CloseGrace):
+				port.Close()
+			}
+		case <-writerDone:
+		}
+	}()
+
 	ticker := time.NewTicker(l.opts.CommandPeriod)
 	defer ticker.Stop()
 	var seq uint8
-	write := func(frame []byte) error {
-		_, err := port.Write(frame)
-		if errors.Is(err, syscall.EAGAIN) {
-			// The port's transmit buffer is full (the robot is not reading):
-			// drop the frame, as the robot does; its decoder resynchronises.
-			return nil
-		}
-		return err
-	}
+	write := func(frame []byte) error { return writeFrame(port, frame, l.opts.CommandPeriod) }
 	var err error
 loop:
 	for {
@@ -262,6 +276,37 @@ loop:
 	return nil
 }
 
+// CloseGrace is how long a disconnect waits for a pending write.
+const CloseGrace = 200 * time.Millisecond
+
+// errWriteStalled means a frame could not be written completely in time.
+var errWriteStalled = errors.New("write stalled")
+
+// writeFrame writes a whole frame. A full transmit buffer before the first
+// byte drops the frame, as the robot does with its own; a frame begun is
+// completed within limit, or the connection is treated as failed, since a
+// device that stops reading mid-frame is not working.
+func writeFrame(port Port, frame []byte, limit time.Duration) error {
+	deadline := time.Now().Add(limit)
+	for written := 0; written < len(frame); {
+		n, err := port.Write(frame[written:])
+		written += max(n, 0)
+		switch {
+		case errors.Is(err, syscall.EAGAIN) || (err == nil && n == 0):
+			if written == 0 {
+				return nil // dropped whole; the robot's decoder resynchronises
+			}
+			if time.Now().After(deadline) {
+				return errWriteStalled
+			}
+			time.Sleep(time.Millisecond)
+		case err != nil:
+			return err
+		}
+	}
+	return nil
+}
+
 // read feeds the decoder until the port fails or is closed.
 func (l *Link) read(port Port) error {
 	var stats Stats
@@ -292,8 +337,12 @@ func (l *Link) read(port Port) error {
 		}
 		stats.Valid, stats.Discarded = dec.Valid(), dec.Discarded()
 		if err != nil {
-			dec.Idle()
-			next()
+			// End of stream: abandon every incomplete candidate, so the
+			// bytes behind each reach the text or a frame.
+			for dec.Pending() > 0 {
+				dec.Idle()
+				next()
+			}
 			if text.pending() {
 				text.flush()
 			}

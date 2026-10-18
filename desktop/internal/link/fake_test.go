@@ -19,6 +19,10 @@ type fakePort struct {
 	once    sync.Once
 	out     []byte
 	rest    []byte
+	// maxWrite limits the bytes each write takes (0: all); blockWrites
+	// makes writes wait until the port is closed.
+	maxWrite    int
+	blockWrites bool
 	writes  int
 }
 
@@ -77,7 +81,18 @@ func (p *fakePort) Write(b []byte) (int, error) {
 	default:
 	}
 	p.mu.Lock()
+	block, limit := p.blockWrites, p.maxWrite
+	p.mu.Unlock()
+	if block {
+		// A stalled device: the write returns only when the port closes.
+		<-p.closed
+		return 0, errClosed
+	}
+	p.mu.Lock()
 	defer p.mu.Unlock()
+	if limit > 0 && len(b) > limit {
+		b = b[:limit] // a short write
+	}
 	p.out = append(p.out, b...)
 	p.writes++
 	return len(b), nil
@@ -133,6 +148,8 @@ type fakeSystem struct {
 	openErr error
 	ports   []*fakePort
 	opened  chan *fakePort
+	// configure, when set, adjusts each port as it is opened.
+	configure func(*fakePort)
 }
 
 func newFakeSystem(device PortInfo) *fakeSystem {
@@ -158,8 +175,14 @@ func (s *fakeSystem) Open(name string) (Port, error) {
 		return nil, errors.New("no such port")
 	}
 	p := newFakePort()
+	if s.configure != nil {
+		s.configure(p)
+	}
 	s.ports = append(s.ports, p)
-	s.opened <- p
+	select {
+	case s.opened <- p:
+	default: // nobody is waiting for this many ports
+	}
 	return p, nil
 }
 
