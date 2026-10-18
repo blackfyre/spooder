@@ -1,0 +1,712 @@
+{
+ "schema_version": 1,
+ "diagram_type": "architecture",
+ "meta": {
+  "title": "Spooder: robot, gamepad bridge and desktop calibrator",
+  "output": ".archify/architecture-spooder-system-20261018-130100/spooder-system.html",
+  "quality_profile": "showcase",
+  "locale": "en",
+  "repository": {
+   "url": "git@github.com:blackfyre/spooder.git",
+   "provider": "github",
+   "link_mode": "local-only",
+   "revision": "b186de5120e37e60f0f92c6ddf1f6b7b0b0a6021"
+  }
+ },
+ "components": [
+  {
+   "id": "gamepad",
+   "type": "external",
+   "label": "Gamepad",
+   "sublabel": "Bluetooth Classic",
+   "pos": [
+    40,
+    200
+   ],
+   "size": [
+    140,
+    60
+   ]
+  },
+  {
+   "id": "phone",
+   "type": "external",
+   "label": "Phone",
+   "sublabel": "WiFi, setup mode",
+   "pos": [
+    40,
+    880
+   ],
+   "size": [
+    140,
+    60
+   ]
+  },
+  {
+   "id": "desktop",
+   "type": "frontend",
+   "label": "spooder-calibrator",
+   "sublabel": "Go · Gio · USB",
+   "pos": [
+    40,
+    1060
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "desktop/internal/link/link.go",
+     "line": 214,
+     "end_line": 300,
+     "label": "frames vs text, 20 ms writer"
+    },
+    {
+     "path": "desktop/internal/export/export.go",
+     "line": 124,
+     "end_line": 140,
+     "label": "export into a checkout"
+    }
+   ]
+  },
+  {
+   "id": "supply",
+   "type": "external",
+   "label": "Servo supply",
+   "sublabel": "6 V BEC · ≤ 10 A",
+   "pos": [
+    40,
+    1220
+   ],
+   "size": [
+    140,
+    60
+   ]
+  },
+  {
+   "id": "sensors",
+   "type": "external",
+   "label": "VL6180X + LSM6DSO",
+   "sublabel": "I²C1 · suspended",
+   "pos": [
+    40,
+    1380
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "tag": "planned"
+  },
+  {
+   "id": "mapping",
+   "type": "frontend",
+   "label": "Bluepad32 + mapping",
+   "sublabel": "one pad · toggles, dials",
+   "pos": [
+    280,
+    200
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "core/gamepad_mapping/gamepad_mapping.cpp",
+     "line": 91,
+     "end_line": 180,
+     "label": "pad to desired state"
+    },
+    {
+     "path": "firmware/bridge/main/bridge.cpp",
+     "line": 91,
+     "end_line": 115,
+     "label": "loop()"
+    }
+   ]
+  },
+  {
+   "id": "rlink",
+   "type": "backend",
+   "label": "robot_link task",
+   "sublabel": "20 ms frames · e-stop",
+   "pos": [
+    280,
+    380
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "firmware/bridge/main/link.cpp",
+     "line": 152,
+     "end_line": 178,
+     "label": "task above loop()"
+    }
+   ]
+  },
+  {
+   "id": "screen",
+   "type": "frontend",
+   "label": "Status screen",
+   "sublabel": "logo · status · QR",
+   "pos": [
+    280,
+    560
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "firmware/bridge/main/display.cpp",
+     "line": 194,
+     "end_line": 293,
+     "label": "status and setup screens"
+    }
+   ]
+  },
+  {
+   "id": "portal",
+   "type": "frontend",
+   "label": "Setup portal",
+   "sublabel": "AP · captive · editor",
+   "pos": [
+    280,
+    880
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "firmware/bridge/main/setup_mode.cpp",
+     "line": 282,
+     "end_line": 359,
+     "label": "WiFi AP, DNS, HTTP"
+    },
+    {
+     "path": "firmware/bridge/main/main.c",
+     "line": 1,
+     "end_line": 65,
+     "label": "Bluetooth skipped in setup mode"
+    }
+   ]
+  },
+  {
+   "id": "uart",
+   "type": "backend",
+   "label": "link (UART1)",
+   "sublabel": "GPIO20/21 · 115200",
+   "pos": [
+    520,
+    380
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "firmware/servo2040/src/link.cpp",
+     "line": 93,
+     "end_line": 156,
+     "label": "RX ring, TX queue"
+    }
+   ]
+  },
+  {
+   "id": "usb",
+   "type": "backend",
+   "label": "usb_link",
+   "sublabel": "frames + debug text",
+   "pos": [
+    520,
+    1060
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "firmware/servo2040/src/usb_link.cpp",
+     "line": 30,
+     "end_line": 85,
+     "label": "USB CDC frames"
+    }
+   ]
+  },
+  {
+   "id": "power",
+   "type": "backend",
+   "label": "power_monitor",
+   "sublabel": "ADC mux · A, V",
+   "pos": [
+    520,
+    1220
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "firmware/servo2040/src/power_monitor.cpp",
+     "line": 28,
+     "end_line": 45,
+     "label": "current and voltage"
+    }
+   ]
+  },
+  {
+   "id": "reader",
+   "type": "backend",
+   "label": "Sensor reader",
+   "sublabel": "core 1 · pitch, roll",
+   "pos": [
+    520,
+    1380
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "tag": "planned",
+   "sources": [
+    {
+     "path": "openspec/changes/add-body-sensing/proposal.md",
+     "line": 1,
+     "end_line": 20,
+     "label": "suspended change"
+    }
+   ]
+  },
+  {
+   "id": "receiver",
+   "type": "security",
+   "label": "link_receiver",
+   "sublabel": "arbitration · guards",
+   "pos": [
+    760,
+    380
+   ],
+   "size": [
+    140,
+    240
+   ],
+   "sources": [
+    {
+     "path": "core/protocol/link_receiver.cpp",
+     "line": 148,
+     "end_line": 195,
+     "label": "arbitrate"
+    },
+    {
+     "path": "core/protocol/link_receiver.cpp",
+     "line": 80,
+     "end_line": 110,
+     "label": "calibration guards"
+    }
+   ]
+  },
+  {
+   "id": "supervisor",
+   "type": "security",
+   "label": "Supervisor",
+   "sublabel": "resume gate · start/stop",
+   "pos": [
+    760,
+    720
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "core/protection/supervisor.cpp",
+     "line": 6,
+     "end_line": 29,
+     "label": "run, stop or restart"
+    },
+    {
+     "path": "firmware/servo2040/src/main.cpp",
+     "line": 266,
+     "end_line": 280,
+     "label": "decision per tick"
+    }
+   ]
+  },
+  {
+   "id": "protection",
+   "type": "security",
+   "label": "Power protection",
+   "sublabel": "trips · e-stop fault",
+   "pos": [
+    760,
+    1220
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "core/protection/protection.cpp",
+     "line": 87,
+     "end_line": 167,
+     "label": "protection::step"
+    },
+    {
+     "path": "firmware/servo2040/src/main.cpp",
+     "line": 250,
+     "end_line": 262,
+     "label": "after input, every tick"
+    }
+   ]
+  },
+  {
+   "id": "leds",
+   "type": "frontend",
+   "label": "Status LEDs",
+   "sublabel": "6× WS2812 · PIO 1",
+   "pos": [
+    760,
+    1380
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "core/status/led_pattern.cpp",
+     "line": 127,
+     "end_line": 181,
+     "label": "LED patterns"
+    }
+   ]
+  },
+  {
+   "id": "servos",
+   "type": "external",
+   "label": "18 MG996R servos",
+   "sublabel": "GPIO0–17 · 50 Hz",
+   "pos": [
+    1000,
+    200
+   ],
+   "size": [
+    140,
+    60
+   ]
+  },
+  {
+   "id": "servoout",
+   "type": "backend",
+   "label": "servo_output",
+   "sublabel": "calibrated pulses",
+   "pos": [
+    1000,
+    380
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "firmware/servo2040/src/servo_output.cpp",
+     "line": 108,
+     "end_line": 140,
+     "label": "apply, toPulse"
+    }
+   ]
+  },
+  {
+   "id": "body",
+   "type": "backend",
+   "label": "Body + IK",
+   "sublabel": "5 ms steps · 6 gaits",
+   "pos": [
+    1000,
+    560
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "core/movement/body.cpp",
+     "line": 544,
+     "end_line": 579,
+     "label": "body::step"
+    },
+    {
+     "path": "core/movement/body.cpp",
+     "line": 530,
+     "end_line": 542,
+     "label": "solveLeg per leg"
+    }
+   ]
+  },
+  {
+   "id": "calib",
+   "type": "backend",
+   "label": "Joint calibration",
+   "sublabel": "60°/s · RAM only",
+   "pos": [
+    1000,
+    720
+   ],
+   "size": [
+    140,
+    60
+   ],
+   "sources": [
+    {
+     "path": "core/movement/joint_calibration.cpp",
+     "line": 21,
+     "end_line": 117,
+     "label": "table, clamps, step, toPulse"
+    },
+    {
+     "path": "firmware/servo2040/src/main.cpp",
+     "line": 281,
+     "end_line": 292,
+     "label": "process sets, step"
+    }
+   ]
+  }
+ ],
+ "boundaries": [
+  {
+   "kind": "region",
+   "label": "TTGO T-Display bridge",
+   "wraps": [
+    "mapping",
+    "rlink",
+    "screen",
+    "portal"
+   ]
+  },
+  {
+   "kind": "region",
+   "label": "Servo 2040",
+   "wraps": [
+    "uart",
+    "usb",
+    "power",
+    "reader",
+    "receiver",
+    "supervisor",
+    "protection",
+    "leds",
+    "servoout",
+    "body",
+    "calib"
+   ]
+  },
+  {
+   "kind": "region",
+   "label": "Desktop",
+   "wraps": [
+    "desktop"
+   ]
+  }
+ ],
+ "connections": [
+  {
+   "id": "bt",
+   "from": "gamepad",
+   "to": "mapping",
+   "label": "Bluetooth"
+  },
+  {
+   "id": "desired",
+   "from": "mapping",
+   "to": "rlink",
+   "label": "desired state"
+  },
+  {
+   "id": "status",
+   "from": "rlink",
+   "to": "screen",
+   "label": "status"
+  },
+  {
+   "id": "wifi",
+   "from": "phone",
+   "to": "portal",
+   "label": "WiFi portal"
+  },
+  {
+   "id": "portalreq",
+   "from": "portal",
+   "to": "rlink",
+   "label": "mode, edits"
+  },
+  {
+   "id": "cmd",
+   "from": "rlink",
+   "to": "uart",
+   "label": "commands, sets",
+   "variant": "emphasis"
+  },
+  {
+   "id": "tele",
+   "from": "uart",
+   "to": "rlink",
+   "label": "telemetry, reports"
+  },
+  {
+   "id": "usbframes",
+   "from": "desktop",
+   "to": "usb",
+   "label": "frames over USB",
+   "variant": "emphasis"
+  },
+  {
+   "id": "usbback",
+   "from": "usb",
+   "to": "desktop",
+   "label": "reports, text"
+  },
+  {
+   "id": "bridgein",
+   "from": "uart",
+   "to": "receiver",
+   "label": "bridge input"
+  },
+  {
+   "id": "usbin",
+   "from": "usb",
+   "to": "receiver",
+   "label": "USB input"
+  },
+  {
+   "id": "gated",
+   "from": "receiver",
+   "to": "supervisor",
+   "label": "arbitrated mode",
+   "variant": "emphasis"
+  },
+  {
+   "id": "guarded",
+   "from": "receiver",
+   "to": "calib",
+   "label": "guarded sets",
+   "variant": "security"
+  },
+  {
+   "id": "mode",
+   "from": "supervisor",
+   "to": "body",
+   "label": "gated mode",
+   "variant": "emphasis"
+  },
+  {
+   "id": "offsets",
+   "from": "calib",
+   "to": "body",
+   "label": "offsets"
+  },
+  {
+   "id": "ranges",
+   "from": "calib",
+   "to": "servoout",
+   "label": "pulse ranges"
+  },
+  {
+   "id": "angles",
+   "from": "body",
+   "to": "servoout",
+   "label": "joint angles",
+   "variant": "emphasis"
+  },
+  {
+   "id": "pulses",
+   "from": "servoout",
+   "to": "servos",
+   "label": "pulses",
+   "variant": "emphasis"
+  },
+  {
+   "id": "sense",
+   "from": "supply",
+   "to": "power",
+   "label": "shunt, divider"
+  },
+  {
+   "id": "reading",
+   "from": "power",
+   "to": "protection",
+   "label": "A, V"
+  },
+  {
+   "id": "allow",
+   "from": "protection",
+   "to": "supervisor",
+   "label": "allow, Sleep",
+   "variant": "security"
+  },
+  {
+   "id": "inhibit",
+   "from": "protection",
+   "to": "servoout",
+   "label": "inhibit",
+   "variant": "security"
+  },
+  {
+   "id": "faults",
+   "from": "protection",
+   "to": "leds",
+   "label": "faults"
+  },
+  {
+   "id": "i2c",
+   "from": "sensors",
+   "to": "reader",
+   "label": "I²C1",
+   "variant": "dashed"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "slate",
+   "title": "How to read",
+   "items": [
+    "Built and host-tested at b186de5; not yet brought up on hardware",
+    "Tagged \"planned\" and dashed: suspended sensor work",
+    "Bridge: Bluetooth in normal mode, WiFi only in setup mode"
+   ]
+  },
+  {
+   "dot": "rose",
+   "title": "Safety rules",
+   "items": [
+    "Input, then protection, every 20 ms tick",
+    "E-stop from either link latches; clear only from the source in control",
+    "Both links claiming control: conflict, robot sleeps",
+    "Calibration only in Calibrate, ±30° of defaults, 60°/s"
+   ]
+  },
+  {
+   "dot": "violet",
+   "title": "Link protocol v2",
+   "items": [
+    "Commands 50 Hz, telemetry 10 Hz, CRC-16 frames",
+    "Calibration sets resent until a report confirms them",
+    "Golden vectors shared by the C++ and Go tests"
+   ]
+  }
+ ]
+}

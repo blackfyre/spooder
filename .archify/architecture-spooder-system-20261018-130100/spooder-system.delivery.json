@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "8cd1a381-69f2-4d4d-8d6c-b878c51eacaf",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-system-20261018-130100/candidate.json",
+  "output": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-system-20261018-130100/spooder-system.html",
+  "specification": {
+    "sha256": "2437cb05e8b858fc1a8419a17ee379e7f9ad98802d13f22e6760fe0c40683a59",
+    "bytes": 11932
+  },
+  "artifact": {
+    "sha256": "343c76c409c9b777221ee84c3917d47a72376bc7840881ffaa77fc020b536c88",
+    "bytes": 858179
+  }
+}
