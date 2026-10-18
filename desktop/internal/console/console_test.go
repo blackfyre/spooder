@@ -82,6 +82,9 @@ func TestFormatGoldenVectors(t *testing.T) {
 		"calibration_report_clamped":           "calibration report #9  request 17  clamped  reversed 1",
 		"calibration_report_rejected_seq_wrap": "calibration report #0  request 18  rejected  reversed 1",
 		"calibration_report_extremes":          "calibration report #255  request 255  result 255  reversed 18",
+		"pose_calibration_outputs_on":          "pose seq=3 flags=1",
+		"pose_output_off_legs_unset":           "pose seq=200 flags=0",
+		"pose_extremes":                        "pose seq=255 flags=255",
 	}
 	seen := 0
 	for _, v := range readVectors(t) {
