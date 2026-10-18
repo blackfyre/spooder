@@ -140,6 +140,49 @@ func TestServo2040IsPreselectedAndConnects(t *testing.T) {
 	}
 }
 
+func TestExplicitPortIsPreselectedAheadOfAServo2040(t *testing.T) {
+	explicit := link.PortInfo{Name: "/tmp/virtual-robot/usb"}
+	fl := &fakeLink{}
+	w, err := newWindow(Env{
+		Session: session.New(func() time.Time { return clock }, nil),
+		Link:    fl,
+		Ports:   func() ([]link.PortInfo, error) { return []link.PortInfo{servo, explicit}, nil },
+		Port:    explicit.Name,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ports, _ := w.env.Ports()
+	w.setPorts(ports)
+	if w.portSel != 1 {
+		t.Fatalf("preselected %d", w.portSel)
+	}
+	router := new(input.Router)
+	frame(w, router)
+	click(w, router, &w.connect)
+	if len(fl.connected) != 1 || fl.connected[0] != explicit {
+		t.Fatalf("connected %+v", fl.connected)
+	}
+	click(w, router, &w.connect) // disconnect
+	// Absent (the virtual robot not running): the Servo 2040 instead.
+	w.setPorts([]link.PortInfo{servo})
+	if w.portSel != 0 {
+		t.Fatalf("preselected %d", w.portSel)
+	}
+	// Once it appears, it is preselected again over the Servo 2040.
+	w.setPorts([]link.PortInfo{servo, {Name: "/dev/ttyS0"}, explicit})
+	if w.portSel != 2 {
+		t.Fatalf("preselected %d after the path appeared", w.portSel)
+	}
+	// The operator's own pick is kept.
+	w.portClicks[1].Click()
+	frame(w, router)
+	w.setPorts([]link.PortInfo{servo, {Name: "/dev/ttyS0"}, explicit, {Name: "/dev/ttyS1"}})
+	if w.portSel != 1 {
+		t.Fatalf("pick lost: %d", w.portSel)
+	}
+}
+
 // Space toggles the e-stop whether or not the app is in control, and even
 // after Tab presses (which would otherwise focus a button).
 func TestSpaceIsTheEmergencyStop(t *testing.T) {

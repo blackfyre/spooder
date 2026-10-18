@@ -97,6 +97,13 @@ description = "Build and run the virtual robot, its USB port linked at build/vir
 depends = ["virtual-robot"]
 run = "build/virtual-robot/virtual-robot --link build/virtual-robot/usb --echo"
 
+[tasks.e2e]
+description = "End-to-end tests: the desktop calibrator's link and session against the virtual robot"
+depends = ["virtual-robot"]
+dir = "desktop"
+env = { CGO_ENABLED = "1" }
+run = "go test -count=1 ./e2e"
+
 # Desktop calibrator (desktop/). Gio needs cgo and the Wayland, X11 and EGL
 # development packages on Linux; desktop-deps names any that are missing.
 [tasks.desktop-deps]

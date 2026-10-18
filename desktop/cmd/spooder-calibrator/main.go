@@ -17,6 +17,7 @@ import (
 
 func main() {
 	checkout := flag.String("checkout", "", "spooder checkout to export the calibration defaults into")
+	port := flag.String("port", "", "serial port to list and preselect even if not enumerated (e.g. the virtual robot's build/virtual-robot/usb)")
 	flag.Parse()
 
 	configDir, _ := os.UserConfigDir()
@@ -29,13 +30,14 @@ func main() {
 
 	redraw := new(ui.Redraw)
 	s := session.New(nil, redraw.Invalidate)
-	sys := link.Serial{}
+	sys := link.WithPort(link.Serial{}, *port)
 	l := link.New(sys, s, s, link.Options{})
 	ui.Run(ui.Env{
 		Session:    s,
 		Redraw:     redraw,
 		Link:       l,
 		Ports:      sys.List,
+		Port:       *port,
 		ConfigDir:  configDir,
 		Checkouts:  ui.CheckoutCandidates(*checkout, remembered, cwd, exe),
 		Appearance: appearance.Read(),

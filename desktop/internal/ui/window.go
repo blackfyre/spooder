@@ -58,6 +58,7 @@ type Env struct {
 	Redraw     *Redraw // the session's change hook calls Redraw.Invalidate
 	Link       Linker
 	Ports      func() ([]link.PortInfo, error)
+	Port       string   // a port given with --port: preselected ahead of a Servo 2040
 	ConfigDir  string   // for the remembered checkout
 	Checkouts  []string // candidate checkouts, see CheckoutCandidates
 	Appearance appearance.Settings
@@ -93,7 +94,8 @@ type window struct {
 	snap  session.Snapshot
 
 	ports      []link.PortInfo
-	portSel    int // index into ports, -1 for none
+	portSel    int  // index into ports, -1 for none
+	picked     bool // the operator chose a port (not a preselection)
 	portsCh    chan []link.PortInfo
 	portClicks []widget.Clickable
 	portList   layout.List
@@ -201,7 +203,7 @@ func (w *window) receive() {
 }
 
 // setPorts replaces the port list, keeping the selection on the same
-// device, or preselecting a Servo 2040.
+// device, or preselecting the --port port, else a Servo 2040.
 func (w *window) setPorts(ports []link.PortInfo) {
 	var selected *link.PortInfo
 	if w.portSel >= 0 && w.portSel < len(w.ports) {
@@ -214,9 +216,19 @@ func (w *window) setPorts(ports []link.PortInfo) {
 	w.ports = ports
 	w.portClicks = make([]widget.Clickable, len(ports))
 	w.portSel = -1
-	if selected != nil {
+	// A preselection is made again, so the --port path wins once it
+	// appears; the operator's own pick, or the connected device, is kept.
+	if selected != nil && (w.picked || w.device != nil) {
 		for i, p := range ports {
 			if link.SameDevice(*selected, p) {
+				w.portSel = i
+				break
+			}
+		}
+	}
+	if w.portSel < 0 && w.env.Port != "" {
+		for i, p := range ports {
+			if p.Name == w.env.Port {
 				w.portSel = i
 				break
 			}
@@ -375,6 +387,7 @@ func (w *window) handle(gtx layout.Context) {
 	for i := range w.portClicks {
 		if w.portClicks[i].Clicked(gtx) && w.device == nil {
 			w.portSel = i
+			w.picked = true
 		}
 	}
 	if w.connect.Clicked(gtx) {

@@ -13,9 +13,9 @@
 
 ## 3. Desktop and end to end
 
-- [ ] 3.1 `--port` (D4): `link.WithPort`, `ui.Env.Port`. Verify `mise run desktop-test` with unit tests for listing, opening and preselection.
-- [ ] 3.2 `desktop/e2e` tests (D5) and the `e2e` mise task: observe, control and Calibrate, a confirmed calibration change with the applied value at ≤ 60°/s, e-stop latching and blocking clears, release → Sleep, overvoltage. Verify `mise run e2e` passes and the tests skip without the binary.
-- [ ] 3.3 Screenshots against the live robot (D6), light and dark. Verify the PNGs exist and show the states.
+- [x] 3.1 `--port` (D4): `link.WithPort`, `ui.Env.Port`. Verify `mise run desktop-test` with unit tests for listing, opening and preselection.
+- [x] 3.2 `desktop/e2e` tests (D5) and the `e2e` mise task: observe, control and Calibrate, a confirmed calibration change with the applied value at ≤ 60°/s, e-stop latching and blocking clears, release → Sleep, overvoltage. Verify `mise run e2e` passes and the tests skip without the binary.
+- [x] 3.3 Screenshots against the live robot (D6), light and dark. Verify the PNGs exist and show the states.
 
 ## 4. Documentation
 

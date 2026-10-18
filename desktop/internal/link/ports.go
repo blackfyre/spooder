@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"os"
 	"strings"
 	"time"
 
@@ -99,12 +100,57 @@ func (Serial) List() ([]PortInfo, error) {
 }
 
 // Open opens a port at BaudRate with DTR raised, which the robot's USB stack
-// takes as a host being connected.
+// takes as a host being connected. A port without modem control lines (a
+// pseudo-terminal, such as the virtual robot's) is opened without them.
 func (Serial) Open(name string) (Port, error) {
-	return serial.Open(name, &serial.Mode{
+	p, err := serial.Open(name, &serial.Mode{
 		BaudRate:          BaudRate,
 		InitialStatusBits: &serial.ModemOutputBits{DTR: true, RTS: true},
 	})
+	if err != nil && isNoModemLines(err) {
+		return serial.Open(name, &serial.Mode{BaudRate: BaudRate})
+	}
+	return p, err
+}
+
+// isNoModemLines reports whether opening failed only for want of modem
+// control lines (go.bug.st/serial's TIOCMGET or TIOCMSET refused).
+func isNoModemLines(err error) bool {
+	var pe *serial.PortError
+	return errors.As(err, &pe) && pe.Code() == serial.InvalidSerialPort && strings.Contains(err.Error(), "modem bits")
+}
+
+// WithPort returns sys with the port at path added: listed whenever the path
+// exists, even if the system's enumeration does not report it (a
+// pseudo-terminal, or a symbolic link to one, as the virtual robot keeps).
+// Its PortInfo has only a Name, so reconnection follows the path. An empty
+// path returns sys unchanged.
+func WithPort(sys System, path string) System {
+	if path == "" {
+		return sys
+	}
+	return explicitPort{System: sys, path: path}
+}
+
+type explicitPort struct {
+	System
+	path string
+}
+
+func (e explicitPort) List() ([]PortInfo, error) {
+	ports, err := e.System.List()
+	if err != nil {
+		ports = nil // the explicit port does not depend on the enumeration
+	}
+	for _, p := range ports {
+		if p.Name == e.path {
+			return ports, nil
+		}
+	}
+	if _, err := os.Stat(e.path); err == nil {
+		ports = append(ports, PortInfo{Name: e.path})
+	}
+	return ports, nil
 }
 
 // IsPermission reports whether opening a port failed for lack of access
