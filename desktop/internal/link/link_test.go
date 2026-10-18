@@ -322,3 +322,51 @@ func TestTextAccumulator(t *testing.T) {
 		t.Fatalf("long line %d", len(lines[3].Text))
 	}
 }
+
+func TestReadOnlyLinkNeverWrites(t *testing.T) {
+	sys := newFakeSystem(servo)
+	rec := newRecorder()
+	l := New(sys, rec, nil, fast)
+	l.Connect(servo)
+	t.Cleanup(l.Close)
+	var p *fakePort
+	select {
+	case p = <-sys.opened:
+	case <-time.After(time.Second):
+		t.Fatal("port not opened")
+	}
+	p.send(append([]byte("boot ok\n"), telemetry(1)...))
+	if !rec.waitFor(time.Second, func(r *recorder) bool { return len(r.frames) == 1 && len(r.lines) == 1 }) {
+		t.Fatalf("frames %d lines %d", len(rec.frames), len(rec.lines))
+	}
+	time.Sleep(10 * fast.CommandPeriod) // several writer periods
+	// An unplug: the read-only link reconnects like any other.
+	sys.setPresent(false, "")
+	p.unplug()
+	if !rec.waitFor(time.Second, func(r *recorder) bool { return r.states[len(r.states)-1].Status == Waiting }) {
+		t.Fatal("loss not reported")
+	}
+	sys.setPresent(true, "/dev/ttyACM1")
+	var p2 *fakePort
+	select {
+	case p2 = <-sys.opened:
+	case <-time.After(time.Second):
+		t.Fatal("not reconnected")
+	}
+	p2.send(telemetry(2))
+	if !rec.waitFor(time.Second, func(r *recorder) bool { return len(r.frames) == 2 }) {
+		t.Fatal("no frame after reconnect")
+	}
+	l.Close()
+	if !p2.isClosed() {
+		t.Fatal("port left open")
+	}
+	for i, port := range []*fakePort{p, p2} {
+		port.mu.Lock()
+		writes, out := port.writes, len(port.out)
+		port.mu.Unlock()
+		if writes != 0 || out != 0 {
+			t.Errorf("port %d: %d writes, %d bytes", i, writes, out)
+		}
+	}
+}

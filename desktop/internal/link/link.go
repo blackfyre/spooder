@@ -68,7 +68,8 @@ type Handler interface {
 	Line(l Line, s Stats)
 }
 
-// Source supplies what the writer sends.
+// Source supplies what the writer sends. A link without a source (nil) is
+// read-only: it never writes to the port.
 type Source interface {
 	// Command is the command frame payload to send now.
 	Command() protocol.Command
@@ -113,7 +114,8 @@ type Link struct {
 	done chan struct{} // closed when the supervisor has ended
 }
 
-// New returns an idle link.
+// New returns an idle link. With a nil src the link is read-only: it reads
+// and reconnects as usual but never writes.
 func New(sys System, h Handler, src Source, opts Options) *Link {
 	return &Link{sys: sys, h: h, src: src, opts: opts.withDefaults()}
 }
@@ -131,8 +133,8 @@ func (l *Link) Connect(device PortInfo) {
 }
 
 // Disconnect releases the device: the writer sends one last command frame
-// without the controller flag, then the port is closed. It returns once the
-// port is closed.
+// without the controller flag (none for a read-only link), then the port is
+// closed. It returns once the port is closed.
 func (l *Link) Disconnect() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -218,6 +220,9 @@ func (l *Link) run(port Port, stop chan struct{}) error {
 		defer close(readDone)
 		readErr <- l.read(port)
 	}()
+	if l.src == nil {
+		return readOnly(port, stop, readErr, readDone)
+	}
 
 	// A write that blocks (a stalled device) must not hold up a disconnect:
 	// once stop is closed, the writer gets CloseGrace to finish, then the
@@ -273,6 +278,22 @@ loop:
 				seq++
 			}
 		}
+	}
+	port.Close()
+	<-readDone
+	if err != nil {
+		return errors.Join(ErrLost, err)
+	}
+	return nil
+}
+
+// readOnly serves a port without writing anything: it waits for stop or a
+// read failure, then closes the port.
+func readOnly(port Port, stop chan struct{}, readErr <-chan error, readDone <-chan struct{}) error {
+	var err error
+	select {
+	case <-stop:
+	case err = <-readErr:
 	}
 	port.Close()
 	<-readDone
