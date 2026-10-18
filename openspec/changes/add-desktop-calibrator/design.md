@@ -43,7 +43,7 @@ A separate module keeps Gio and cgo out of anything the firmware build or the ho
 ### D2. Dependencies and toolchain
 
 - Go pinned in `mise.toml` (1.27.1, matching `bopen`'s toolchain); `gioui.org v0.10.3`, `gioui.org/x v0.10.3`; `go.bug.st/serial` pinned to a release, with no cgo on Linux or Windows.
-- Linux build needs cgo plus the Wayland, X11 and EGL development packages. Fedora: `wayland-devel libxkbcommon-x11-devel libX11-devel libXcursor-devel mesa-libEGL-devel mesa-libGLES-devel vulkan-headers`. These are listed in the hardware-check skill, and the mise task checks for `pkg-config` entries and names what is missing.
+- Linux build needs cgo plus the Wayland, X11 and EGL development packages. Fedora: `wayland-devel libxkbcommon-devel libxkbcommon-x11-devel libX11-devel libXcursor-devel libXfixes-devel mesa-libEGL-devel vulkan-headers`. These are the providers of the `pkg-config` names in Gio's cgo directives (`wayland-client wayland-cursor wayland-egl egl xkbcommon xkbcommon-x11 x11 x11-xcb xcursor xfixes`) and of `<vulkan/vulkan.h>`; GLES is loaded at run time, so `mesa-libGLES-devel` is not needed. They are listed in the hardware-check skill, and `desktop/scripts/check-deps.sh` (the `desktop-deps` task, run before `desktop-build` and `desktop-test`) checks each entry and prints the `dnf install` line for whatever is missing.
 - mise tasks: `desktop-build`, `desktop-run`, `desktop-test` (`go test ./...` in `desktop/`). `desktop-test` is a verification gate next to `mise run test`.
 
 ### D3. Serial I/O and the stream split
