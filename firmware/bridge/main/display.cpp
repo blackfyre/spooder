@@ -4,6 +4,7 @@
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
 
+#include "logo.h"
 #include "status/status_screen.h"
 
 namespace display
@@ -61,6 +62,20 @@ private:
 };
 
 static Panel lcd;
+
+enum class Phase
+{
+  Logo,
+  BootLog,
+  Status,
+};
+static Phase phase = Phase::Logo;
+static uint32_t phaseSinceMs;
+
+constexpr int BOOT_LINES = 8;
+static status_screen::Line bootLines[BOOT_LINES];
+static int bootLineCount;
+
 static status_screen::Line shown[status_screen::LINE_COUNT];
 static bool shownFresh;
 static bool firstDraw = true;
@@ -93,6 +108,40 @@ static void drawLine(int i, const status_screen::Line &l)
   lcd.drawString(l.text, MARGIN_X, y);
 }
 
+// The logo's drawn area, at 2x, centred: it fills the 135 px height.
+static void drawLogo()
+{
+  int minX = logo::WIDTH, maxX = -1, minY = logo::HEIGHT, maxY = -1;
+  for (int y = 0; y < logo::HEIGHT; y++)
+    for (int x = 0; x < logo::WIDTH; x++)
+      if (logo::pixel(x, y))
+      {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+  lcd.fillScreen(TFT_BLACK);
+  if (maxX < 0)
+    return;
+  constexpr int SCALE = 2;
+  int ox = (lcd.width() - (maxX - minX + 1) * SCALE) / 2;
+  int oy = (lcd.height() - (maxY - minY + 1) * SCALE) / 2;
+  lcd.startWrite();
+  for (int y = minY; y <= maxY; y++)
+    for (int x = minX; x <= maxX; x++)
+      if (logo::pixel(x, y))
+        lcd.fillRect(ox + (x - minX) * SCALE, oy + (y - minY) * SCALE, SCALE, SCALE, TFT_WHITE);
+  lcd.endWrite();
+}
+
+static void drawBootLog()
+{
+  lcd.fillScreen(TFT_BLACK);
+  for (int i = 0; i < bootLineCount; i++)
+    drawLine(i, bootLines[i]);
+}
+
 void setup()
 {
   lcd.init();
@@ -100,12 +149,47 @@ void setup()
   lcd.setBrightness(160);
   lcd.setFont(&fonts::Font2);
   lcd.setTextWrap(false);
-  lcd.fillScreen(TFT_BLACK);
+  drawLogo();
+  phase = Phase::Logo;
+  phaseSinceMs = millis();
+  bootMessage("Boot");
+}
+
+void bootMessage(const char *text, bool ok)
+{
+  if (bootLineCount >= BOOT_LINES)
+    return;
+  status_screen::Line &l = bootLines[bootLineCount++];
+  snprintf(l.text, sizeof(l.text), "%s", text);
+  l.tone = ok ? status_screen::Tone::Normal : status_screen::Tone::Bad;
+}
+
+// Advances the start-up sequence; returns true once the status screen is due.
+static bool startupDone(uint32_t nowMs, bool emergencyStop)
+{
+  if (phase != Phase::Status && emergencyStop)
+  {
+    phase = Phase::Status; // never hide an emergency stop behind the logo
+    return true;
+  }
+  if (phase == Phase::Logo && nowMs - phaseSinceMs >= LOGO_MS)
+  {
+    phase = Phase::BootLog;
+    phaseSinceMs = nowMs;
+    drawBootLog();
+  }
+  else if (phase == Phase::BootLog && nowMs - phaseSinceMs >= BOOT_LOG_MS)
+  {
+    phase = Phase::Status;
+  }
+  return phase == Phase::Status;
 }
 
 void update(uint32_t nowMs, bool gamepadConnected, const gamepad_mapping::Desired &desired,
             const robot_link::Status &linkStatus)
 {
+  if (!startupDone(nowMs, linkStatus.emergencyStop))
+    return;
   if (!firstDraw && nowMs - lastDrawMs < REFRESH_MS)
     return;
   lastDrawMs = nowMs;

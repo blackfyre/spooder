@@ -69,11 +69,15 @@ static gamepad_mapping::PadState readPad()
 void setup()
 {
   Console.printf("spooder bridge, Bluepad32 %s\n", BP32.firmwareVersion());
-  display::setup();
+  display::setup(); // logo first
   robot_link::start();
+  display::bootMessage("Robot link: UART1 26/27");
   BP32.setup(&onConnected, &onDisconnected);
   // No virtual devices (mouse emulation from touchpads).
   BP32.enableVirtualDevice(false);
+  display::bootMessage("Bluetooth: Bluepad32");
+  display::bootMessage("Ready!");
+  display::bootMessage("Waiting on gamepad...");
 }
 
 void loop()
