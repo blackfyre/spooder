@@ -42,7 +42,7 @@ A separate module keeps Gio and cgo out of anything the firmware build or the ho
 
 ### D2. Dependencies and toolchain
 
-- Go pinned in `mise.toml` (1.27.1, matching `bopen`'s toolchain); `gioui.org v0.10.3`, `gioui.org/x v0.10.3`; `go.bug.st/serial` pinned to a release, with no cgo on Linux or Windows.
+- Go pinned in `mise.toml` (1.27.1, matching `bopen`'s toolchain); `gioui.org v0.10.3`; `go.bug.st/serial` v1.8.0, with no cgo on Linux or Windows. `gioui.org/x` is not needed: nothing in the app uses it.
 - Linux build needs cgo plus the Wayland, X11 and EGL development packages. Fedora: `wayland-devel libxkbcommon-devel libxkbcommon-x11-devel libX11-devel libXcursor-devel libXfixes-devel mesa-libEGL-devel vulkan-headers`. These are the providers of the `pkg-config` names in Gio's cgo directives (`wayland-client wayland-cursor wayland-egl egl xkbcommon xkbcommon-x11 x11 x11-xcb xcursor xfixes`) and of `<vulkan/vulkan.h>`; GLES is loaded at run time, so `mesa-libGLES-devel` is not needed. They are listed in the hardware-check skill, and `desktop/scripts/check-deps.sh` (the `desktop-deps` task, run before `desktop-build` and `desktop-test`) checks each entry and prints the `dnf install` line for whatever is missing.
 - mise tasks: `desktop-build`, `desktop-run`, `desktop-test` (`go test ./...` in `desktop/`). `desktop-test` is a verification gate next to `mise run test`.
 
@@ -83,9 +83,11 @@ A separate module keeps Gio and cgo out of anything the firmware build or the ho
   - dark: `#1b1b19` background, `#121211` wells, `#2c2c29` panels, `#f3f2ee` text, `#3a3935` selection;
   - accent `#e2551d` (pressed `#a93a0f`, as text `#a3390c`);
   - status: green `#9ece6a`, yellow `#e0af68`, blue `#7aa2f7`.
-- **Type:** Archivo SemiBold for text; JetBrains Mono, uppercase with wide letter-spacing, for labels, buttons and every numeric value.
+- **Type:** Archivo SemiBold for text; JetBrains Mono, uppercase with wide letter-spacing, for labels, buttons and every numeric value. Gio's text layout has no letter-spacing, so labels are laid out a glyph at a time with 0.08 em between them; values keep their case.
+- **Text on the accent** is ink, not white: white on `#e2551d` is 3.8:1, ink 4.6:1, and the labels are small. A theme test checks every text and fill pair the UI draws in both palettes.
 - **Buttons:** 7 px radius, flat fill, a 2 px darker bottom shadow that flattens on press (a small custom Gio widget).
-- **Screens:** a header (port, connection, control toggle, e-stop), a telemetry strip, the joint editor as a 6 × 3 grid of leg/joint cards, and the log and export panes. Before building, check the Claude Design project for anything newer than the site's CSS; the project is only read, never written.
+- **Screens:** a header (port, connection, control toggle, e-stop), a telemetry strip, the joint editor as a 6 × 3 grid of leg/joint cards, and the log and export panes.
+  - **Keyboard:** the window takes Tab, so keyboard focus never moves onto a button, which would take Space for itself: Space is always the e-stop. For the same reason there is no text field: the export's checkout is chosen from the one given with `--checkout`, the remembered one, the working directory and the checkout the binary was built in. Before building, check the Claude Design project for anything newer than the site's CSS; the project is only read, never written.
 
 ## Risks / Trade-offs
 
