@@ -24,4 +24,4 @@
 
 ## 5. Wrap-up
 
-- [ ] 5.1 Update `CLAUDE.md` and the skills minimally (pose frame, legs pane); verify `openspec validate add-desktop-leg-view` passes
+- [x] 5.1 Update `CLAUDE.md` and the skills minimally (pose frame, legs pane); verify `openspec validate add-desktop-leg-view` passes
