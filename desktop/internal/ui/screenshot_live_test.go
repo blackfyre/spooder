@@ -41,13 +41,22 @@ func TestLiveScreenshots(t *testing.T) {
 		if dark {
 			theme = "dark"
 		}
+		// The GPU context first, so capturing a frame later is quick (the
+		// pending change is caught within a command period).
+		hw, err := headless.NewWindow(width, height)
+		if err != nil {
+			t.Skip("no headless GPU:", err)
+		}
+		t.Cleanup(hw.Release)
 		vr, err := virtualrobot.Start(bin, filepath.Join(t.TempDir(), "usb"))
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(vr.Close)
 		s := session.New(nil, nil)
 		sys := vr.System()
 		l := link.New(sys, s, s, link.Options{})
+		t.Cleanup(func() { s.Shutdown(); l.Close() }) // runs before the robot's: last registered, first run
 		w, err := newWindow(Env{Session: s, Link: l, Ports: sys.List, Port: vr.Link,
 			Checkouts: []string{checkoutDir(t)}, Appearance: appearance.Settings{Dark: dark}})
 		if err != nil {
@@ -71,11 +80,6 @@ func TestLiveScreenshots(t *testing.T) {
 		}
 		shoot := func(name string) {
 			t.Helper()
-			hw, err := headless.NewWindow(width, height)
-			if err != nil {
-				t.Skip("no headless GPU:", err)
-			}
-			defer hw.Release()
 			var ops op.Ops
 			gtx := layout.Context{Ops: &ops, Metric: unit.Metric{PxPerDp: 1, PxPerSp: 1},
 				Constraints: layout.Exact(image.Pt(width, height)), Now: nextFrameTime(), Source: router.Source()}
@@ -149,8 +153,5 @@ func TestLiveScreenshots(t *testing.T) {
 		frame(w, router)
 		shoot("estop-legs")
 
-		s.Shutdown()
-		l.Close()
-		vr.Close()
 	}
 }
