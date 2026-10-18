@@ -4,6 +4,8 @@ Spooder is firmware for a hexapod robot, derived from [Aecert's Hexapod V1](http
 - the robot, on a **Pimoroni Servo 2040** (RP2040), in C++ on the pico-sdk with pimoroni-pico;
 - the gamepad bridge, on a **LilyGO TTGO T-Display v1.1** (original ESP32), on ESP-IDF + Arduino + Bluepad32. It sends gamepad commands to the robot over a UART link and shows robot status on its screen.
 
+A computer can speak the same link protocol on the robot's USB port, alongside the debug text, to calibrate, monitor and control the robot without the bridge. Joint calibration can be changed live (in RAM) and exported as the compiled defaults.
+
 I²C sensors are planned (`add-body-sensing`, suspended). See `openspec/changes/`.
 
 ## Toolchain
@@ -38,7 +40,9 @@ mise run clean
 SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run build
 ```
 
-**Command source.** The robot takes commands from the bridge link by default. `mise run build --serial` (or `mise run upload --serial`) builds the USB serial keys instead, for movement bring-up without the bridge and as a rollback.
+**Command source.** By default the robot takes commands from the bridge link or the USB link, whichever reports a connected controller; if both do, it sleeps and reports a source conflict. `mise run build --serial` (or `mise run upload --serial`) builds the USB serial keys instead, for movement bring-up without the bridge and as a rollback; the USB link is then not compiled.
+
+**Flash both boards together** when the link protocol changes (`protocol::VERSION`, now 2). A mismatched pair fails safe: each side discards the other's frames, so the link looks lost and the robot sleeps.
 
 `mise run test`, `mise run build` (with and without `--serial`) and `mise run build-bridge` are the verification gates. Hardware behaviour can only be checked on the boards (see the `spooder-hardware-check` skill).
 
@@ -48,14 +52,17 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `movement/`:
     - `body`: the non-blocking state machine (Initialise, Stand, Walk, Sleep, Calibrate) on a fixed 5 ms internal grid.
     - `gait`, `kinematics` (IK, target validation, `servoOutputIndex`) and `vectors`.
+    - `joint_calibration`: the per-joint calibration table (offset, 0° and 180° pulses, direction), its clamps, the 60°/s rate-limited `step` and `toPulse`.
+    - `calibration_defaults.cpp`: the compiled defaults, in a fixed format that a front-end's export replaces whole. `test/golden/calibration_defaults.cpp` must equal it.
     - `movement_command.h`: the request a controller hands to movement.
   - `protection/`: power protection and the emergency stop. It turns supply readings into "output allowed" and "force Sleep", with latched faults; `supervisor` decides when the body runs, stops or restarts.
-  - `protocol/`: the link's frames, CRC and incremental decoder (both firmwares), and `link_receiver`, the robot's handling of decoded commands (arrival stamping, clear and mode-request counters, baselines after a link gap).
+  - `protocol/`: the link's frames (version 2: command, telemetry, calibration set and report), CRC and incremental decoder (both firmwares), pinned by `test/golden/protocol_v2.txt`. `link_receiver` is the robot's handling of decoded frames: arrival stamping, clear and mode-request counters, baselines after a link gap, the calibration guards and reports, and the arbitration between the bridge and USB links.
   - `gamepad_mapping/`: gamepad input to the desired command state (bridge).
   - `status/led_pattern`: what the robot's six status LEDs show; `status/status_screen`: the bridge screen's text.
 - `firmware/servo2040/`: the pico-sdk CMake project.
-  - `main.cpp`: the core 0 loop, every 20 ms: input (link or serial) → power read → protection → supervisor → `body::step` → servo output → LEDs → telemetry every fifth tick.
-  - `link`: UART1 on GPIO20/21 (J6), interrupt-driven RX ring and TX.
+  - `main.cpp`: the core 0 loop, every 20 ms: input (both links, arbitrated, or serial) → power read → protection → supervisor → calibration sets → calibration step → `body::step` → servo output → LEDs → telemetry every fifth tick and calibration reports, on both links.
+  - `link`: UART1 on GPIO20/21 (J6), interrupt-driven RX ring and a 256-byte TX queue of whole frames.
+  - `usb_link`: link frames over USB stdio, sharing the port with `printf`; frames are written whole or dropped.
   - `servo_output`: `ServoCluster` on PIO 0, GPIO0–17.
   - `power_monitor`: current and voltage via the analog mux.
   - `status_leds`: WS2812 on PIO 1, drawing `core/status/led_pattern`.
@@ -63,16 +70,17 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `config.h` + `power_limits*.h`: build-time limits.
 - `firmware/bridge/`: the ESP-IDF PlatformIO project for the TTGO T-Display.
   - `main/bridge.cpp`: Bluepad32 callbacks (one controller slot) and `loop()`: gamepad → mapping → link, and the screen.
-  - `main/link`: `robot_link`, a FreeRTOS task above `loop()` that sends a command frame every 20 ms, samples the GPIO35 e-stop button and decodes telemetry.
+  - `main/link`: `robot_link`, a FreeRTOS task above `loop()` that sends a command frame every 20 ms, samples the GPIO35 e-stop button and decodes telemetry and calibration reports.
   - `main/display`: LovyanGFX ST7789 driver drawing `status_screen` lines, at most every 250 ms, changed lines only.
-- `test/`: Unity host tests, one directory per area.
+- `test/`: Unity host tests, one directory per area. `test/golden/` holds the golden files other implementations (the desktop calibrator) test against; regenerate `protocol_v2.txt` only for a deliberate protocol change (`SPOODER_WRITE_GOLDEN=1 mise run test`).
 - `openspec/`: specifications (`specs/`) and changes (`changes/`). This is the source of truth for intended behaviour.
 
 ## Notes
 
 - Never enable stdio over UART on the Servo 2040. The SDK's default UART pins, GPIO0/1, are servo outputs 1 and 2. The link uses UART1 on GPIO20/21.
 - On ESP-IDF, POSIX `link()` and C++20 `std::lerp` are visible: hence `robot_link` on the bridge and `interpolate` in `core/movement/vectors.h`.
-- `ServoCluster::enable()` on a servo with no pulse set sends it to mid-travel, and `pulse()` enables a disabled servo. `servo_output` relies on both facts. Read it before changing output handling.
+- `ServoCluster::enable()` on a servo with no pulse set sends it to mid-travel, and `pulse()` enables a disabled servo. `servo_output` relies on both facts. It also turns off each channel's calibration limits (500–2500 µs by default), keeping the cluster's 400–2600 µs hard limits, so calibrated pulses pass unchanged. Read it before changing output handling.
+- Debug text on the robot's USB port must stay printable ASCII (plus tab, CR, LF): the same port carries binary link frames.
 - Project skills in `.claude/skills/`:
   - `spooder-firmware-shape`: layout, loop, J6 pins, the protection layer, the link and the bridge.
   - `spooder-leg-kinematics`: the movement reference.

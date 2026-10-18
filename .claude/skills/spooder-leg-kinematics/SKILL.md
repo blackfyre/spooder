@@ -11,11 +11,13 @@ Behaviour is specified in OpenSpec (`locomotion` and `leg-actuation` capabilitie
 
 | File | Role | Hardware-free |
 |---|---|---|
-| `firmware/servo2040/src/main.cpp` | Calls `body::step(bodyState, cmd, now)` every 20 ms after protection, reports rejections, hands the state to `servo_output` | no |
+| `firmware/servo2040/src/main.cpp` | Keeps the requested and applied calibration tables, steps the applied one, sets each leg's offsets, calls `body::step(bodyState, cmd, now)` every 20 ms after protection, reports rejections, hands the state and the applied table to `servo_output` | no |
 | `movement_command.h` | `MovementCommand`, `RequestedMode`, `StrideMode` | yes |
 | `body.h/.cpp` | `BodyState` and the state machine: modes, transitions, smoothing, walking | yes |
 | `gait.h/.cpp` | Gait table, progress rate, Bézier foot paths (`footTarget`) | yes |
-| `kinematics.h/.cpp` | `solveLeg`, `angleToMicroseconds`, link lengths, `LEG_OFFSETS` | yes |
+| `kinematics.h/.cpp` | `solveLeg`, link lengths, `servoOutputIndex` | yes |
+| `joint_calibration.h/.cpp` | Per-joint `Joint` (offset, 0° and 180° pulses, reversed), `Table`, `clampJoint`, rate-limited `step`, `toPulse`, `legOffsets` | yes |
+| `calibration_defaults.cpp` | `joint_calibration::DEFAULTS`, the compiled defaults in a fixed format (export target) | yes |
 | `vectors.h` | `Vector2`/`Vector3`, `lerp`, `mapFloat` | yes |
 | `firmware/servo2040/src/servo_output.*` | `ServoCluster` on PIO 0 (GPIO0–17): batched pulses, one `load()` per step, output on/off, protection inhibit | no |
 
@@ -74,8 +76,10 @@ theta3 = 180 - phi3                      + offset.z   // tibia
 
 - **Target validation:** `solveLeg` rejects non-finite targets and targets beyond reach.
   - On rejection the body keeps the leg's recorded position, writes nothing, and sets `newlyRejected` once per accepted→rejected change. `movement.cpp` prints that rejection once.
-- **Pulse conversion:** angles are clamped to 0–180° and converted to 500 + angle·2000/180 µs.
-- **Pulse output:** `servo_output` drives all 18 outputs from one `ServoCluster` (PIO 0, 50 Hz, crystal-timed, no calibration needed).
+- **Offsets:** the body holds each leg's three offsets (`BodyState::offsets`, defaults from `body::init`); `main` sets the applied table's values with `body::setOffsets` every tick, and a change re-solves the leg even if its foot did not move.
+- **Pulse conversion:** `joint_calibration::toPulse` clamps the angle to 0–180°, mirrors it to 180° − angle for a reversed joint, and interpolates between the joint's 0° and 180° pulses (by default 500 and 2500 µs).
+- **Pulse output:** `servo_output` drives all 18 outputs from one `ServoCluster` (PIO 0, 50 Hz, crystal-timed). Its per-channel calibration limits are off; only the cluster's 400–2600 µs hard limits apply.
+  - Every joint the body has set is converted through the applied table each tick, so a calibration change moves a joint whose angle did not change.
   - It writes changed joints with `pulse(i, us, false)` and calls `load()` once, so a step lands in one frame.
   - It never calls `enable()`, which would send a servo with no pulse set to mid-travel.
   - It writes nothing while protection inhibits output.
@@ -84,7 +88,7 @@ theta3 = 180 - phi3                      + offset.z   // tibia
 
 Leg index `i` (0–5) and joint `j` (0 coxa, 1 femur, 2 tibia) map to servo output `kinematics::servoOutputIndex(i, j) = 3i + j` (0-based; board output label 3i + j + 1, GPIO 3i + j).
 
-| Leg | Outputs (coxa / femur / tibia) | GPIO | `LEG_OFFSETS[i]` (coxa, femur, tibia) |
+| Leg | Outputs (coxa / femur / tibia) | GPIO | Default offsets (coxa, femur, tibia) |
 |---|---|---|---|
 | 0 | 1 / 2 / 3 | 0 / 1 / 2 | 90, 75, −18 |
 | 1 | 4 / 5 / 6 | 3 / 4 / 5 | 93, 75, −15 |
@@ -93,12 +97,15 @@ Leg index `i` (0–5) and joint `j` (0 coxa, 1 femur, 2 tibia) map to servo outp
 | 4 | 13 / 14 / 15 | 12 / 13 / 14 | 85, 89, −16 |
 | 5 | 16 / 17 / 18 | 15 / 16 / 17 | 93, 85, −24 |
 
-These offsets are upstream's 2023 values and have never been measured on this robot.
+These default offsets (`calibration_defaults.cpp`, all with 500/2500 µs and normal direction) are upstream's 2023 values and have never been measured on this robot.
 
 - `STRIDE_MULTIPLIER = {1,1,1,−1,−1,−1}` puts legs 0–2 on one side and 3–5 on the other.
 - `ROTATION_MULTIPLIER = {−1,0,1,−1,0,1}`, combined with `LEG_PLACEMENT_ANGLE = 56°`, places legs 0/3 at one end, 1/4 in the middle and 2/5 at the other end. Confirm which end is the front on the robot.
 
-To recalibrate, put the robot on a stand and send `c` with the serial hook to reach the calibration pose. In that pose the coxa should be perpendicular to the body, the femur horizontal and the tibia vertical. Adjust one `LEG_OFFSETS` entry at a time and update the table.
+To recalibrate, put the robot on a stand and request Calibrate to reach the calibration pose. In that pose the coxa should be perpendicular to the body, the femur horizontal and the tibia vertical.
+
+- **Live:** a front-end (the bridge's setup portal, or the desktop calibrator on USB) sends calibration set frames, one joint at a time. The robot accepts them only in Calibrate with output allowed, clamps the offset to the default ±30° and each pulse to 400–2600 µs (end points at least 1000 µs apart), and moves the joint there at no more than 60°/s. Live values stay in RAM until the robot restarts. Reports show the accepted table.
+- **Defaults:** export the reported table as the complete text of `core/movement/calibration_defaults.cpp`, update `test/golden/calibration_defaults.cpp` to match, and rebuild. Without a front-end, edit both files by hand in the same format.
 
 ## Gait table (`gait.cpp`)
 

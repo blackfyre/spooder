@@ -21,7 +21,8 @@ New logic goes into `core/` unless it truly needs hardware. A controller mapping
 `main.cpp` runs a 20 ms period loop (`LOOP_PERIOD_MS`, `sleep_until`; an overrun restarts the period):
 
 ```
-input   = readInput(now)                      // link::poll, or serial_commands::poll; bounded, never blocks
+input   = readInput(now)                      // link::poll + usb_link::poll, then link_receiver::arbitrate;
+                                              // or serial_commands::poll. Bounded, never blocks
 reading = power_monitor::read()
 prot    = protection::step(state, reading, now, input.clearFaults, input.emergencyStop)
 servo_output::setInhibited(!prot.allowOutput)
@@ -29,9 +30,13 @@ requested = command fresh (≤ 1 s) ? input.mode : Sleep
 run     = protection::supervise(supervisor, prot, requested, input.requestSeq)
 if run.stopBody:  servo_output::stop()                 // output-cutting fault: body stops
 if run.startBody: body::init(bodyState)                // boot, and restart after such a fault
-if run.runBody:   body::step(bodyState, cmd with run.mode, now); servo_output::apply(bodyState)
+link::processCalibration / usb_link::processCalibration(requested table, calibrating, prot.allowOutput)
+joint_calibration::step(applied, requested, dt)        // 60°/s towards the requested table
+if run.runBody:   body::setOffsets(applied offsets); body::step(bodyState, cmd with run.mode, now);
+                  servo_output::apply(bodyState, applied)
 status_leds::show(...)
-every fifth tick: link::sendTelemetry(...)   // non-blocking
+every fifth tick: telemetry on both links      // non-blocking, whole frames or nothing
+reports due (after a set, 1 Hz in Calibrate, ≤ 5 Hz): calibration report on each link
 ```
 
 - **Input, then protection, at the top of the tick.** Input comes first so an emergency stop in a frame that has already arrived acts in this tick (within 20 ms). Both sources are bounded and non-blocking (`MAX_CHARS_PER_POLL`; the link drains at most its 256-byte ring), so they cannot meaningfully delay a trip.
@@ -53,8 +58,8 @@ every fifth tick: link::sendTelemetry(...)   // non-blocking
 | PIO 0 SM 0 + 1 DMA channel + `DMA_IRQ_0` (shared handler) | `ServoCluster` (`servo_output`) |
 | PIO 1 SM 0 + DMA + a repeating timer | WS2812 LEDs (`status_leds`, 10 fps) |
 | ADC via the 74LV4051 mux (GPIO22/24/25 address, GPIO29 `SHARED_ADC`) | `power_monitor` (current at address 7, voltage at 6); sensor headers at 0–5 |
-| USB | stdio console |
-| UART1 on GPIO20/21 + `UART1_IRQ` | the bridge link (`link`): RX ring and TX feed under the interrupt |
+| USB | stdio console, plus link frames (`usb_link`) in default builds; `CFG_TUD_CDC_TX_BUFSIZE=256` so a whole report fits |
+| UART1 on GPIO20/21 + `UART1_IRQ` | the bridge link (`link`): RX ring and a 256-byte whole-frame TX queue under the interrupt |
 | UART0 / stdio UART | **none**: GPIO0/1 are servos; never enable stdio UART |
 
 J6 header (unpopulated; solder a header) allocation:
@@ -69,20 +74,24 @@ J6 header (unpopulated; solder a header) allocation:
 
 The board has no pull-ups on GPIO19–21 or 26–28. Check for clashes before claiming any pin or PIO resource.
 
-## The bridge link
+## The links
 
-- **Boundary:** `core/protocol` owns framing (versioned, CRC-16/CCITT-FALSE, fixed little-endian payloads, incremental decoder). `core/protocol/link_receiver` owns what a decoded command means to the robot. The two `link` adapters only move bytes. Both firmwares compile the same protocol code; change it in one place and bump `protocol::VERSION` when the layout changes.
+- **Boundary:** `core/protocol` owns framing (versioned, CRC-16/CCITT-FALSE, fixed little-endian payloads, incremental decoder). `core/protocol/link_receiver` owns what a decoded frame means to the robot. The adapters (`link` on both boards, `usb_link` on the robot) only move bytes. Both firmwares compile the same protocol code; change it in one place, bump `protocol::VERSION` when the layout changes, regenerate `test/golden/protocol_v2.txt` (`SPOODER_WRITE_GOLDEN=1 mise run test`) and flash both boards together.
+- **Frames (version 2):** command (front-end to robot, 20 ms), telemetry (robot, 100 ms; byte 21 holds the source flags), calibration set (front-end, one joint) and calibration report (robot, the whole table, 135 bytes).
+- **Two links on the robot:** the bridge on UART1 and a computer on USB, each with its own `Decoder` and `link_receiver::Receiver`. `link_receiver::arbitrate` picks the one reporting a fresh, connected controller; both at once is a conflict (Sleep, `TELEMETRY_SOURCE_CONFLICT`). The e-stop is either link's; a fault clear and `requestSeq` come only from the source in control.
+- **USB shares the port with `printf`.** Frames and text are both written from the core 0 loop, so neither lands inside the other. `usb_link` writes a frame only when the CDC buffer has room for all of it. Keep debug text printable ASCII.
+- **Calibration:** sets are queued per link and processed after protection, only in Calibrate with output allowed (`processCalibration`, clamps in `joint_calibration::clampJoint`); a repeated request id is a retransmission. Reports carry the requested table; `ReportSchedule` sends one after each set and at 1 Hz in Calibrate, at most 5 Hz per link.
 - **Frames carry desired state, never events.** Counters stand in for events: the fault-clear counter (one clear per change) and the mode-request counter (advances `requestSeq` for the resume gate). After a link gap of 200 ms or more, the first frame only sets the counter baselines, so a restarted bridge cannot clear faults or count as a request.
 - **Staleness:** commands are stamped on arrival; the body's 1 s stale rule turns a silent link into Sleep, and a stale command never starts a stopped body.
 - **Decoder false starts:** the earliest candidate is kept until its CRC is checked. Each side calls `Decoder::idle()` when the line has been quiet longer than one frame, so a false start cannot hide a frame behind it.
-- **Rates:** commands every 20 ms (bridge), telemetry every 100 ms (robot), 115200 8N1.
+- **Rates:** commands every 20 ms (bridge), telemetry every 100 ms (robot), 115200 8N1 on UART1. A report takes about 11.7 ms on UART1.
 
 ## The bridge (TTGO T-Display, ESP32)
 
 | Context | Core | Work |
 |---|---|---|
 | BTstack / Bluepad32 | 0 | Bluetooth; callbacks into `bridge.cpp` |
-| `robot_link` task, priority 5 | 1 | every 20 ms (`xTaskDelayUntil`): sample the GPIO35 e-stop button, send a command frame, decode telemetry |
+| `robot_link` task, priority 5 | 1 | every 20 ms (`xTaskDelayUntil`): sample the GPIO35 e-stop button, send a command frame, decode telemetry and calibration reports |
 | Arduino `loop()`, priority 1 | 1 | `BP32.update()`, `gamepad_mapping::update`, hand the desired state to the link task, redraw the screen (≤ 4 Hz, changed lines only) |
 
 - Shared state between `loop()` and the link task is copied under one spinlock (`portMUX`); nothing else is shared.

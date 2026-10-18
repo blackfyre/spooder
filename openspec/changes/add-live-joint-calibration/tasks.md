@@ -23,6 +23,6 @@
 
 ## 4. Verification and documentation
 
-- [ ] 4.1 Run `mise run test`, `mise run build` (with and without `--serial`) and `mise run build-bridge` from a clean state. Verify all pass with no warnings in our sources.
+- [x] 4.1 Run `mise run test`, `mise run build` (with and without `--serial`) and `mise run build-bridge` from a clean state. Verify all pass with no warnings in our sources.
 - [ ] 4.2 Bring up on the hardware (requires the user): flash both boards, and confirm the robot behaves as before with the defaults, the bridge link works at version 2, and debug text is still readable on USB.
-- [ ] 4.3 Update `CLAUDE.md`, `spooder-firmware-shape` (calibration table, protocol v2, USB link and arbitration), `spooder-hardware-check` (flash both boards together) and `spooder-leg-kinematics` (calibration). Verify that every symbol and path mentioned exists (`grep`).
+- [x] 4.3 Update `CLAUDE.md`, `spooder-firmware-shape` (calibration table, protocol v2, USB link and arbitration), `spooder-hardware-check` (flash both boards together) and `spooder-leg-kinematics` (calibration). Verify that every symbol and path mentioned exists (`grep`).

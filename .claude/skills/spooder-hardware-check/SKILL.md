@@ -49,8 +49,9 @@ mise run monitor          # USB serial; Ctrl+C to exit
 mise run upload --serial  # the USB serial keys instead of the link
 ```
 
-- The default build ignores serial keys and drives the robot from the bridge. For movement bring-up without the bridge, use `mise run upload --serial`. `upload` rebuilds first and passes the flag on, so give it to `upload` itself, not only to an earlier `build`.
-- In the default build, with no bridge connected, the robot never leaves Sleep: LED 6 blinks amber fast (link stale).
+- The default build ignores serial keys and drives the robot from the bridge or a USB host speaking the link protocol. For movement bring-up without either, use `mise run upload --serial`. `upload` rebuilds first and passes the flag on, so give it to `upload` itself, not only to an earlier `build`.
+- In the default build, with no bridge and no USB host in control, the robot never leaves Sleep: LED 6 blinks amber fast (link stale).
+- **Flash both boards together** whenever the link protocol version changes (it is 2 now): build and flash the robot and the bridge from the same commit. A mismatch shows as `Link: LOST` on the bridge and a sleeping robot. Roll back both from the previous commit.
 
 **Bridge (TTGO T-Display):**
 
@@ -74,7 +75,10 @@ mise run monitor-bridge                       # Bluepad32 console; type `help`
 - `output allowed: starting movement` when the body starts (boot, or restart after a fault);
 - `movement stopped: waiting for the fault to clear and a new request` when a fault cuts output;
 - `fault latched: <name> (<A> A, <V> V)` once per fault;
-- `point impossible to reach: (...) leg n` once per rejection.
+- `point impossible to reach: (...) leg n` once per rejection;
+- `operator source: none|bridge|USB|conflict (bridge and USB): sleeping` on each change (default build).
+
+In the default build, a connected USB host also receives binary link frames (telemetry every 100 ms, calibration reports in Calibrate) between the text lines; a plain terminal shows them as stray characters. The text itself stays readable.
 
 **LEDs** (`core/status/led_pattern`; LEDs 1–5 = main indication, LED 6 = command source):
 
@@ -88,6 +92,8 @@ mise run monitor-bridge                       # Bluepad32 console; type `help`
 | LED 6 dim white | Commands from the USB serial hook |
 | All six steady red | Emergency stop latched (from the bridge) |
 | LED 6 cyan / blinking magenta / fast-blinking amber | Bridge link up with gamepad / without gamepad / link stale |
+| LED 6 blue | A USB host with a connected controller is in control |
+| LED 6 alternating magenta and cyan | Source conflict: the bridge and a USB host both claim control; the robot sleeps until one lets go |
 
 **Serial keys** (only in a `--serial` build):
 
@@ -131,7 +137,7 @@ Stop at the first stage that misbehaves.
    - Then `w`, `g`, `r`, `z` (legs fold, then go limp), `s` (wakes through Stand) and `c`.
 7. **Geometry and calibration.**
    - Measure the new frame's link lengths, and compare them with `kinematics::COXA/FEMUR/TIBIA_LENGTH`.
-   - Recalibrate `LEG_OFFSETS` per the `spooder-leg-kinematics` skill.
+   - Recalibrate the joints per the `spooder-leg-kinematics` skill (live calibration in Calibrate, then export to `core/movement/calibration_defaults.cpp`).
 
 ## Bridge bring-up
 
@@ -139,7 +145,7 @@ Robot on the bench supply with **no servos** until step 4; default (link) robot 
 
 1. **Bridge alone, on USB.** The screen shows `Pad: none` and `Link: LOST`. The console prints the Bluepad32 banner.
 2. **Link on a bench cable.** Wire the three link wires.
-   - Within a second the screen shows `Link: ok`, the robot's body mode, `Out on/off`, supply voltage and current.
+   - Within a second the screen shows `Link: ok`, the robot's body mode, `Out on/off`, supply voltage and current. `Link: ok  USB in control` or `Link: ok  CONFLICT with USB` means a USB host claims control too.
    - LED 6 on the robot blinks magenta (link up, no gamepad).
    - Pull the cable: the screen shows `Link: LOST` within about 1 s, and the robot sleeps (LED 6 fast amber).
 3. **Gamepad.** Put the pad in pairing mode (see below).
