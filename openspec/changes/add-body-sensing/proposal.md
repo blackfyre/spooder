@@ -1,5 +1,7 @@
 # Proposal
 
+> **Suspended (2026-10-17):** the VL6180X and LSM6DSO boards are not to hand. Resume when they are found; `add-gamepad-bridge` does not depend on this change, and its sensor telemetry fields stay marked unavailable meanwhile.
+
 ## Why
 
 The long-term goal is for a VL6180X distance sensor and an LSM6DSO IMU to help movement: ground distance for foot placement and body height, and body attitude for levelling. Before any behaviour can depend on them, the robot needs reliable, rate-guaranteed readings. A missing or failing sensor must never disturb the 20 ms movement loop or the power protection.
