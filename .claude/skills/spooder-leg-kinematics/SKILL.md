@@ -5,7 +5,7 @@ description: Reference for Spooder's movement module — the MovementCommand int
 
 # Spooder leg kinematics and gaits
 
-Behaviour is specified in OpenSpec (`locomotion` and `leg-actuation` capabilities; until archived, under `openspec/changes/port-upstream-locomotion/specs/`). Units are millimetres, degrees and milliseconds. The maths derives from Aecert's Hexapod V1 (upstream `ca5ed27`).
+Behaviour is specified in OpenSpec (`locomotion` and `leg-actuation` capabilities in `openspec/specs/`, with pending deltas in the active changes under `openspec/changes/`). Units are millimetres, degrees and milliseconds. The maths derives from Aecert's Hexapod V1 (upstream `ca5ed27`).
 
 ## Layout
 

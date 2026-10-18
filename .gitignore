@@ -13,3 +13,4 @@ firmware/bridge/sdkconfig.*
 # Desktop calibrator: a plain `go build` in desktop/ (mise builds into build/desktop/).
 desktop/spooder-calibrator
 desktop/cmd/spooder-calibrator/spooder-calibrator
+.claude/worktrees/
