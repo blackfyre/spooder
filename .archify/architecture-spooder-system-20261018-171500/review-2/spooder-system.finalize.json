@@ -1,0 +1,313 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "fail",
+  "type": "architecture",
+  "quality": "showcase",
+  "startedAt": "2026-10-18T18:12:12.242Z",
+  "specification": {
+    "path": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-system-20261018-171500/candidate.json",
+    "sha256": "f7214b12c41c4f40f6e4b0c2133f22976617b16b29ab697ee6e2d55b9fa94d65",
+    "bytes": 13374
+  },
+  "artifact": {
+    "path": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-system-20261018-171500/spooder-system.html",
+    "sha256": "b75646ad3a1e4bd47d95f756deb69254da12eb4e5732fe83cff43c0eabe233e2",
+    "bytes": 863822
+  },
+  "stages": {
+    "validate": {
+      "status": "fail",
+      "exitCode": 1,
+      "durationMs": null,
+      "command": [
+        "/home/meki/.local/share/mise/installs/node/24.15.0/bin/node",
+        "/home/meki/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "architecture",
+        "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-system-20261018-171500/candidate.json",
+        "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-system-20261018-171500/spooder-system.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/meki/Projects/blackfyre/spooder",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": false,
+        "command": "deliver",
+        "receiptId": "da3604de-8b3a-474f-b6d4-b2e1535dd06e",
+        "stage": "check",
+        "type": "architecture",
+        "input": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-system-20261018-171500/candidate.json",
+        "output": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-system-20261018-171500/spooder-system.html",
+        "error": "Final artifact check failed; the previous artifact was preserved.",
+        "diagnostics": [
+          {
+            "code": "composition/desktop-readability",
+            "severity": "error",
+            "message": "Final artifact failed composition/desktop-readability.",
+            "subject": {
+              "check": "composition"
+            },
+            "evidence": {
+              "owner": {
+                "kind": "edge",
+                "id": "bt",
+                "from": "gamepad",
+                "to": "mapping"
+              },
+              "viewportWidth": 1440,
+              "viewportHeight": 900,
+              "availableDiagramWidth": 930,
+              "budgetBasis": "legacy-930",
+              "readerContract": "declared-wide-v1",
+              "requestedTargetPx": 7.5,
+              "requestedTargetMet": false,
+              "budgetLimit": "legacy",
+              "viewBoxWidth": 1450,
+              "scale": 0.6413793103448275,
+              "text": "Bluetooth",
+              "detail": "edge",
+              "sourceFontPx": 8,
+              "projectedFontPx": 5.13103448275862,
+              "minimumProjectedFontPx": 6
+            },
+            "supportedFixes": [
+              "Preserve the semantic text and any supplied coordinates, routes, sides, channels, and labels. Compactly reflow automatic spacing and empty corridors so the complete viewBox width is at most 1240px (current 1450px; 8px source text at 930px desktop budget). If supplied geometry fixes that width, use a renderer-supported semantic text-size setting or renderer-level fix instead. Position-only label controls cannot repair its projection."
+            ]
+          }
+        ],
+        "provenance": "failed",
+        "checker": {
+          "ok": false,
+          "file": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-system-20261018-171500/spooder-system.html",
+          "artifact": {
+            "sha256": "8d15649b628091efee6c047048378a1fd3f175613356e084ebc46cc3b215fe73",
+            "bytes": 864020
+          },
+          "checks": [
+            {
+              "name": "single_svg",
+              "ok": true,
+              "details": [
+                "found 1 <svg> block(s)"
+              ]
+            },
+            {
+              "name": "finite_svg",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "orthogonal_arrows",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "label_route_clearance",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "relationship_crossings",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "relationship_corridors",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "container_border_runs",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "route_rhythm",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "legend_clearance",
+              "ok": true,
+              "details": []
+            }
+          ],
+          "composition": {
+            "schemaVersion": 1,
+            "profile": "showcase",
+            "status": "fail",
+            "summary": {
+              "errors": 1,
+              "warnings": 0
+            },
+            "metrics": {
+              "properCrossings": 0,
+              "resolvedCrossovers": 0,
+              "ambiguousCorridors": 0,
+              "arrowheadCollisions": 0,
+              "containerBorderRuns": 0,
+              "labelRouteClearanceIssues": 0,
+              "labelCanvasOverflowIssues": 0,
+              "minLabelRouteClearance": 20,
+              "desktopReadabilityIssues": 1,
+              "viewportHeightIssues": 0,
+              "minProjectedNodeTextPx": 5.13103448275862,
+              "maxBends": 2,
+              "routesOverSuggestedBends": 0,
+              "maxStretch": 1.141,
+              "routesOverSuggestedStretch": 0,
+              "minSegmentPx": 24,
+              "minInteriorSegmentPx": 200,
+              "shortSegmentCount": 0,
+              "shortEndpointSegmentCount": 0,
+              "shortInteriorSegmentCount": 0,
+              "microSegmentCount": 0
+            },
+            "suggestedLimits": {
+              "bendsPerRelationship": 2,
+              "stretch": 1.35,
+              "segmentPx": 16,
+              "microSegmentPx": 8
+            },
+            "routeReview": {
+              "crossings": [],
+              "detours": []
+            },
+            "leadingSpace": {
+              "measured": true,
+              "emptyTopPx": 170,
+              "emptyTopRatio": 0.098,
+              "occupiedTop": 170,
+              "viewBoxTop": 0,
+              "canvasHeight": 1728,
+              "typicalNodeHeight": 60,
+              "reviewSuggested": false
+            },
+            "desktopReadability": {
+              "budgetBasis": "legacy-930",
+              "readerContract": "declared-wide-v1",
+              "availableDiagramWidth": 930,
+              "actualBudgetPx": 930,
+              "limit": "legacy",
+              "requestedTargetPx": 7.5,
+              "requestedTargetMet": false,
+              "hardFloorPx": 6,
+              "hardFloorMet": false,
+              "minimumOwner": {
+                "kind": "edge",
+                "id": "bt",
+                "from": "gamepad",
+                "to": "mapping"
+              },
+              "minimumSourceTextPx": 8,
+              "minimumProjectedTextPx": 5.13103448275862,
+              "semanticTextCount": 75
+            },
+            "issues": [
+              {
+                "severity": "error",
+                "code": "composition/desktop-readability",
+                "owner": {
+                  "kind": "edge",
+                  "id": "bt",
+                  "from": "gamepad",
+                  "to": "mapping"
+                },
+                "viewportWidth": 1440,
+                "viewportHeight": 900,
+                "availableDiagramWidth": 930,
+                "budgetBasis": "legacy-930",
+                "readerContract": "declared-wide-v1",
+                "requestedTargetPx": 7.5,
+                "requestedTargetMet": false,
+                "budgetLimit": "legacy",
+                "viewBoxWidth": 1450,
+                "scale": 0.6413793103448275,
+                "text": "Bluetooth",
+                "detail": "edge",
+                "sourceFontPx": 8,
+                "projectedFontPx": 5.13103448275862,
+                "minimumProjectedFontPx": 6
+              }
+            ]
+          }
+        },
+        "update": {
+          "status": "unavailable",
+          "installedVersion": null,
+          "availableVersion": null,
+          "releaseNotes": null,
+          "checkedAt": null,
+          "source": null,
+          "noticeRequired": false,
+          "noticeText": null,
+          "reason": "disabled"
+        }
+      },
+      "execution": "embedded-in-deliver"
+    },
+    "deliver": {
+      "status": "not-run",
+      "execution": "blocked-by-validate"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "composition/desktop-readability",
+      "severity": "error",
+      "message": "Final artifact failed composition/desktop-readability.",
+      "subject": {
+        "check": "composition"
+      },
+      "evidence": {
+        "owner": {
+          "kind": "edge",
+          "id": "bt",
+          "from": "gamepad",
+          "to": "mapping"
+        },
+        "viewportWidth": 1440,
+        "viewportHeight": 900,
+        "availableDiagramWidth": 930,
+        "budgetBasis": "legacy-930",
+        "readerContract": "declared-wide-v1",
+        "requestedTargetPx": 7.5,
+        "requestedTargetMet": false,
+        "budgetLimit": "legacy",
+        "viewBoxWidth": 1450,
+        "scale": 0.6413793103448275,
+        "text": "Bluetooth",
+        "detail": "edge",
+        "sourceFontPx": 8,
+        "projectedFontPx": 5.13103448275862,
+        "minimumProjectedFontPx": 6
+      },
+      "supportedFixes": [
+        "Preserve the semantic text and any supplied coordinates, routes, sides, channels, and labels. Compactly reflow automatic spacing and empty corridors so the complete viewBox width is at most 1240px (current 1450px; 8px source text at 930px desktop budget). If supplied geometry fixes that width, use a renderer-supported semantic text-size setting or renderer-level fix instead. Position-only label controls cannot repair its projection."
+      ]
+    }
+  ],
+  "evidence": {
+    "receipt": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-system-20261018-171500/review-2/spooder-system.finalize.json",
+    "summaryReceipt": "/home/meki/Projects/blackfyre/spooder/.archify/architecture-spooder-system-20261018-171500/review-2/spooder-system.finalize-summary.json"
+  },
+  "visualReview": "not-requested",
+  "failedStage": "validate",
+  "finishedAt": "2026-10-18T18:12:12.588Z",
+  "durationMs": 345,
+  "update": {
+    "status": "current",
+    "installedVersion": "3.1.0",
+    "availableVersion": "3.1.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-18T11:03:14.465Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  }
+}
