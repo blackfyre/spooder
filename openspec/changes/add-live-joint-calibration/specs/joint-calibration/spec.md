@@ -37,7 +37,7 @@ A change to a joint's offset or pulse range SHALL take effect at a bounded rate:
 - **THEN** the joint takes at least a third of a second to reach the new angle
 
 ### Requirement: Calibration report and confirmation
-The robot SHALL report the complete table in effect after every accepted or rejected change, and at least once per second while in Calibrate, on every link it has. A front-end SHALL treat a change as done only when a report confirms it, and SHALL resend a change that is not confirmed within 200 ms. A front-end SHALL show the values from the latest report, not the values requested.
+The robot SHALL report the complete table in effect after every accepted or rejected change, and at least once per second while in Calibrate, on every link it has. A front-end SHALL treat a change as done only when a report confirms it, and SHALL resend a change that is not confirmed within 200 ms. A front-end SHALL show the values from the latest report, not the values requested. It SHALL show a coxa's offset from the servo centre, the stored offset minus 90° (which puts the coxa's IK angle of 0° at mid-travel), labelled as such; the table, the link and the export SHALL carry the stored offset.
 
 #### Scenario: Lost change frame
 - **WHEN** a calibration change frame is lost on the link
@@ -47,8 +47,12 @@ The robot SHALL report the complete table in effect after every accepted or reje
 - **WHEN** an offset 45° above the default is requested and the robot clamps it
 - **THEN** the front-end shows the clamped value, the default plus 30°
 
+#### Scenario: Coxa offset shown from centre
+- **WHEN** the robot reports a coxa offset of 93°
+- **THEN** the front-end shows +3.00° from centre, and its export writes 93.00
+
 ### Requirement: Compiled defaults and export
-The compiled defaults SHALL live in one source file with a fixed, documented format. A front-end's export SHALL produce the current reported table as the complete text of that file, so that replacing the file with it and rebuilding gives a robot that starts with exactly that table. Every exporter's tests SHALL check, byte for byte, the export of a fixed fixture table against a golden fixture file that does not change with calibration. The committed defaults file SHALL be free to hold any calibration; host tests SHALL check that it parses as 18 joints in output order, within the guards' hard limits, and that exporting what it holds reproduces it exactly.
+The compiled defaults SHALL live in one source file with a fixed, documented format. A front-end's export SHALL produce the current reported table as the complete text of that file, so that replacing the file with it and rebuilding gives a robot that starts with exactly that table. Every exporter's tests SHALL check, byte for byte, the export of a fixed fixture table against a golden fixture file that does not change with calibration. The committed defaults file SHALL be free to hold any calibration; host tests SHALL check that it parses as 18 joints in output order, within the guards' hard limits, with every joint's servo angle at the calibration pose (its IK angle there plus its offset) within 0–180°, and that exporting what it holds reproduces it exactly.
 
 #### Scenario: Round trip
 - **WHEN** the exported text replaces the compiled defaults and the firmware is rebuilt and flashed

@@ -102,10 +102,28 @@ func directionText(reversed bool) string {
 	return "normal"
 }
 
-// fieldText is a joint field's value.
-func fieldText(j calib.Joint, f calib.Field) string {
+// coxaCentreCentideg is the stored coxa offset that puts the IK's 0° (the foot
+// straight out from the mount) at the servo's mid-travel. Coxa offsets are
+// shown from it; the table, the link and the export keep the stored value.
+const coxaCentreCentideg = 9000
+
+func isCoxa(joint int) bool { return joint%3 == 0 }
+
+// signedDegreesText is degreesText with a plus sign on positive values.
+func signedDegreesText(centideg int) string {
+	if centideg > 0 {
+		return "+" + degreesText(int16(centideg))
+	}
+	return degreesText(int16(centideg))
+}
+
+// fieldText is a field's value for joint joint (0–17, output order).
+func fieldText(joint int, j calib.Joint, f calib.Field) string {
 	switch f {
 	case calib.FieldOffset:
+		if isCoxa(joint) {
+			return signedDegreesText(int(j.OffsetCentideg) - coxaCentreCentideg)
+		}
 		return degreesText(j.OffsetCentideg)
 	case calib.FieldPulse0:
 		return pulseText(j.Pulse0Us)
@@ -117,9 +135,17 @@ func fieldText(j calib.Joint, f calib.Field) string {
 
 var fieldLabels = [calib.FieldCount]string{"offset", "0° pulse", "180° pulse", "direction"}
 
+// fieldLabel is a field's label for joint joint.
+func fieldLabel(joint int, f calib.Field) string {
+	if f == calib.FieldOffset && isCoxa(joint) {
+		return "offset from centre"
+	}
+	return fieldLabels[f]
+}
+
 // fieldDiffers reports whether a field of two joint values differs.
 func fieldDiffers(a, b calib.Joint, f calib.Field) bool {
-	return fieldText(a, f) != fieldText(b, f)
+	return fieldText(1, a, f) != fieldText(1, b, f)
 }
 
 func voltsText(mv uint16) string { return fmt.Sprintf("%d.%02d V", mv/1000, (mv%1000)/10) }

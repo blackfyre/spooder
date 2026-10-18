@@ -39,6 +39,7 @@ button.sel,.primary button.sel{background:var(--acc);color:#1b1b19;box-shadow:0 
 box-shadow:0 2px 0 var(--acc-edge);text-align:center;font:600 16px 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.14em}
 .status span{margin-right:10px}
 table{border-collapse:collapse;width:100%;font-size:12px}
+.note{margin:8px 0 0;font-size:11px;color:var(--muted)}
 th{font-size:10px;font-weight:400;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:4px;text-align:right}
 td{padding:5px 4px;text-align:right;border-top:1px solid var(--line)}
 td:first-child,th:first-child{text-align:left}
@@ -70,7 +71,7 @@ font-size:11px;line-height:1.6;resize:vertical}
 <div class="row" id="legs"></div>
 <div class="row" id="joints"></div>
 <div id="editor">
-<div class="row"><span class="lbl">Offset</span><span class="v" id="e-offset"></span></div>
+<div class="row"><span class="lbl" id="l-offset">Offset</span><span class="v" id="e-offset"></span></div>
 <div class="row" id="n-offset"></div>
 <div class="row"><span class="lbl">0&deg; pulse</span><span class="v" id="e-p0"></span></div>
 <div class="row" id="n-p0"></div>
@@ -86,6 +87,7 @@ font-size:11px;line-height:1.6;resize:vertical}
 <h2>Table</h2>
 <table><thead><tr><th>Joint</th><th>Offset</th><th>0&deg;</th><th>180&deg;</th><th>Dir</th><th></th></tr></thead>
 <tbody id="tbl"></tbody></table>
+<p class="note">Coxa offsets are shown from the servo centre (stored value minus 90&deg;); the export holds the stored values.</p>
 </div>
 <div class="card">
 <h2>Export</h2>
@@ -107,6 +109,8 @@ function $(id){return document.getElementById(id)}
 function txt(id,t,c){var e=$(id);e.textContent=t;e.className=c||''}
 function cur(){return leg*3+joint}
 function deg(c){return (c/100).toFixed(2)+'°'}
+// Coxa offsets show from the servo centre (stored minus 90°); the table keeps the stored value.
+function off(i,c){if(i%3)return deg(c);c-=9000;return (c>0?'+':'')+deg(c)}
 function btn(parent,label,fn){var b=document.createElement('button');b.textContent=label;b.onclick=fn;parent.appendChild(b);return b}
 function build(){
   for(var l=0;l<6;l++)(function(l){btn($('legs'),'Leg '+(l+1),function(){leg=l;render()})})(l);
@@ -145,7 +149,7 @@ function render(){
   txt('hint',!s.link?'Robot link lost.':!c?'No calibration table yet: press Calibrate (the robot reports it in Calibrate).':
       calib?'':'Changes are rejected outside Calibrate.','warn');
   var j=c?c.j[cur()]:null;
-  txt('e-offset',j?deg(j[0]):'--');txt('e-p0',j?j[1]+' µs':'--');txt('e-p180',j?j[2]+' µs':'--');
+  txt('e-offset',j?off(cur(),j[0]):'--');txt('l-offset',joint?'Offset':'Offset from centre','lbl');txt('e-p0',j?j[1]+' µs':'--');txt('e-p180',j?j[2]+' µs':'--');
   txt('e-rev',j?(j[3]?'reversed':'normal'):'--');
   [].forEach.call(document.querySelectorAll('#editor button'),function(b){b.disabled=!c});
   txt('pend',j&&j[4]?'Waiting for the robot...':'',j&&j[4]?'warn':'');
@@ -153,7 +157,7 @@ function render(){
   var rows=$('tbl').children;
   for(var i=0;i<18;i++){var r=rows[i],v=c?c.j[i]:null,d=r.children;r.className=i==cur()?'cur':'';
     d[0].textContent=(Math.floor(i/3)+1)+' '+JOINTS[i%3];
-    d[1].textContent=v?deg(v[0]):'--';d[2].textContent=v?v[1]:'--';d[3].textContent=v?v[2]:'--';
+    d[1].textContent=v?off(i,v[0]):'--';d[2].textContent=v?v[1]:'--';d[3].textContent=v?v[2]:'--';
     d[4].textContent=v?(v[3]?'rev':'norm'):'--';d[5].textContent=v&&v[4]?'*':''}
 }
 function poll(){

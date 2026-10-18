@@ -65,9 +65,18 @@ func TestFormatting(t *testing.T) {
 	for f, want := range map[calib.Field]string{
 		calib.FieldOffset: "-18.50°", calib.FieldPulse0: "510 µs", calib.FieldPulse180: "2500 µs", calib.FieldDirection: "reversed",
 	} {
-		if got := fieldText(j, f); got != want {
+		if got := fieldText(1, j, f); got != want {
 			t.Errorf("field %d: %q", f, got)
 		}
+	}
+	// Coxa offsets show from the servo centre (stored minus 90°).
+	for stored, want := range map[int16]string{9300: "+3.00°", 9000: "0.00°", 8550: "-4.50°", 0: "-90.00°"} {
+		if got := fieldText(3, calib.Joint{OffsetCentideg: stored}, calib.FieldOffset); got != want {
+			t.Errorf("coxa %d: %q", stored, got)
+		}
+	}
+	if fieldLabel(0, calib.FieldOffset) != "offset from centre" || fieldLabel(1, calib.FieldOffset) != "offset" {
+		t.Fatal("offset labels")
 	}
 	if voltsText(5480) != "5.48 V" || ampsText(65535) != "65.53 A" || ampsText(120) != "0.12 A" {
 		t.Fatal("units")

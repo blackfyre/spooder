@@ -146,12 +146,12 @@ func (w *window) fieldRow(j int, f calib.Field, v jointView, editable, selected 
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Min.X = gtx.Constraints.Max.X
 					return layout.Flex{Alignment: layout.Baseline}.Layout(gtx,
-						layout.Rigid(tracked(w.th, 10, w.pal.Muted, fieldLabels[f])),
+						layout.Rigid(tracked(w.th, 10, w.pal.Muted, fieldLabel(j, f))),
 						layout.Flexed(1, layout.Spacer{}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							ws := []layout.Widget{valueLabel(w.th, sizeValue, w.pal.Fg, fieldText(v.Reported, f)).Layout}
+							ws := []layout.Widget{valueLabel(w.th, sizeValue, w.pal.Fg, fieldText(j, v.Reported, f)).Layout}
 							if v.Pending && fieldDiffers(v.Wanted, v.Reported, f) {
-								ws = append(ws, valueLabel(w.th, sizeLabel, w.pal.AccentText, "→ "+fieldText(v.Wanted, f)).Layout)
+								ws = append(ws, valueLabel(w.th, sizeLabel, w.pal.AccentText, "→ "+fieldText(j, v.Wanted, f)).Layout)
 							}
 							return sideBySide(gtx, 6, ws...)
 						}),

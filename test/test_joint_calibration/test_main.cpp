@@ -3,7 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "movement/body.h"
 #include "movement/joint_calibration.h"
+#include "movement/kinematics.h"
 #include "protocol/link_receiver.h"
 #include "setup/calibration_export.h"
 
@@ -359,13 +361,21 @@ static void checkFormatFixture()
     TEST_ASSERT_TRUE(sameJoint(FIXTURE[i], parsed[i]));
 }
 
-// The largest default offset magnitude the defaults checks accept.
-static const float MAX_DEFAULT_OFFSET_DEG = 180;
+// The IK angle of joint @p i (output order) at the calibration pose, before
+// its offset: 0 for a coxa (straight out from the mount), 90 for a femur
+// (straight up) and a tibia (horizontal).
+static float calibrationPoseAngle(int i)
+{
+  kinematics::JointAngles a;
+  TEST_ASSERT_TRUE(kinematics::solveLeg(body::CALIBRATION_POSE, Vector3(0, 0, 0), a));
+  return i % 3 == 0 ? a.coxa : i % 3 == 1 ? a.femur : a.tibia;
+}
 
 // The checks on a defaults file at @p path, whatever its values: it holds 18
 // joints in output order, each within the guards' hard limits (pulses in
-// 400-2600 us, at least 1000 us apart; the offset within half a turn, so the
-// default plus or minus any guard test's change still fits the wire's int16
+// 400-2600 us, at least 1000 us apart; the offset such that the servo reaches
+// the calibration pose, its angle there within 0-180 degrees, which also keeps
+// the default plus or minus any guard test's change within the wire's int16
 // centidegrees), and the reference and the portal's exporters both reproduce
 // it byte for byte (export(parse(file)) == file).
 static void checkDefaultsFile(const char *path, Joint parsed[JOINT_COUNT])
@@ -377,7 +387,8 @@ static void checkDefaultsFile(const char *path, Joint parsed[JOINT_COUNT])
   {
     Joint j = parsed[i];
     TEST_ASSERT_FALSE_MESSAGE(clampJoint(j, parsed[i]), "a joint outside the guards' hard limits");
-    TEST_ASSERT_TRUE_MESSAGE(fabsf(parsed[i].offsetDeg) <= MAX_DEFAULT_OFFSET_DEG, "an offset beyond half a turn");
+    float servo = calibrationPoseAngle(i) + parsed[i].offsetDeg;
+    TEST_ASSERT_TRUE_MESSAGE(servo >= -0.005f && servo <= 180.005f, "a servo that cannot reach the calibration pose");
   }
   exportDefaults(parsed, exported, sizeof(exported));
   TEST_ASSERT_EQUAL_STRING(text, exported);
@@ -401,6 +412,14 @@ static bool sameAsWritten(const Joint &a, const Joint &b)
 {
   return lroundf(a.offsetDeg * 100) == lroundf(b.offsetDeg * 100) && a.pulse0Us == b.pulse0Us &&
          a.pulse180Us == b.pulse180Us && a.reversed == b.reversed;
+}
+
+void test_calibration_pose_angles_before_offsets()
+{
+  // The reachability check relies on these; the skill names them.
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 0, calibrationPoseAngle(0));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 90, calibrationPoseAngle(1));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 90, calibrationPoseAngle(2));
 }
 
 void test_export_of_the_fixture_is_the_golden_file()
@@ -470,6 +489,7 @@ int main()
   RUN_TEST(test_offset_converges_before_pulses_move);
   RUN_TEST(test_direction_change_never_jumps);
   RUN_TEST(test_zero_or_negative_dt_changes_nothing);
+  RUN_TEST(test_calibration_pose_angles_before_offsets);
   RUN_TEST(test_export_of_the_fixture_is_the_golden_file);
   RUN_TEST(test_committed_defaults_file_is_valid_and_compiled);
   RUN_TEST(test_an_exported_calibration_passes_every_check);
