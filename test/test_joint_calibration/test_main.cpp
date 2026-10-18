@@ -359,9 +359,13 @@ static void checkFormatFixture()
     TEST_ASSERT_TRUE(sameJoint(FIXTURE[i], parsed[i]));
 }
 
+// The largest default offset magnitude the defaults checks accept.
+static const float MAX_DEFAULT_OFFSET_DEG = 180;
+
 // The checks on a defaults file at @p path, whatever its values: it holds 18
 // joints in output order, each within the guards' hard limits (pulses in
-// 400-2600 us, at least 1000 us apart; the offset fits the wire's int16
+// 400-2600 us, at least 1000 us apart; the offset within half a turn, so the
+// default plus or minus any guard test's change still fits the wire's int16
 // centidegrees), and the reference and the portal's exporters both reproduce
 // it byte for byte (export(parse(file)) == file).
 static void checkDefaultsFile(const char *path, Joint parsed[JOINT_COUNT])
@@ -373,8 +377,7 @@ static void checkDefaultsFile(const char *path, Joint parsed[JOINT_COUNT])
   {
     Joint j = parsed[i];
     TEST_ASSERT_FALSE_MESSAGE(clampJoint(j, parsed[i]), "a joint outside the guards' hard limits");
-    long centideg = lroundf(parsed[i].offsetDeg * 100);
-    TEST_ASSERT_TRUE_MESSAGE(centideg >= INT16_MIN && centideg <= INT16_MAX, "an offset the wire cannot carry");
+    TEST_ASSERT_TRUE_MESSAGE(fabsf(parsed[i].offsetDeg) <= MAX_DEFAULT_OFFSET_DEG, "an offset beyond half a turn");
   }
   exportDefaults(parsed, exported, sizeof(exported));
   TEST_ASSERT_EQUAL_STRING(text, exported);
@@ -387,13 +390,13 @@ static void checkDefaultsFile(const char *path, Joint parsed[JOINT_COUNT])
   TEST_ASSERT_EQUAL_STRING(text, exported);
 }
 
-// Equal as the file and the wire carry them: centidegrees and whole pulses.
 // An offset moved by @p deg towards zero, so it stays on the wire.
 static float towardsZero(float offsetDeg, float deg)
 {
   return offsetDeg < 0 ? offsetDeg + deg : offsetDeg - deg;
 }
 
+// Equal as the file and the wire carry them: centidegrees and whole pulses.
 static bool sameAsWritten(const Joint &a, const Joint &b)
 {
   return lroundf(a.offsetDeg * 100) == lroundf(b.offsetDeg * 100) && a.pulse0Us == b.pulse0Us &&
