@@ -1,14 +1,16 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-// The serial link between the gamepad bridge and the robot: frame layout,
-// CRC, encoders and an incremental decoder, shared by both firmwares.
+// The link between the robot and its front-ends (the gamepad bridge on UART1,
+// a computer on USB): frame layout, CRC, encoders and an incremental decoder,
+// shared by both firmwares. test/golden/protocol_v2.txt pins the encoding.
 // Hardware-free: compiled for both boards and for host tests.
 //
 // Frame:
 //   0      start marker 0xA5
 //   1      protocol version
-//   2      type (1 = command, 2 = telemetry)
+//   2      type (1 = command, 2 = telemetry, 3 = calibration set,
+//          4 = calibration report)
 //   3      sequence number (wraps)
 //   4      payload length N (fixed per type and version)
 //   5      payload, N bytes, little-endian
@@ -19,21 +21,29 @@ namespace protocol
 {
 
 constexpr uint8_t START = 0xA5;
-constexpr uint8_t VERSION = 1;
+constexpr uint8_t VERSION = 2;
 
 enum class FrameType : uint8_t
 {
   Command = 1,
   Telemetry = 2,
+  CalibrationSet = 3,
+  CalibrationReport = 4,
 };
 
 constexpr int HEADER_SIZE = 5;
 constexpr int CRC_SIZE = 2;
 constexpr int COMMAND_PAYLOAD_SIZE = 12;
 constexpr int TELEMETRY_PAYLOAD_SIZE = 32;
+constexpr int CALIBRATION_JOINTS = 18;
+constexpr int CALIBRATION_JOINT_SIZE = 7;
+constexpr int CALIBRATION_SET_PAYLOAD_SIZE = 9;
+constexpr int CALIBRATION_REPORT_PAYLOAD_SIZE = 2 + CALIBRATION_JOINTS * CALIBRATION_JOINT_SIZE; // 128
 constexpr int COMMAND_FRAME_SIZE = HEADER_SIZE + COMMAND_PAYLOAD_SIZE + CRC_SIZE;
 constexpr int TELEMETRY_FRAME_SIZE = HEADER_SIZE + TELEMETRY_PAYLOAD_SIZE + CRC_SIZE;
-constexpr int MAX_FRAME_SIZE = TELEMETRY_FRAME_SIZE;
+constexpr int CALIBRATION_SET_FRAME_SIZE = HEADER_SIZE + CALIBRATION_SET_PAYLOAD_SIZE + CRC_SIZE;
+constexpr int CALIBRATION_REPORT_FRAME_SIZE = HEADER_SIZE + CALIBRATION_REPORT_PAYLOAD_SIZE + CRC_SIZE;
+constexpr int MAX_FRAME_SIZE = CALIBRATION_REPORT_FRAME_SIZE; // 135
 
 // Command flags.
 constexpr uint8_t FLAG_CONTROLLER_CONNECTED = 1u << 0;
@@ -59,7 +69,12 @@ struct Command
 constexpr uint8_t SENSOR_TOF = 1u << 0;
 constexpr uint8_t SENSOR_ATTITUDE = 1u << 1;
 
-// Robot to bridge, every 100 ms.
+// Telemetry flags.
+constexpr uint8_t TELEMETRY_SOURCE_CONFLICT = 1u << 0; // both links claim control: the robot sleeps
+constexpr uint8_t TELEMETRY_USB_IN_CONTROL = 1u << 1;
+constexpr uint8_t TELEMETRY_BRIDGE_IN_CONTROL = 1u << 2;
+
+// Robot to every link, every 100 ms.
 struct Telemetry
 {
   uint8_t bodyMode;  // body::Mode value
@@ -75,6 +90,46 @@ struct Telemetry
   uint8_t tofStatus;
   int16_t pitchCentideg;
   int16_t rollCentideg;
+  uint8_t flags;            // TELEMETRY_* bits
+};
+
+// Calibration set flags and report joint flags.
+constexpr uint8_t CALIBRATION_REVERSED = 1u << 0;
+
+// Front-end to robot: the complete calibration wanted for one joint.
+struct CalibrationSet
+{
+  uint8_t requestId;      // a repeat on the same link is a retransmission
+  uint8_t joint;          // 0..17, servo output order
+  int16_t offsetCentideg;
+  uint16_t pulse0Us;
+  uint16_t pulse180Us;
+  uint8_t flags;          // CALIBRATION_* bits
+};
+
+enum class CalibrationResult : uint8_t
+{
+  Accepted = 0,
+  Clamped = 1,  // accepted after clamping to the safe range
+  Rejected = 2, // not in Calibrate, or output not allowed
+  NoneYet = 3,  // no calibration set processed from this link
+};
+
+struct CalibrationJoint
+{
+  int16_t offsetCentideg;
+  uint16_t pulse0Us;
+  uint16_t pulse180Us;
+  uint8_t flags; // CALIBRATION_* bits
+};
+
+// Robot to front-ends: the calibration table in effect, and the result of
+// the last calibration set processed from the link it is sent on.
+struct CalibrationReport
+{
+  uint8_t lastRequestId;
+  uint8_t result; // CalibrationResult value
+  CalibrationJoint joints[CALIBRATION_JOINTS];
 };
 
 /**
@@ -88,13 +143,17 @@ uint16_t crc16(const uint8_t *data, int length);
  */
 int encodeCommand(const Command &c, uint8_t seq, uint8_t *out);
 int encodeTelemetry(const Telemetry &t, uint8_t seq, uint8_t *out);
+int encodeCalibrationSet(const CalibrationSet &c, uint8_t seq, uint8_t *out);
+int encodeCalibrationReport(const CalibrationReport &r, uint8_t seq, uint8_t *out);
 
 struct Frame
 {
   FrameType type;
   uint8_t seq;
-  Command command;     // valid when type == Command
-  Telemetry telemetry; // valid when type == Telemetry
+  Command command;                     // valid when type == Command
+  Telemetry telemetry;                 // valid when type == Telemetry
+  CalibrationSet calibrationSet;       // valid when type == CalibrationSet
+  CalibrationReport calibrationReport; // valid when type == CalibrationReport
 };
 
 // Incremental decoder. Feed every received byte with push(), then call next()

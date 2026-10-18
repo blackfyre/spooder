@@ -34,6 +34,10 @@ static int payloadSize(uint8_t type)
     return COMMAND_PAYLOAD_SIZE;
   case FrameType::Telemetry:
     return TELEMETRY_PAYLOAD_SIZE;
+  case FrameType::CalibrationSet:
+    return CALIBRATION_SET_PAYLOAD_SIZE;
+  case FrameType::CalibrationReport:
+    return CALIBRATION_REPORT_PAYLOAD_SIZE;
   }
   return -1;
 }
@@ -86,7 +90,36 @@ int encodeTelemetry(const Telemetry &t, uint8_t seq, uint8_t *out)
   p[16] = t.tofStatus;
   put16(p + 17, (uint16_t)t.pitchCentideg);
   put16(p + 19, (uint16_t)t.rollCentideg);
+  p[21] = t.flags;
   return finishFrame(FrameType::Telemetry, seq, out);
+}
+
+int encodeCalibrationSet(const CalibrationSet &c, uint8_t seq, uint8_t *out)
+{
+  uint8_t *p = out + HEADER_SIZE;
+  p[0] = c.requestId;
+  p[1] = c.joint;
+  put16(p + 2, (uint16_t)c.offsetCentideg);
+  put16(p + 4, c.pulse0Us);
+  put16(p + 6, c.pulse180Us);
+  p[8] = c.flags;
+  return finishFrame(FrameType::CalibrationSet, seq, out);
+}
+
+int encodeCalibrationReport(const CalibrationReport &r, uint8_t seq, uint8_t *out)
+{
+  uint8_t *p = out + HEADER_SIZE;
+  p[0] = r.lastRequestId;
+  p[1] = r.result;
+  for (int i = 0; i < CALIBRATION_JOINTS; i++)
+  {
+    uint8_t *j = p + 2 + i * CALIBRATION_JOINT_SIZE;
+    put16(j, (uint16_t)r.joints[i].offsetCentideg);
+    put16(j + 2, r.joints[i].pulse0Us);
+    put16(j + 4, r.joints[i].pulse180Us);
+    j[6] = r.joints[i].flags;
+  }
+  return finishFrame(FrameType::CalibrationReport, seq, out);
 }
 
 static void parseCommand(const uint8_t *p, Command &c)
@@ -119,6 +152,31 @@ static void parseTelemetry(const uint8_t *p, Telemetry &t)
   t.tofStatus = p[16];
   t.pitchCentideg = (int16_t)get16(p + 17);
   t.rollCentideg = (int16_t)get16(p + 19);
+  t.flags = p[21];
+}
+
+static void parseCalibrationSet(const uint8_t *p, CalibrationSet &c)
+{
+  c.requestId = p[0];
+  c.joint = p[1];
+  c.offsetCentideg = (int16_t)get16(p + 2);
+  c.pulse0Us = get16(p + 4);
+  c.pulse180Us = get16(p + 6);
+  c.flags = p[8];
+}
+
+static void parseCalibrationReport(const uint8_t *p, CalibrationReport &r)
+{
+  r.lastRequestId = p[0];
+  r.result = p[1];
+  for (int i = 0; i < CALIBRATION_JOINTS; i++)
+  {
+    const uint8_t *j = p + 2 + i * CALIBRATION_JOINT_SIZE;
+    r.joints[i].offsetCentideg = (int16_t)get16(j);
+    r.joints[i].pulse0Us = get16(j + 2);
+    r.joints[i].pulse180Us = get16(j + 4);
+    r.joints[i].flags = j[6];
+  }
 }
 
 void Decoder::push(uint8_t byte)
@@ -170,10 +228,22 @@ void Decoder::emit(int total, Frame &out)
 {
   out.type = (FrameType)buf_[2];
   out.seq = buf_[3];
-  if (out.type == FrameType::Command)
-    parseCommand(buf_ + HEADER_SIZE, out.command);
-  else
-    parseTelemetry(buf_ + HEADER_SIZE, out.telemetry);
+  const uint8_t *payload = buf_ + HEADER_SIZE;
+  switch (out.type)
+  {
+  case FrameType::Command:
+    parseCommand(payload, out.command);
+    break;
+  case FrameType::Telemetry:
+    parseTelemetry(payload, out.telemetry);
+    break;
+  case FrameType::CalibrationSet:
+    parseCalibrationSet(payload, out.calibrationSet);
+    break;
+  case FrameType::CalibrationReport:
+    parseCalibrationReport(payload, out.calibrationReport);
+    break;
+  }
   valid_++;
   drop(total);
 }

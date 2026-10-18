@@ -54,7 +54,8 @@ firmware/servo2040/src/usb_link.{h,cpp}   frames over USB stdio, sharing the por
 - **Telemetry** keeps its size. Reserved byte 21 becomes flags: bit 0 source conflict, bit 1 USB in control, bit 2 bridge in control.
 - `MAX_FRAME_SIZE` becomes 135. One report takes about 11.7 ms at 115200 baud on UART1; USB is far faster.
 - **Rates:** a report after each processed set, and at 1 Hz in Calibrate, capped at 5 Hz per link.
-- **Golden vectors:** a host test encodes a fixed set of frames of every type (including edge values and wrap-around) and compares them with `test/golden/protocol_v2.txt`. Regenerating the file is an explicit step, done when the protocol changes; the Go tests read the same file.
+- **Golden vectors:** a host test (`test/test_protocol_golden`) encodes a fixed set of frames of every type (including edge values and wrap-around) and compares them with `test/golden/protocol_v2.txt`. Regenerating the file is an explicit step, done when the protocol changes (`SPOODER_WRITE_GOLDEN=1 mise run test`); the Go tests read the same file.
+  - Format, documented in the file's `#` header: one frame per line, `<name> <hex bytes> <field>=<value> ...`, decimal values, header fields then payload fields in payload order. A line whose only field is `rejected` is a frame a decoder must discard (a version-1 frame, a bad CRC).
 
 ### D4. USB link alongside debug text
 

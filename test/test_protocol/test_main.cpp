@@ -1,4 +1,7 @@
 #include <unity.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "protocol/protocol.h"
 
 using namespace protocol;
@@ -41,7 +44,35 @@ static Telemetry sampleTelemetry()
   t.tofStatus = 11;
   t.pitchCentideg = -1000;
   t.rollCentideg = 32767;
+  t.flags = TELEMETRY_SOURCE_CONFLICT | TELEMETRY_BRIDGE_IN_CONTROL;
   return t;
+}
+
+static CalibrationSet sampleSet()
+{
+  CalibrationSet c = {};
+  c.requestId = 201;
+  c.joint = 17;
+  c.offsetCentideg = -2450;
+  c.pulse0Us = 2600;
+  c.pulse180Us = 400;
+  c.flags = CALIBRATION_REVERSED;
+  return c;
+}
+
+static CalibrationReport sampleReport()
+{
+  CalibrationReport r = {};
+  r.lastRequestId = 255;
+  r.result = (uint8_t)CalibrationResult::Clamped;
+  for (int i = 0; i < CALIBRATION_JOINTS; i++)
+  {
+    r.joints[i].offsetCentideg = (int16_t)(i * 1000 - 9000);
+    r.joints[i].pulse0Us = (uint16_t)(400 + i);
+    r.joints[i].pulse180Us = (uint16_t)(2600 - i);
+    r.joints[i].flags = i % 2 ? CALIBRATION_REVERSED : 0;
+  }
+  return r;
 }
 
 static void feed(const uint8_t *bytes, int n)
@@ -78,6 +109,10 @@ void test_frame_sizes()
   uint8_t buf[MAX_FRAME_SIZE];
   TEST_ASSERT_EQUAL(19, encodeCommand(sampleCommand(), 0, buf));
   TEST_ASSERT_EQUAL(39, encodeTelemetry(sampleTelemetry(), 0, buf));
+  TEST_ASSERT_EQUAL(16, encodeCalibrationSet(sampleSet(), 0, buf));
+  TEST_ASSERT_EQUAL(135, encodeCalibrationReport(sampleReport(), 0, buf));
+  TEST_ASSERT_EQUAL(128, CALIBRATION_REPORT_PAYLOAD_SIZE);
+  TEST_ASSERT_EQUAL(135, MAX_FRAME_SIZE);
 }
 
 void test_command_round_trip()
@@ -126,6 +161,58 @@ void test_telemetry_round_trip()
   TEST_ASSERT_EQUAL(t.tofStatus, f.telemetry.tofStatus);
   TEST_ASSERT_EQUAL(t.pitchCentideg, f.telemetry.pitchCentideg);
   TEST_ASSERT_EQUAL(t.rollCentideg, f.telemetry.rollCentideg);
+  TEST_ASSERT_EQUAL_HEX8(t.flags, f.telemetry.flags);
+  // The flags are byte 21 of the payload.
+  TEST_ASSERT_EQUAL_HEX8(t.flags, buf[HEADER_SIZE + 21]);
+}
+
+void test_calibration_set_round_trip()
+{
+  uint8_t buf[MAX_FRAME_SIZE];
+  CalibrationSet c = sampleSet();
+  int n = encodeCalibrationSet(c, 250, buf);
+  Frame f;
+  TEST_ASSERT_EQUAL(1, feedAndCount(buf, n, f));
+  TEST_ASSERT_TRUE(f.type == FrameType::CalibrationSet);
+  TEST_ASSERT_EQUAL(250, f.seq);
+  TEST_ASSERT_EQUAL(c.requestId, f.calibrationSet.requestId);
+  TEST_ASSERT_EQUAL(c.joint, f.calibrationSet.joint);
+  TEST_ASSERT_EQUAL(c.offsetCentideg, f.calibrationSet.offsetCentideg);
+  TEST_ASSERT_EQUAL(c.pulse0Us, f.calibrationSet.pulse0Us);
+  TEST_ASSERT_EQUAL(c.pulse180Us, f.calibrationSet.pulse180Us);
+  TEST_ASSERT_EQUAL(c.flags, f.calibrationSet.flags);
+}
+
+void test_calibration_report_round_trip()
+{
+  uint8_t buf[MAX_FRAME_SIZE];
+  CalibrationReport r = sampleReport();
+  int n = encodeCalibrationReport(r, 3, buf);
+  Frame f;
+  TEST_ASSERT_EQUAL(1, feedAndCount(buf, n, f));
+  TEST_ASSERT_TRUE(f.type == FrameType::CalibrationReport);
+  TEST_ASSERT_EQUAL(3, f.seq);
+  TEST_ASSERT_EQUAL(r.lastRequestId, f.calibrationReport.lastRequestId);
+  TEST_ASSERT_EQUAL(r.result, f.calibrationReport.result);
+  for (int i = 0; i < CALIBRATION_JOINTS; i++)
+  {
+    TEST_ASSERT_EQUAL(r.joints[i].offsetCentideg, f.calibrationReport.joints[i].offsetCentideg);
+    TEST_ASSERT_EQUAL(r.joints[i].pulse0Us, f.calibrationReport.joints[i].pulse0Us);
+    TEST_ASSERT_EQUAL(r.joints[i].pulse180Us, f.calibrationReport.joints[i].pulse180Us);
+    TEST_ASSERT_EQUAL(r.joints[i].flags, f.calibrationReport.joints[i].flags);
+  }
+}
+
+void test_report_and_commands_back_to_back()
+{
+  uint8_t buf[3 * MAX_FRAME_SIZE];
+  int n = encodeCommand(sampleCommand(), 1, buf);
+  n += encodeCalibrationReport(sampleReport(), 2, buf + n);
+  n += encodeCalibrationSet(sampleSet(), 3, buf + n);
+  Frame f;
+  TEST_ASSERT_EQUAL(3, feedAndCount(buf, n, f));
+  TEST_ASSERT_TRUE(f.type == FrameType::CalibrationSet);
+  TEST_ASSERT_EQUAL(0, dec.discardedFrames());
 }
 
 void test_every_single_byte_corruption_is_rejected()
@@ -250,15 +337,30 @@ void test_idle_keeps_a_complete_buffer_untouched()
   TEST_ASSERT_EQUAL(0, dec.discardedFrames());
 }
 
-void test_unknown_version_is_rejected()
+// Re-encodes a command frame as another version, with a valid CRC.
+static int commandWithVersion(uint8_t version, uint8_t *buf)
 {
-  uint8_t buf[MAX_FRAME_SIZE];
   int n = encodeCommand(sampleCommand(), 1, buf);
-  buf[1] = 2;
-  // Recompute the CRC, so only the version is wrong.
+  buf[1] = version;
   uint16_t crc = crc16(buf + 1, HEADER_SIZE - 1 + COMMAND_PAYLOAD_SIZE);
   buf[n - 2] = (uint8_t)(crc & 0xFF);
   buf[n - 1] = (uint8_t)(crc >> 8);
+  return n;
+}
+
+void test_version_1_frame_is_rejected()
+{
+  uint8_t buf[MAX_FRAME_SIZE];
+  int n = commandWithVersion(1, buf);
+  Frame f;
+  TEST_ASSERT_EQUAL(0, feedAndCount(buf, n, f));
+  TEST_ASSERT_EQUAL(1, dec.discardedFrames());
+}
+
+void test_unknown_version_is_rejected()
+{
+  uint8_t buf[MAX_FRAME_SIZE];
+  int n = commandWithVersion(3, buf);
   Frame f;
   TEST_ASSERT_EQUAL(0, feedAndCount(buf, n, f));
   TEST_ASSERT_EQUAL(1, dec.discardedFrames());
@@ -268,7 +370,7 @@ void test_unknown_type_is_rejected()
 {
   uint8_t buf[MAX_FRAME_SIZE];
   int n = encodeCommand(sampleCommand(), 1, buf);
-  buf[2] = 3;
+  buf[2] = 5;
   uint16_t crc = crc16(buf + 1, HEADER_SIZE - 1 + COMMAND_PAYLOAD_SIZE);
   buf[n - 2] = (uint8_t)(crc & 0xFF);
   buf[n - 1] = (uint8_t)(crc >> 8);
@@ -329,6 +431,9 @@ int main()
   RUN_TEST(test_frame_sizes);
   RUN_TEST(test_command_round_trip);
   RUN_TEST(test_telemetry_round_trip);
+  RUN_TEST(test_calibration_set_round_trip);
+  RUN_TEST(test_calibration_report_round_trip);
+  RUN_TEST(test_report_and_commands_back_to_back);
   RUN_TEST(test_every_single_byte_corruption_is_rejected);
   RUN_TEST(test_corrupted_frame_is_counted);
   RUN_TEST(test_resynchronises_over_garbage);
@@ -336,6 +441,7 @@ int main()
   RUN_TEST(test_frame_behind_incomplete_false_start_is_returned_when_idle);
   RUN_TEST(test_command_shaped_bytes_inside_telemetry_do_not_split_it);
   RUN_TEST(test_idle_keeps_a_complete_buffer_untouched);
+  RUN_TEST(test_version_1_frame_is_rejected);
   RUN_TEST(test_unknown_version_is_rejected);
   RUN_TEST(test_unknown_type_is_rejected);
   RUN_TEST(test_inconsistent_length_is_rejected);
