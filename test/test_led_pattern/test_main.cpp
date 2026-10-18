@@ -53,9 +53,9 @@ void test_fault_overrides_everything_and_is_brighter()
 void test_each_fault_has_a_distinct_colour()
 {
   const uint16_t faults[] = {protection::OVERCURRENT, protection::BROWNOUT, protection::OVERVOLTAGE,
-                             protection::SUSTAINED_CURRENT, protection::UNDERVOLTAGE};
-  Rgb seen[5];
-  for (int i = 0; i < 5; i++)
+                             protection::SUSTAINED_CURRENT, protection::UNDERVOLTAGE, protection::EMERGENCY_STOP};
+  Rgb seen[6];
+  for (int i = 0; i < 6; i++)
   {
     State s = healthy(BodyMode::Stand);
     s.faults = faults[i];
@@ -63,6 +63,19 @@ void test_each_fault_has_a_distinct_colour()
     seen[i] = out[0];
     for (int j = 0; j < i; j++)
       TEST_ASSERT_FALSE(seen[i] == seen[j]);
+  }
+}
+
+void test_emergency_stop_is_steady_red_and_wins()
+{
+  State s = healthy(BodyMode::Walk);
+  s.faults = protection::EMERGENCY_STOP | protection::OVERCURRENT;
+  for (uint32_t t = 0; t < 2000; t += 100)
+  {
+    s.nowMs = t;
+    compute(s, out);
+    for (int i = 0; i < LED_COUNT; i++)
+      TEST_ASSERT_TRUE(isRedOnly(out[i]));
   }
 }
 
@@ -182,6 +195,7 @@ int main()
   UNITY_BEGIN();
   RUN_TEST(test_fault_overrides_everything_and_is_brighter);
   RUN_TEST(test_each_fault_has_a_distinct_colour);
+  RUN_TEST(test_emergency_stop_is_steady_red_and_wins);
   RUN_TEST(test_waiting_for_supply_pulses_amber_on_all_leds);
   RUN_TEST(test_stopped_body_breathes_blue_with_input_indicator);
   RUN_TEST(test_non_walking_modes_show_mode_count_in_green);

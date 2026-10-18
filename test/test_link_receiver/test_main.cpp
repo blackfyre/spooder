@@ -1,0 +1,201 @@
+#include <unity.h>
+#include "protocol/link_receiver.h"
+
+using namespace link_receiver;
+
+static Receiver r;
+static uint32_t now;
+
+void setUp()
+{
+  r = Receiver();
+  now = 5000;
+}
+void tearDown() {}
+
+static protocol::Command frame(RequestedMode mode, uint8_t clear = 0, uint8_t modeSeq = 0, bool connected = true,
+                               bool estop = false)
+{
+  protocol::Command c = {};
+  c.mode = (uint8_t)mode;
+  c.speed = 44;
+  c.flags = (connected ? protocol::FLAG_CONTROLLER_CONNECTED : 0) | (estop ? protocol::FLAG_EMERGENCY_STOP : 0);
+  c.clearCounter = clear;
+  c.modeRequestCounter = modeSeq;
+  return c;
+}
+
+// One frame per 20 ms tick.
+static Input tick(const protocol::Command &c)
+{
+  now += 20;
+  accept(r, c, now);
+  return take(r);
+}
+
+void test_no_frame_yet_requests_sleep_and_stale()
+{
+  Input in = take(r);
+  TEST_ASSERT_FALSE(in.linkSeen);
+  TEST_ASSERT_TRUE(in.command.mode == RequestedMode::Sleep);
+  TEST_ASSERT_EQUAL_UINT32(0, in.command.issuedAtMs);
+  TEST_ASSERT_FALSE(in.controllerConnected);
+  TEST_ASSERT_FALSE(in.clearRequested);
+}
+
+void test_command_is_stamped_with_arrival_time()
+{
+  Input in = tick(frame(RequestedMode::Walk));
+  TEST_ASSERT_TRUE(in.linkSeen);
+  TEST_ASSERT_TRUE(in.command.mode == RequestedMode::Walk);
+  TEST_ASSERT_EQUAL_UINT32(now, in.command.issuedAtMs);
+  // No new frame: the stamp stays at the last arrival, so it can go stale.
+  uint32_t arrived = now;
+  now += 1500;
+  in = take(r);
+  TEST_ASSERT_EQUAL_UINT32(arrived, in.command.issuedAtMs);
+}
+
+void test_newest_frame_wins()
+{
+  accept(r, frame(RequestedMode::Walk), now);
+  accept(r, frame(RequestedMode::Stand), now + 1);
+  TEST_ASSERT_TRUE(take(r).command.mode == RequestedMode::Stand);
+}
+
+void test_lost_frame_loses_nothing()
+{
+  // Full state in every frame: skipping one changes nothing.
+  tick(frame(RequestedMode::Stand, 0, 0));
+  tick(frame(RequestedMode::Walk, 0, 1));
+  Input a = tick(frame(RequestedMode::Walk, 1, 1));
+
+  Receiver other;
+  uint32_t t = 5020;
+  accept(other, frame(RequestedMode::Stand, 0, 0), t);
+  take(other);
+  t += 40; // the Walk frame is lost
+  accept(other, frame(RequestedMode::Walk, 1, 1), t);
+  Input b = take(other);
+  TEST_ASSERT_TRUE(a.command.mode == b.command.mode);
+  TEST_ASSERT_EQUAL_UINT32(a.requestSeq, b.requestSeq);
+  TEST_ASSERT_EQUAL(a.clearRequested, b.clearRequested);
+}
+
+void test_disconnected_controller_requests_sleep()
+{
+  Input in = tick(frame(RequestedMode::Walk, 0, 0, false));
+  TEST_ASSERT_TRUE(in.command.mode == RequestedMode::Sleep);
+  TEST_ASSERT_FALSE(in.controllerConnected);
+}
+
+void test_unknown_mode_requests_sleep()
+{
+  protocol::Command c = frame(RequestedMode::Walk);
+  c.mode = 9;
+  TEST_ASSERT_TRUE(tick(c).command.mode == RequestedMode::Sleep);
+}
+
+void test_out_of_range_values_are_clamped()
+{
+  protocol::Command c = frame(RequestedMode::Walk);
+  c.translateX = 127;
+  c.translateY = 127;
+  c.rotate = -128;
+  c.height = 250;
+  c.speed = 101;
+  c.stride = 7;
+  Input in = tick(c);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 100.0f, in.command.translate.magnitude());
+  TEST_ASSERT_EQUAL_FLOAT(-100.0f, in.command.rotate);
+  TEST_ASSERT_EQUAL_FLOAT(100.0f, in.command.height);
+  TEST_ASSERT_EQUAL_FLOAT(100.0f, in.command.speed);
+  TEST_ASSERT_TRUE(in.command.stride == StrideMode::Dynamic);
+}
+
+void test_emergency_stop_flag_passes_through()
+{
+  TEST_ASSERT_TRUE(tick(frame(RequestedMode::Walk, 0, 0, true, true)).emergencyStop);
+  TEST_ASSERT_FALSE(tick(frame(RequestedMode::Walk)).emergencyStop);
+}
+
+void test_repeated_clear_counter_issues_no_clear()
+{
+  tick(frame(RequestedMode::Stand, 4));
+  for (int i = 0; i < 50; i++)
+    TEST_ASSERT_FALSE(tick(frame(RequestedMode::Stand, 4)).clearRequested);
+}
+
+void test_incremented_clear_counter_issues_exactly_one_clear()
+{
+  tick(frame(RequestedMode::Stand, 4));
+  TEST_ASSERT_TRUE(tick(frame(RequestedMode::Stand, 5)).clearRequested);
+  TEST_ASSERT_FALSE(tick(frame(RequestedMode::Stand, 5)).clearRequested);
+  // Wraps.
+  tick(frame(RequestedMode::Stand, 255));
+  TEST_ASSERT_TRUE(tick(frame(RequestedMode::Stand, 0)).clearRequested);
+}
+
+void test_clear_is_held_until_taken()
+{
+  accept(r, frame(RequestedMode::Stand, 4), now);
+  accept(r, frame(RequestedMode::Stand, 5), now + 20);
+  accept(r, frame(RequestedMode::Stand, 5), now + 40);
+  TEST_ASSERT_TRUE(take(r).clearRequested);
+  TEST_ASSERT_FALSE(take(r).clearRequested);
+}
+
+void test_mode_request_counter_advances_request_seq()
+{
+  uint32_t seq = tick(frame(RequestedMode::Stand, 0, 7)).requestSeq;
+  TEST_ASSERT_EQUAL_UINT32(seq, tick(frame(RequestedMode::Stand, 0, 7)).requestSeq);
+  TEST_ASSERT_EQUAL_UINT32(seq + 1, tick(frame(RequestedMode::Walk, 0, 8)).requestSeq);
+}
+
+void test_first_frame_sets_baseline_only()
+{
+  Input in = tick(frame(RequestedMode::Walk, 9, 3));
+  TEST_ASSERT_FALSE(in.clearRequested);
+  TEST_ASSERT_EQUAL_UINT32(0, in.requestSeq);
+}
+
+void test_bridge_restart_after_gap_neither_clears_nor_requests()
+{
+  tick(frame(RequestedMode::Walk, 9, 3));
+  uint32_t seq = tick(frame(RequestedMode::Walk, 9, 3)).requestSeq;
+  now += LINK_GAP_MS; // the bridge reboots
+  Input in = tick(frame(RequestedMode::Stand, 0, 0));
+  TEST_ASSERT_FALSE(in.clearRequested);
+  TEST_ASSERT_EQUAL_UINT32(seq, in.requestSeq);
+  // Later changes count again.
+  TEST_ASSERT_TRUE(tick(frame(RequestedMode::Stand, 1, 0)).clearRequested);
+  TEST_ASSERT_EQUAL_UINT32(seq + 1, tick(frame(RequestedMode::Walk, 1, 1)).requestSeq);
+}
+
+void test_short_gap_keeps_counting()
+{
+  tick(frame(RequestedMode::Stand, 1, 1));
+  now += LINK_GAP_MS - 40; // a few lost frames
+  TEST_ASSERT_TRUE(tick(frame(RequestedMode::Stand, 2, 1)).clearRequested);
+}
+
+int main()
+{
+  UNITY_BEGIN();
+  RUN_TEST(test_no_frame_yet_requests_sleep_and_stale);
+  RUN_TEST(test_command_is_stamped_with_arrival_time);
+  RUN_TEST(test_newest_frame_wins);
+  RUN_TEST(test_lost_frame_loses_nothing);
+  RUN_TEST(test_disconnected_controller_requests_sleep);
+  RUN_TEST(test_unknown_mode_requests_sleep);
+  RUN_TEST(test_out_of_range_values_are_clamped);
+  RUN_TEST(test_emergency_stop_flag_passes_through);
+  RUN_TEST(test_repeated_clear_counter_issues_no_clear);
+  RUN_TEST(test_incremented_clear_counter_issues_exactly_one_clear);
+  RUN_TEST(test_clear_is_held_until_taken);
+  RUN_TEST(test_mode_request_counter_advances_request_seq);
+  RUN_TEST(test_first_frame_sets_baseline_only);
+  RUN_TEST(test_bridge_restart_after_gap_neither_clears_nor_requests);
+  RUN_TEST(test_short_gap_keeps_counting);
+  return UNITY_END();
+}

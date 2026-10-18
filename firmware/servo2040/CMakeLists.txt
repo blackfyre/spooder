@@ -21,6 +21,8 @@ add_library(spooder_core STATIC
   ${SPOODER_CORE}/movement/body.cpp
   ${SPOODER_CORE}/movement/gait.cpp
   ${SPOODER_CORE}/movement/kinematics.cpp
+  ${SPOODER_CORE}/protocol/link_receiver.cpp
+  ${SPOODER_CORE}/protocol/protocol.cpp
   ${SPOODER_CORE}/protection/protection.cpp
   ${SPOODER_CORE}/protection/resume_gate.cpp
   ${SPOODER_CORE}/protection/supervisor.cpp
@@ -39,15 +41,28 @@ if(NOT EXISTS "${SPOODER_POWER_LIMITS}")
     "servos and supply, or pass -DSPOODER_POWER_LIMITS=<file> / set SPOODER_POWER_LIMITS.")
 endif()
 
+# Command source: the gamepad bridge link (default), or the USB serial console
+# for bring-up and as a rollback.
+option(SPOODER_SERIAL_COMMANDS "Take commands from the USB serial console instead of the bridge link" OFF)
+
 add_executable(spooder
   src/main.cpp
   src/power_monitor.cpp
-  src/serial_commands.cpp
   src/servo_output.cpp
   src/status_leds.cpp
 )
+if(SPOODER_SERIAL_COMMANDS)
+  target_sources(spooder PRIVATE src/serial_commands.cpp)
+  target_compile_definitions(spooder PRIVATE SPOODER_SERIAL_COMMANDS)
+else()
+  target_sources(spooder PRIVATE src/link.cpp)
+endif()
 
 target_compile_options(spooder PRIVATE -Wall)
+# -Wextra only for our sources: the SDK's interface libraries compile into
+# this target too.
+get_target_property(SPOODER_SOURCES spooder SOURCES)
+set_source_files_properties(${SPOODER_SOURCES} PROPERTIES COMPILE_OPTIONS -Wextra)
 target_compile_definitions(spooder PRIVATE
   SPOODER_POWER_LIMITS_HEADER="${SPOODER_POWER_LIMITS}"
   # A connected host that is not reading must not stall the control loop:
@@ -56,6 +71,7 @@ target_compile_definitions(spooder PRIVATE
 )
 target_link_libraries(spooder
   pico_stdlib
+  hardware_uart
   servo2040
   analogmux
   analog

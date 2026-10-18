@@ -29,7 +29,7 @@ The bridge SHALL send a command frame at least every 20 ms while it runs. Each f
 - **THEN** the robot treats its last command as stale and goes to Sleep
 
 ### Requirement: Fault clearing over the link
-A fault-clear request SHALL be signalled by the bridge incrementing the fault-clear counter. The robot SHALL issue one clear request for each counter value it has not seen before. A repeated value SHALL NOT clear anything.
+A fault-clear request SHALL be signalled by the bridge incrementing the fault-clear counter. The robot SHALL issue one clear request for each change of the counter between consecutive valid frames. A repeated value SHALL NOT clear anything. The first valid frame after power-up, or after 200 ms or more without a valid frame, SHALL only set the baseline for the fault-clear and mode-request counters: a restarted bridge, whose counters start again, SHALL NOT clear faults or count as a new mode request.
 
 #### Scenario: Repeated frames carry the same counter
 - **WHEN** many frames arrive with an unchanged counter
@@ -38,6 +38,10 @@ A fault-clear request SHALL be signalled by the bridge incrementing the fault-cl
 #### Scenario: Counter increments
 - **WHEN** a frame arrives with a counter value one higher than the last one seen
 - **THEN** exactly one clear request is issued
+
+#### Scenario: Bridge restarts
+- **WHEN** the bridge restarts after an emergency stop, and its first frames after the gap carry reset counters and no emergency stop
+- **THEN** no clear request is issued, the emergency-stop fault stays latched and the body stays asleep
 
 ### Requirement: Resuming after a fault
 After a fault is cleared, the robot SHALL keep the body asleep until a command frame arrives with a mode-request counter different from the one in effect when the fault latched. A frame that only repeats the previous desired mode SHALL NOT restart motion.

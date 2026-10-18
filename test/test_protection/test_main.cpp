@@ -22,16 +22,16 @@ static void reset()
 {
   init(s, LIMITS);
   now = 1000;
-  last = step(s, Reading{0, 0}, now, false);
+  last = step(s, Reading{0, 0}, now, false, false);
 }
 
 // Feeds the same reading every 20 ms for @p durationMs.
-static void feed(float currentA, float voltageV, uint32_t durationMs, bool clear = false)
+static void feed(float currentA, float voltageV, uint32_t durationMs, bool clear = false, bool estop = false)
 {
   for (uint32_t t = 0; t < durationMs; t += 20)
   {
     now += 20;
-    last = step(s, Reading{currentA, voltageV}, now, clear);
+    last = step(s, Reading{currentA, voltageV}, now, clear, estop);
   }
 }
 
@@ -84,14 +84,14 @@ void test_overcurrent_inhibits_on_the_same_step()
 {
   powerUp();
   now += 20;
-  last = step(s, Reading{9.5f, 6.0f}, now, false);
+  last = step(s, Reading{9.5f, 6.0f}, now, false, false);
   TEST_ASSERT_FALSE(last.allowOutput);
   TEST_ASSERT_TRUE(last.forceSleep);
   TEST_ASSERT_EQUAL_UINT16(OVERCURRENT, last.faults);
   TEST_ASSERT_EQUAL_UINT16(OVERCURRENT, last.newlyLatched);
   // Reported once: not newly latched again on the next step.
   now += 20;
-  last = step(s, Reading{9.5f, 6.0f}, now, false);
+  last = step(s, Reading{9.5f, 6.0f}, now, false, false);
   TEST_ASSERT_EQUAL_UINT16(NONE, last.newlyLatched);
 }
 
@@ -163,7 +163,7 @@ void test_brownout_inhibits_immediately()
 {
   powerUp();
   now += 20;
-  last = step(s, Reading{0.5f, 4.5f}, now, false);
+  last = step(s, Reading{0.5f, 4.5f}, now, false, false);
   TEST_ASSERT_TRUE(last.faults & BROWNOUT);
   TEST_ASSERT_FALSE(last.allowOutput);
 }
@@ -172,7 +172,7 @@ void test_overvoltage_inhibits_immediately_even_before_gate()
 {
   reset();
   now += 20;
-  last = step(s, Reading{0, 7.2f}, now, false);
+  last = step(s, Reading{0, 7.2f}, now, false, false);
   TEST_ASSERT_EQUAL_UINT16(OVERVOLTAGE, last.faults);
   TEST_ASSERT_FALSE(last.allowOutput);
 }
@@ -206,7 +206,7 @@ void test_inhibiting_fault_needs_fresh_settle_after_clear()
 {
   powerUp();
   now += 20;
-  last = step(s, Reading{10.0f, 6.0f}, now, false);
+  last = step(s, Reading{10.0f, 6.0f}, now, false, false);
   TEST_ASSERT_FALSE(last.allowOutput);
   feed(0.2f, 6.0f, 20, true); // cleared: current back to normal
   TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
@@ -220,10 +220,62 @@ void test_clear_is_selective()
   powerUp();
   feed(0.5f, 5.0f, 300); // undervoltage latches
   now += 20;
-  last = step(s, Reading{9.5f, 5.0f}, now, false); // and an overcurrent spike
+  last = step(s, Reading{9.5f, 5.0f}, now, false, false); // and an overcurrent spike
   TEST_ASSERT_EQUAL_UINT16(UNDERVOLTAGE | OVERCURRENT, last.faults);
   feed(0.5f, 5.0f, 20, true); // current recovered, voltage did not
   TEST_ASSERT_EQUAL_UINT16(UNDERVOLTAGE, last.faults);
+}
+
+// --- emergency stop ---------------------------------------------------------
+
+void test_emergency_stop_inhibits_on_the_same_step()
+{
+  powerUp();
+  now += 20;
+  last = step(s, Reading{0.2f, 6.0f}, now, false, true);
+  TEST_ASSERT_FALSE(last.allowOutput);
+  TEST_ASSERT_TRUE(last.forceSleep);
+  TEST_ASSERT_EQUAL_UINT16(EMERGENCY_STOP, last.faults);
+  TEST_ASSERT_EQUAL_UINT16(EMERGENCY_STOP, last.newlyLatched);
+}
+
+void test_emergency_stop_latches_before_the_supply_settles()
+{
+  reset();
+  feed(0.2f, 6.0f, 100, false, true);
+  TEST_ASSERT_EQUAL_UINT16(EMERGENCY_STOP, last.faults);
+  feed(0.2f, 6.0f, 1000);
+  TEST_ASSERT_FALSE(last.allowOutput);
+}
+
+void test_emergency_stop_release_without_clear_keeps_output_off()
+{
+  powerUp();
+  feed(0.2f, 6.0f, 40, false, true);
+  feed(0.2f, 6.0f, 2000); // released, no clear
+  TEST_ASSERT_FALSE(last.allowOutput);
+  TEST_ASSERT_EQUAL_UINT16(EMERGENCY_STOP, last.faults);
+}
+
+void test_clear_while_emergency_stop_held_keeps_fault()
+{
+  powerUp();
+  feed(0.2f, 6.0f, 40, false, true);
+  feed(0.2f, 6.0f, 200, true, true); // clear requested while still held
+  TEST_ASSERT_EQUAL_UINT16(EMERGENCY_STOP, last.faults);
+  TEST_ASSERT_FALSE(last.allowOutput);
+}
+
+void test_clear_after_release_restores_output_after_settling()
+{
+  powerUp();
+  feed(0.2f, 6.0f, 40, false, true);
+  feed(0.2f, 6.0f, 40);       // released
+  feed(0.2f, 6.0f, 20, true); // one clear request
+  TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
+  TEST_ASSERT_FALSE(last.allowOutput); // the gate needs a fresh settle
+  feed(0.2f, 6.0f, SUPPLY_SETTLE_MS + 20);
+  TEST_ASSERT_TRUE(last.allowOutput);
 }
 
 int main()
@@ -245,5 +297,10 @@ int main()
   RUN_TEST(test_clear_after_recovery);
   RUN_TEST(test_inhibiting_fault_needs_fresh_settle_after_clear);
   RUN_TEST(test_clear_is_selective);
+  RUN_TEST(test_emergency_stop_inhibits_on_the_same_step);
+  RUN_TEST(test_emergency_stop_latches_before_the_supply_settles);
+  RUN_TEST(test_emergency_stop_release_without_clear_keeps_output_off);
+  RUN_TEST(test_clear_while_emergency_stop_held_keeps_fault);
+  RUN_TEST(test_clear_after_release_restores_output_after_settling);
   return UNITY_END();
 }

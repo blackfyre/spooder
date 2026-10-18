@@ -6,14 +6,19 @@
 #include "protection/protection.h"
 #include "protection/supervisor.h"
 #include "power_monitor.h"
-#include "serial_commands.h"
 #include "servo_output.h"
 #include "status_leds.h"
+#ifdef SPOODER_SERIAL_COMMANDS
+#include "serial_commands.h"
+#else
+#include "link.h"
+#endif
 
 // Control loop period. Movement advances by elapsed time, so this is a target,
 // not a hard deadline.
 constexpr uint32_t LOOP_PERIOD_MS = 20;
 constexpr uint32_t REPORT_PERIOD_MS = 1000;
+constexpr int TELEMETRY_EVERY_TICKS = 5; // 100 ms
 
 static body::BodyState bodyState;
 static protection::State protectionState;
@@ -24,8 +29,75 @@ static_assert((int)led_pattern::BodyMode::Walk == (int)body::Mode::Walk &&
                   (int)led_pattern::BodyMode::Calibrate == (int)body::Mode::Calibrate,
               "led_pattern::BodyMode must mirror body::Mode");
 
+// One tick's operator input, from the bridge link or (bring-up builds) the
+// USB serial console.
+struct TickInput
+{
+  MovementCommand command;
+  uint32_t requestSeq;   // advances on every explicit mode request
+  bool clearFaults;
+  bool emergencyStop;
+  bool printReadings;
+  led_pattern::Input source;
+};
+
+static bool isFresh(const MovementCommand &c, uint32_t now)
+{
+  return c.issuedAtMs != 0 && now - c.issuedAtMs <= body::COMMAND_TIMEOUT_MS;
+}
+
+static TickInput readInput(uint32_t now)
+{
+  TickInput in = {};
+#ifdef SPOODER_SERIAL_COMMANDS
+  serial_commands::Input s = serial_commands::poll(now); // bounded
+  in.command = s.command;
+  in.requestSeq = s.requestSeq;
+  in.clearFaults = s.clearFaults;
+  in.printReadings = s.printReadings;
+  in.source = led_pattern::Input::Serial;
+#else
+  link_receiver::Input l = link::poll(now); // bounded by the receive buffer
+  in.command = l.command;
+  in.requestSeq = l.requestSeq;
+  in.clearFaults = l.clearRequested;
+  in.emergencyStop = l.emergencyStop;
+  if (!isFresh(l.command, now))
+    in.source = led_pattern::Input::LinkStale;
+  else
+    in.source = l.controllerConnected ? led_pattern::Input::LinkConnected : led_pattern::Input::LinkNoGamepad;
+#endif
+  return in;
+}
+
+#ifndef SPOODER_SERIAL_COMMANDS
+static uint16_t clampU16(float v)
+{
+  if (v <= 0)
+    return 0;
+  if (v >= 65535.0f)
+    return 65535;
+  return (uint16_t)(v + 0.5f);
+}
+
+static void sendTelemetry(const protection::Reading &r, const protection::Result &p, bool outputsOn)
+{
+  protocol::Telemetry t = {};
+  t.bodyMode = (uint8_t)bodyState.mode;
+  t.gait = (uint8_t)bodyState.currentGait;
+  t.outputsOn = outputsOn;
+  t.faults = p.faults;
+  t.voltageMv = clampU16(r.voltageV * 1000.0f);
+  t.currentMa = clampU16(r.currentA * 1000.0f);
+  t.validFrames = (uint16_t)link::validFrames();
+  t.discardedFrames = (uint16_t)link::discardedFrames();
+  t.sensorsAvailable = 0; // filled by add-body-sensing
+  link::sendTelemetry(t);
+}
+#endif
+
 static led_pattern::State ledState(uint32_t now, const protection::Result &prot, bool bodyRunning,
-                                   float currentA)
+                                   float currentA, led_pattern::Input source)
 {
   led_pattern::State s;
   s.nowMs = now;
@@ -37,7 +109,7 @@ static led_pattern::State ledState(uint32_t now, const protection::Result &prot,
   s.currentA = currentA;
   s.tripCurrentA = config::POWER_LIMITS.tripCurrentA;
   s.sustainedCurrentA = config::POWER_LIMITS.sustainedCurrentA;
-  s.input = led_pattern::Input::Serial; // the bridge link reports its own state once it exists
+  s.input = source;
   return s;
 }
 
@@ -55,6 +127,8 @@ static const char *faultName(uint16_t fault)
     return "brown-out";
   case protection::OVERVOLTAGE:
     return "overvoltage";
+  case protection::EMERGENCY_STOP:
+    return "emergency stop";
   default:
     return "unknown";
   }
@@ -96,6 +170,9 @@ int main()
   stdio_init_all();
   status_leds::setup();
   power_monitor::setup();
+#ifndef SPOODER_SERIAL_COMMANDS
+  link::setup();
+#endif
   protection::init(protectionState, config::POWER_LIMITS);
 
   if (!servo_output::setup())
@@ -112,7 +189,9 @@ int main()
     }
   }
 
-  bool clearRequested = false; // from the previous tick's input
+#ifndef SPOODER_SERIAL_COMMANDS
+  int telemetryTick = 0;
+#endif
   uint32_t lastReportMs = 0;
   absolute_time_t next = get_absolute_time();
 
@@ -120,20 +199,25 @@ int main()
   {
     uint32_t now = nowMs();
 
-    // Protection first, so nothing else in the tick can delay a trip.
+    // Input first, so an emergency stop in a frame that has arrived acts in
+    // this tick. Both input sources are bounded and never block, so they
+    // cannot delay the protection step that follows.
+    TickInput input = readInput(now);
+
     protection::Reading reading = power_monitor::read();
-    protection::Result prot = protection::step(protectionState, reading, now, clearRequested);
+    protection::Result prot =
+        protection::step(protectionState, reading, now, input.clearFaults, input.emergencyStop);
     servo_output::setInhibited(!prot.allowOutput);
     if (prot.newlyLatched)
       reportFaults(prot.newlyLatched, reading);
 
-    serial_commands::Input input = serial_commands::poll(now); // bounded
-    clearRequested = input.clearFaults;
+    // A stale command never starts the body; the body itself sleeps on it.
+    RequestedMode requested = isFresh(input.command, now) ? input.command.mode : RequestedMode::Sleep;
 
     // The supervisor decides whether the body runs: a fault that cuts output
     // stops it, and it restarts through the boot sequence only once output is
     // allowed and the operator has made a new request since the fault.
-    protection::Decision run = protection::supervise(supervisor, prot, input.command.mode, input.requestSeq);
+    protection::Decision run = protection::supervise(supervisor, prot, requested, input.requestSeq);
     if (run.stopBody)
     {
       servo_output::stop();
@@ -153,7 +237,15 @@ int main()
       servo_output::apply(bodyState);
     }
 
-    status_leds::show(ledState(now, prot, run.runBody, reading.currentA));
+    status_leds::show(ledState(now, prot, run.runBody, reading.currentA, input.source));
+
+#ifndef SPOODER_SERIAL_COMMANDS
+    if (++telemetryTick >= TELEMETRY_EVERY_TICKS)
+    {
+      telemetryTick = 0;
+      sendTelemetry(reading, prot, servo_output::outputsOn());
+    }
+#endif
 
     if (input.printReadings || now - lastReportMs >= REPORT_PERIOD_MS)
     {

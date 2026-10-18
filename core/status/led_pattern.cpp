@@ -21,8 +21,10 @@ struct FaultIndication
   uint16_t fault;
   Rgb colour;
 };
-// Lowest bit wins when several faults latch.
+// The first matching entry wins when several faults latch. Emergency stop
+// alternates red with red: steady red.
 static const FaultIndication FAULT_COLOURS[] = {
+    {protection::EMERGENCY_STOP, RED},
     {protection::OVERCURRENT, WHITE},
     {protection::BROWNOUT, MAGENTA},
     {protection::OVERVOLTAGE, BLUE},

@@ -16,11 +16,12 @@ enum Fault : uint16_t
   UNDERVOLTAGE = 1u << 2,      // below the minimum voltage for the debounce time: sleep
   BROWNOUT = 1u << 3,          // below the brown-out voltage: output inhibited
   OVERVOLTAGE = 1u << 4,       // above the maximum voltage: output inhibited
+  EMERGENCY_STOP = 1u << 5,    // emergency stop signalled: output inhibited
 };
 
 // Faults that switch servo output off immediately; the others put the body to
 // sleep, which folds the legs before switching output off.
-constexpr uint16_t INHIBITING_FAULTS = OVERCURRENT | BROWNOUT | OVERVOLTAGE;
+constexpr uint16_t INHIBITING_FAULTS = OVERCURRENT | BROWNOUT | OVERVOLTAGE | EMERGENCY_STOP;
 
 // Supply must be continuously valid this long before output is allowed.
 constexpr uint32_t SUPPLY_SETTLE_MS = 500;
@@ -93,8 +94,10 @@ void init(State &s, const Limits &limits);
  *
  * @param clearRequested clears each latched fault whose condition is absent
  *        in this reading; faults whose condition persists stay latched.
+ * @param emergencyStop the operator's emergency stop is signalled; it latches
+ *        EMERGENCY_STOP, which clears only once the stop is released.
  */
-Result step(State &s, const Reading &reading, uint32_t nowMs, bool clearRequested);
+Result step(State &s, const Reading &reading, uint32_t nowMs, bool clearRequested, bool emergencyStop);
 
 } // namespace protection
 

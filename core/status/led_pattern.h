@@ -6,6 +6,7 @@
 //
 // LEDs 0-4 carry the main indication, in priority order:
 //   latched fault      all six alternate the fault's colour with red (bright)
+//                      (emergency stop: steady red)
 //   waiting for supply all six pulse amber
 //   body stopped       slow blue breathing (supply valid, waiting for a request)
 //   walking            load bar: supply current against the trip limit, in the
