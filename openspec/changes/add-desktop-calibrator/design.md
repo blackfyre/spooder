@@ -42,8 +42,8 @@ A separate module keeps Gio and cgo out of anything the firmware build or the ho
 
 ### D2. Dependencies and toolchain
 
-- Go pinned in `mise.toml` (1.27.1, matching `bopen`'s toolchain); `gioui.org v0.10.3`, `gioui.org/x v0.10.3`; `go.bug.st/serial` pinned to a release, with no cgo on Linux or Windows.
-- Linux build needs cgo plus the Wayland, X11 and EGL development packages. Fedora: `wayland-devel libxkbcommon-x11-devel libX11-devel libXcursor-devel mesa-libEGL-devel mesa-libGLES-devel vulkan-headers`. These are listed in the hardware-check skill, and the mise task checks for `pkg-config` entries and names what is missing.
+- Go pinned in `mise.toml` (1.27.1, matching `bopen`'s toolchain); `gioui.org v0.10.3`; `go.bug.st/serial` v1.8.0, with no cgo on Linux or Windows. `gioui.org/x` is not needed: nothing in the app uses it.
+- Linux build needs cgo plus the Wayland, X11 and EGL development packages. Fedora: `wayland-devel libxkbcommon-devel libxkbcommon-x11-devel libX11-devel libXcursor-devel libXfixes-devel mesa-libEGL-devel vulkan-headers`. These are the providers of the `pkg-config` names in Gio's cgo directives (`wayland-client wayland-cursor wayland-egl egl xkbcommon xkbcommon-x11 x11 x11-xcb xcursor xfixes`) and of `<vulkan/vulkan.h>`; GLES is loaded at run time, so `mesa-libGLES-devel` is not needed. They are listed in the hardware-check skill, and `desktop/scripts/check-deps.sh` (the `desktop-deps` task, run before `desktop-build` and `desktop-test`) checks each entry and prints the `dnf install` line for whatever is missing.
 - mise tasks: `desktop-build`, `desktop-run`, `desktop-test` (`go test ./...` in `desktop/`). `desktop-test` is a verification gate next to `mise run test`.
 
 ### D3. Serial I/O and the stream split
@@ -64,12 +64,17 @@ A separate module keeps Gio and cgo out of anything the firmware build or the ho
 ### D5. Calibration model (`internal/calib`)
 
 - The same rules as the bridge's `calibration_sync`: the latest value per joint, the oldest pending sent first, a request id per send, confirmation by the report's request id, a resend after 200 ms with the same id, and the reported value replacing the shown one, including clamps and rejections.
+  - **One change in flight.** The robot recognises only its last request id per link as a retransmission, so a resend of an older change after a newer one was processed would be processed again (and, if output was meanwhile disallowed, reported as rejected although applied). Until the sent change is confirmed, only it is resent; other edits wait, keeping their latest value. A newer value for the joint in flight replaces it and is sent with a new id.
+  - **Request ids** start after the `lastRequestId` of the first report on a connection (the robot keeps it across a desktop restart), and a new id never equals the latest reported one. A report with result "none yet" confirms nothing.
+  - Unconfirmed edits are dropped when control is released or the link is lost; sets are sent only while in control. On a new connection the table is cleared until the robot reports again (it reports at 1 Hz in Calibrate and after each processed set).
 - Keyboard: arrow keys select a joint and field; `+`/`-` nudge fine, Shift+`+`/`-` coarse (0.5° and 5°; 10 µs and 50 µs); `R` toggles direction.
 
 ### D6. Export
 
 - The writer produces the format of `add-live-joint-calibration` D6. Its test exports the defaults and compares them with `test/golden/calibration_defaults.cpp` byte for byte.
 - **Checkout check:** the chosen directory must contain `core/movement/calibration_defaults.cpp` and `openspec/`. The file is written atomically (temporary file plus rename), after a line diff is shown and confirmed. The last chosen directory is remembered in the user config directory.
+  - Neither the file nor `core/` and `core/movement/` may be symbolic links, so the write cannot land outside the checkout.
+  - Before writing, the file is read again; if it no longer holds what the diff was made from, nothing is written and the export must be repeated. The temporary file is removed on any failure, and the file keeps its permissions.
 
 ### D7. Look
 
@@ -78,9 +83,11 @@ A separate module keeps Gio and cgo out of anything the firmware build or the ho
   - dark: `#1b1b19` background, `#121211` wells, `#2c2c29` panels, `#f3f2ee` text, `#3a3935` selection;
   - accent `#e2551d` (pressed `#a93a0f`, as text `#a3390c`);
   - status: green `#9ece6a`, yellow `#e0af68`, blue `#7aa2f7`.
-- **Type:** Archivo SemiBold for text; JetBrains Mono, uppercase with wide letter-spacing, for labels, buttons and every numeric value.
+- **Type:** Archivo SemiBold for text; JetBrains Mono, uppercase with wide letter-spacing, for labels, buttons and every numeric value. Gio's text layout has no letter-spacing, so labels are laid out a glyph at a time with 0.08 em between them; values keep their case.
+- **Text on the accent** is ink, not white: white on `#e2551d` is 3.8:1, ink 4.6:1, and the labels are small. A theme test checks every text and fill pair the UI draws in both palettes.
 - **Buttons:** 7 px radius, flat fill, a 2 px darker bottom shadow that flattens on press (a small custom Gio widget).
-- **Screens:** a header (port, connection, control toggle, e-stop), a telemetry strip, the joint editor as a 6 × 3 grid of leg/joint cards, and the log and export panes. Before building, check the Claude Design project for anything newer than the site's CSS; the project is only read, never written.
+- **Screens:** a header (port, connection, control toggle, e-stop), a telemetry strip, the joint editor as a 6 × 3 grid of leg/joint cards, and the log and export panes.
+  - **Keyboard:** the window takes Tab, so keyboard focus never moves onto a button, which would take Space for itself: Space is always the e-stop. For the same reason there is no text field: the export's checkout is chosen from the one given with `--checkout`, the remembered one, the working directory and the checkout the binary was built in. Before building, check the Claude Design project for anything newer than the site's CSS; the project is only read, never written.
 
 ## Risks / Trade-offs
 

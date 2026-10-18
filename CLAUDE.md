@@ -4,13 +4,13 @@ Spooder is firmware for a hexapod robot, derived from [Aecert's Hexapod V1](http
 - the robot, on a **Pimoroni Servo 2040** (RP2040), in C++ on the pico-sdk with pimoroni-pico;
 - the gamepad bridge, on a **LilyGO TTGO T-Display v1.1** (original ESP32), on ESP-IDF + Arduino + Bluepad32. It sends gamepad commands to the robot over a UART link and shows robot status on its screen. Its setup mode (left button held during the boot logo) replaces Bluetooth with a WiFi access point and captive portal, through which a phone calibrates the robot.
 
-A computer can speak the same link protocol on the robot's USB port, alongside the debug text, to calibrate, monitor and control the robot without the bridge. Joint calibration can be changed live (in RAM) and exported as the compiled defaults.
+A computer can speak the same link protocol on the robot's USB port, alongside the debug text, to calibrate, monitor and control the robot without the bridge. Joint calibration can be changed live (in RAM) and exported as the compiled defaults. The desktop calibrator (`desktop/`, Go with a Gio UI) is that computer-side front-end.
 
 I²C sensors are planned (`add-body-sensing`, suspended). See `openspec/changes/`.
 
 ## Toolchain
 
-mise (`mise.toml`) provides Python, PlatformIO, CMake, Ninja and the Arm GNU toolchain. It also sets `PICO_SDK_PATH`, `PIMORONI_PICO_PATH` and `PICO_BOARD=pimoroni_servo2040`. The SDKs are pinned git submodules in `external/`:
+mise (`mise.toml`) provides Python, PlatformIO, CMake, Ninja, the Arm GNU toolchain and Go (the desktop calibrator). It also sets `PICO_SDK_PATH`, `PIMORONI_PICO_PATH` and `PICO_BOARD=pimoroni_servo2040`. The SDKs are pinned git submodules in `external/`:
 - pico-sdk 2.2.0 and pimoroni-pico v1.29.0-2 (robot);
 - the Bluepad32 ESP-IDF + Arduino template (5.0.0-beta0, with its Arduino core and BTstack submodules) and LovyanGFX 1.2.32 (bridge).
 
@@ -31,8 +31,14 @@ mise run build-bridge    # PlatformIO build of firmware/bridge (TTGO T-Display)
 mise run upload-bridge   # flash the bridge (BRIDGE_PORT, default /dev/ttyUSB0)
 mise run monitor-bridge  # the bridge's Bluepad32 console
 mise run test         # host-side Unity tests of core/ (PlatformIO native env)
+mise run desktop-build   # the desktop calibrator -> build/desktop/spooder-calibrator
+mise run desktop-run     # build and start it (run from the checkout: it exports there)
+mise run desktop-test    # gofmt, go vet and go test of desktop/
+mise run desktop-deps    # name the missing Linux packages for the Gio build
 mise run clean
 ```
+
+**Desktop calibrator dependencies.** Gio needs cgo and the Wayland, X11 and EGL development packages on Linux. On Fedora: `sudo dnf install wayland-devel libxkbcommon-devel libxkbcommon-x11-devel libX11-devel libXcursor-devel libXfixes-devel mesa-libEGL-devel vulkan-headers`. `desktop-build` and `desktop-test` run `desktop-deps` first, which prints the `dnf` line for whatever is missing. Opening the robot's port needs membership of the `dialout` group.
 
 **Power limits are required.** The firmware does not build until `firmware/servo2040/src/power_limits.h` exists, chosen for the servos and supply fitted (start from `power_limits.example.h`). Alternatively, set `SPOODER_POWER_LIMITS=<file>`. To verify a build without real limits:
 
@@ -44,7 +50,7 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
 
 **Flash both boards together** when the link protocol changes (`protocol::VERSION`, now 2). A mismatched pair fails safe: each side discards the other's frames, so the link looks lost and the robot sleeps.
 
-`mise run test`, `mise run build` (with and without `--serial`) and `mise run build-bridge` are the verification gates. Hardware behaviour can only be checked on the boards (see the `spooder-hardware-check` skill).
+`mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test` and `mise run desktop-build` are the verification gates. Hardware behaviour can only be checked on the boards (see the `spooder-hardware-check` skill).
 
 ## Layout
 
@@ -75,6 +81,14 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `main/link`: `robot_link`, a FreeRTOS task above `loop()` that sends a command frame every 20 ms, samples the GPIO35 e-stop button and decodes telemetry and calibration reports. In setup mode its commands come from the portal controller, and it sends calibration sets.
   - `main/display`: LovyanGFX ST7789 driver drawing `status_screen` lines, at most every 250 ms, changed lines only; in setup mode, the setup screen with the joining QR code.
   - `main/setup_mode`: the setup-mode boot path (RTC magic), the WiFi access point, the DNS and HTTP servers and the setup task. `main/portal_page.h` is the portal page, one hand-written HTML file.
+- `desktop/`: the desktop calibrator, a Go module (`github.com/blackfyre/spooder/desktop`) kept apart so Gio and cgo never reach the firmware builds.
+  - `cmd/spooder-calibrator`: `main`, the wiring.
+  - `internal/protocol`: the link protocol in Go, byte for byte the C++ one, tested against `test/golden/protocol_v2.txt`.
+  - `internal/link`: the serial port (`go.bug.st/serial`), the split of the stream into frames and debug text lines, the 20 ms writer and reconnecting by USB serial number.
+  - `internal/session`: the single state owner: observe or control, the e-stop, mode and clear counters, telemetry.
+  - `internal/calib`: the joint table shown from reports, pending edits, one change in flight, resend and confirmation by request id.
+  - `internal/export`: `calibration_defaults.cpp` in the fixed format (tested against `test/golden/calibration_defaults.cpp`), the checkout check, the diff and the atomic write.
+  - `internal/ui`: the Gio window in the Blackfyre look; `internal/ui/fonts`: Archivo and JetBrains Mono with their OFL licences. `internal/appearance` and `internal/winreg` are copied from bopen (MIT, `desktop/LICENSE.bopen`).
 - `test/`: Unity host tests, one directory per area. `test/golden/` holds the golden files other implementations (the desktop calibrator) test against; regenerate `protocol_v2.txt` only for a deliberate protocol change (`SPOODER_WRITE_GOLDEN=1 mise run test`).
 - `openspec/`: specifications (`specs/`) and changes (`changes/`). This is the source of truth for intended behaviour.
 
@@ -89,5 +103,6 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
 - Project skills in `.claude/skills/`:
   - `spooder-firmware-shape`: layout, loop, J6 pins, the protection layer, the link and the bridge.
   - `spooder-leg-kinematics`: the movement reference.
-  - `spooder-hardware-check`: flashing both boards, wiring, power, bring-up, the gamepad controls, and setup mode with the portal calibration workflow.
+  - `spooder-hardware-check`: flashing both boards, wiring, power, bring-up, the gamepad controls, setup mode with the portal calibration workflow, and bench calibration with the desktop calibrator.
+- The desktop calibrator never opens a port by itself: it lists ports (the Servo 2040, USB ID 2e8a:000a, preselected) and connects on request. Its tests use in-memory ports only.
 - A CodeGraph index lives in `.codegraph/` (git-ignored). Refresh it with `codegraph sync` after large changes.

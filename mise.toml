@@ -7,6 +7,8 @@ cmake = "3.31.12"
 ninja = "1.13.2"
 # The vfox plugin publishes per-architecture builds; this pin is for x86-64 Linux.
 gcc-arm-none-eabi = "13.3.Rel1~amd64"
+# The desktop calibrator (desktop/, a Go module with a Gio UI).
+go = "1.27.1"
 
 [env]
 PICO_SDK_PATH = "{{config_root}}/external/pico-sdk"
@@ -80,3 +82,28 @@ run = "rm -rf build .pio/build firmware/bridge/.pio/build"
 [tasks.test]
 description = "Run host-side unit tests"
 run = "pio test -e native"
+
+# Desktop calibrator (desktop/). Gio needs cgo and the Wayland, X11 and EGL
+# development packages on Linux; desktop-deps names any that are missing.
+[tasks.desktop-deps]
+description = "Check the Linux packages the desktop calibrator's Gio build needs"
+run = "desktop/scripts/check-deps.sh"
+
+[tasks.desktop-build]
+description = "Build the desktop calibrator (build/desktop/spooder-calibrator)"
+depends = ["desktop-deps"]
+dir = "desktop"
+env = { CGO_ENABLED = "1" }
+run = "go build -trimpath -o ../build/desktop/spooder-calibrator ./cmd/spooder-calibrator"
+
+[tasks.desktop-run]
+description = "Build and start the desktop calibrator"
+depends = ["desktop-build"]
+run = "build/desktop/spooder-calibrator"
+
+[tasks.desktop-test]
+description = "Run the desktop calibrator's Go tests (vet, then go test)"
+depends = ["desktop-deps"]
+dir = "desktop"
+env = { CGO_ENABLED = "1" }
+run = ["test -z \"$(gofmt -l .)\" || { gofmt -l .; exit 1; }", "go vet ./...", "go test ./..."]

@@ -1,6 +1,6 @@
 ---
 name: spooder-hardware-check
-description: Workflow for wiring, powering, flashing and bringing up the Spooder firmwares on the Pimoroni Servo 2040 and the TTGO T-Display gamepad bridge — power and ground rules, J6 header and link wiring, the staged bring-up order (USB only, bench supply, one servo, all servos, then the bridge), what the serial console, LEDs and bridge screen show, the gamepad controls, and how to exercise and verify power protection and the emergency stop, and the bridge's setup mode with the portal calibration workflow. Use when a change must be confirmed on the robot or bridge, when flashing or boot fails, or when the user asks to flash, test on hardware or read a console.
+description: Workflow for wiring, powering, flashing and bringing up the Spooder firmwares on the Pimoroni Servo 2040 and the TTGO T-Display gamepad bridge — power and ground rules, J6 header and link wiring, the staged bring-up order (USB only, bench supply, one servo, all servos, then the bridge), what the serial console, LEDs and bridge screen show, the gamepad controls, how to exercise and verify power protection and the emergency stop, the bridge's setup mode with the portal calibration workflow, and bench calibration with the desktop calibrator on USB (dialout, Linux packages, workflow). Use when a change must be confirmed on the robot or bridge, when flashing or boot fails, or when the user asks to flash, test on hardware or read a console.
 ---
 
 # Spooder hardware check
@@ -137,7 +137,7 @@ Stop at the first stage that misbehaves.
    - Then `w`, `g`, `r`, `z` (legs fold, then go limp), `s` (wakes through Stand) and `c`.
 7. **Geometry and calibration.**
    - Measure the new frame's link lengths, and compare them with `kinematics::COXA/FEMUR/TIBIA_LENGTH`.
-   - Recalibrate the joints per the `spooder-leg-kinematics` skill (live calibration in Calibrate, then export to `core/movement/calibration_defaults.cpp`).
+   - Recalibrate the joints per the `spooder-leg-kinematics` skill (live calibration in Calibrate, then export to `core/movement/calibration_defaults.cpp`), on the bench with the desktop calibrator (below).
 
 ## Bridge bring-up
 
@@ -178,6 +178,30 @@ Setup mode turns the bridge into a WiFi access point with a captive portal; Blue
 5. **Export:** press Export, then Copy (or select the text by hand). Paste it over `core/movement/calibration_defaults.cpp` whole, then copy it to `test/golden/calibration_defaults.cpp` too, as the host tests require both to be equal. Rebuild and flash the robot, then check in Calibrate that the robot reports the same table.
 
 Record results in `openspec/changes/add-bridge-setup-portal/tasks.md` (task 3.2).
+
+## Desktop calibrator (bench calibration over USB)
+
+The desktop app in `desktop/` speaks the link protocol on the robot's USB port. It needs the default (link) robot build: in a `--serial` build the USB link is not compiled.
+
+**Set-up (Linux):**
+- Build dependencies: `mise run desktop-deps` names what is missing. On Fedora: `sudo dnf install wayland-devel libxkbcommon-devel libxkbcommon-x11-devel libX11-devel libXcursor-devel libXfixes-devel mesa-libEGL-devel vulkan-headers`.
+- Port access: `sudo usermod -aG dialout $USER`, then log in again. Without it the header says `no access to /dev/ttyACM0: add yourself to the dialout group`.
+- Close `mise run monitor` first: the port can be open in one program only.
+- `mise run desktop-run` from the checkout. The export pane then offers that checkout (or pass `--checkout DIR` to the binary, `build/desktop/spooder-calibrator`).
+
+**Bench workflow,** robot on a stand, bench supply, one servo first:
+1. **Connect.** The Servo 2040 (USB ID 2e8a:000a) is preselected; press Connect.
+   - The debug log shows the robot's text lines and the telemetry strip its mode, supply and faults. Frames go to the frames pane, never into the log.
+   - A `Stray 0xA5` banner means a text line held a byte 0xA5 outside a frame: debug text must stay ASCII.
+2. **Observe.** The app reports no controller: with the gamepad driving, nothing changes on the robot (LED 6 stays cyan). Space (or E-stop) still stops it: all six LEDs steady red, output off. Press Space again to release the app's e-stop; the fault stays latched.
+3. **Take control** with the bridge's gamepad off and the app's e-stop released. Clear fault (the fault cannot clear while any e-stop is still signalled), then Calibrate. LED 6 shows blue (USB in control) once the fault is cleared, and the source shows `USB (this app)`.
+4. **Calibrate.** Select a joint with the arrow keys or the pointer; `=`/`-` nudge fine, Shift coarse, `R` flips the direction. A change shows `pending` until the robot's report confirms it; clamped or rejected changes are marked and show the robot's value. The joint moves at 60°/s at most.
+5. **Release control.** The robot sleeps (LED 6 fast amber without a bridge). Closing the window or pulling the cable does the same within about 1 s.
+6. **Conflict.** Take control while the gamepad is connected: the app and the bridge screen show the conflict, LED 6 alternates magenta and cyan, and the robot sleeps until one side lets go.
+7. **Export.** Show difference, check it, Write file: only `core/movement/calibration_defaults.cpp` changes. Or Copy text. Rebuild and flash, then confirm the robot reports the same table in Calibrate.
+   - The host tests pin the seed defaults: after an export, `test/golden/calibration_defaults.cpp` and `test_defaults_are_the_former_leg_offsets` no longer match the file, so `mise run test` fails until they are brought in line.
+
+Record results in `openspec/changes/add-desktop-calibrator/tasks.md` (task 4.2).
 
 ## Gamepad controls
 
