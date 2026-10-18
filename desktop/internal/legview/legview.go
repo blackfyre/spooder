@@ -129,7 +129,7 @@ func Classify(servoDeg float64) Limit {
 	switch {
 	case servoDeg < 0 || servoDeg > 180:
 		return LimitAt
-	case servoDeg < NearLimitDeg || servoDeg > 180-NearLimitDeg:
+	case servoDeg <= NearLimitDeg || servoDeg >= 180-NearLimitDeg:
 		return LimitNear
 	}
 	return LimitNone

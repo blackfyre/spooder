@@ -166,8 +166,8 @@ func TestClassify(t *testing.T) {
 		deg  float64
 		want Limit
 	}{
-		{-0.01, LimitAt}, {0, LimitNear}, {4.99, LimitNear}, {5, LimitNone}, {90, LimitNone},
-		{175, LimitNone}, {175.01, LimitNear}, {180, LimitNear}, {180.01, LimitAt}, {183, LimitAt},
+		{-0.01, LimitAt}, {0, LimitNear}, {5, LimitNear}, {5.01, LimitNone}, {90, LimitNone},
+		{174.99, LimitNone}, {175, LimitNear}, {180, LimitNear}, {180.01, LimitAt}, {183, LimitAt},
 	} {
 		if got := Classify(tc.deg); got != tc.want {
 			t.Errorf("Classify(%v) = %v, want %v", tc.deg, got, tc.want)
