@@ -62,7 +62,9 @@ func TestFrameSizes(t *testing.T) {
 		{len(EncodeTelemetry(sampleTelemetry(), 0)), 39},
 		{len(EncodeCalibrationSet(sampleSet(), 0)), 16},
 		{len(EncodeCalibrationReport(sampleReport(), 0)), 135},
+		{len(EncodePose(Pose{}, 0)), 117},
 		{CalibrationReportPayloadSize, 128},
+		{PosePayloadSize, 110},
 		{MaxFrameSize, 135},
 	} {
 		if tc.got != tc.want {
@@ -202,7 +204,7 @@ func TestBadHeadersAreRejected(t *testing.T) {
 	for name, b := range map[string][]byte{
 		"version 1":           withHeaderByte(1, 1),
 		"version 3":           withHeaderByte(1, 3),
-		"unknown type":        withHeaderByte(2, 5),
+		"unknown type":        withHeaderByte(2, 6), // the first type after pose
 		"inconsistent length": inconsistent,
 	} {
 		var d Decoder
@@ -264,5 +266,26 @@ func TestDiscardReturnsEveryByteOutsideFrames(t *testing.T) {
 		if len(frames) != len(wantFrames) {
 			t.Fatalf("round %d: %d frames, want %d", round, len(frames), len(wantFrames))
 		}
+	}
+}
+
+func TestPoseRoundTrip(t *testing.T) {
+	var p Pose
+	p.Flags = PoseOutputsOn
+	for i := range p.Joints {
+		p.Joints[i] = PoseJoint{CommandedCentideg: int16(i*1500 - 12000), ServoCentideg: int16(i*1100 - 900), PulseUs: uint16(500 + 100*i)}
+	}
+	b := EncodePose(p, 77)
+	if b[2] != byte(TypePose) || b[4] != PosePayloadSize || b[HeaderSize] != PoseOutputsOn || b[HeaderSize+1] != 0 {
+		t.Fatalf("header % x", b[:HeaderSize+2])
+	}
+	j17 := b[HeaderSize+2+17*PoseJointSize:]
+	if get16(j17) != uint16(p.Joints[17].CommandedCentideg) || get16(j17[2:]) != uint16(p.Joints[17].ServoCentideg) || get16(j17[4:]) != p.Joints[17].PulseUs {
+		t.Fatalf("joint 17 % x", j17[:6])
+	}
+	var d Decoder
+	frames := decodeAll(&d, b)
+	if len(frames) != 1 || frames[0].Type != TypePose || frames[0].Seq != 77 || frames[0].Pose != p {
+		t.Fatalf("decoded %+v", frames)
 	}
 }

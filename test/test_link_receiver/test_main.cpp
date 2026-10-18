@@ -179,9 +179,58 @@ void test_short_gap_keeps_counting()
   TEST_ASSERT_TRUE(tick(frame(RequestedMode::Stand, 2, 1)).clearRequested);
 }
 
+// Spec "Calibration pose": commanded 0/90/90 per leg, servo angles with the
+// offsets the IK added, pulses as given.
+void test_pose_in_calibration_pose()
+{
+  static body::BodyState b = {};
+  joint_calibration::Table t;
+  joint_calibration::loadDefaults(t);
+  uint16_t pulses[protocol::CALIBRATION_JOINTS];
+  for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
+  {
+    b.offsets[leg] = joint_calibration::legOffsets(t, leg);
+    TEST_ASSERT_TRUE(kinematics::solveLeg(body::CALIBRATION_POSE, b.offsets[leg], b.angles[leg]));
+  }
+  for (int i = 0; i < protocol::CALIBRATION_JOINTS; i++)
+    pulses[i] = (uint16_t)(1000 + i);
+  protocol::Pose p = makePose(b, pulses, true);
+  TEST_ASSERT_EQUAL_HEX8(protocol::POSE_OUTPUTS_ON, p.flags);
+  const int16_t want[3] = {0, 9000, 9000};
+  for (int i = 0; i < protocol::CALIBRATION_JOINTS; i++)
+  {
+    TEST_ASSERT_INT_WITHIN(1, want[i % 3], p.joints[i].commandedCentideg);
+    int16_t offset = (int16_t)lroundf(t.joints[i].offsetDeg * 100);
+    TEST_ASSERT_INT_WITHIN(1, want[i % 3] + offset, p.joints[i].servoCentideg);
+    TEST_ASSERT_EQUAL_UINT16(1000 + i, p.joints[i].pulseUs);
+  }
+  TEST_ASSERT_EQUAL_HEX8(0, makePose(b, pulses, false).flags);
+}
+
+// Rounded to the nearest centidegree, saturated to the i16 range.
+void test_pose_rounds_and_saturates()
+{
+  static body::BodyState b = {};
+  uint16_t pulses[protocol::CALIBRATION_JOINTS] = {};
+  b.angles[0] = {12.346f, -12.346f, 400.0f};
+  b.offsets[0] = Vector3(0.0f, 0.0f, 0.0f);
+  b.angles[1] = {10.0f, 0.0f, -400.0f};
+  b.offsets[1] = Vector3(-400.0f, 0.0f, 0.0f);
+  protocol::Pose p = makePose(b, pulses, false);
+  TEST_ASSERT_EQUAL_INT16(1235, p.joints[0].commandedCentideg);
+  TEST_ASSERT_EQUAL_INT16(-1235, p.joints[1].servoCentideg);
+  TEST_ASSERT_EQUAL_INT16(32767, p.joints[2].servoCentideg);
+  TEST_ASSERT_EQUAL_INT16(32767, p.joints[3].commandedCentideg); // 10 - (-400)
+  TEST_ASSERT_EQUAL_INT16(1000, p.joints[3].servoCentideg);
+  TEST_ASSERT_EQUAL_INT16(-32768, p.joints[5].servoCentideg);
+  TEST_ASSERT_EQUAL_UINT16(0, p.joints[17].pulseUs);
+}
+
 int main()
 {
   UNITY_BEGIN();
+  RUN_TEST(test_pose_in_calibration_pose);
+  RUN_TEST(test_pose_rounds_and_saturates);
   RUN_TEST(test_no_frame_yet_requests_sleep_and_stale);
   RUN_TEST(test_command_is_stamped_with_arrival_time);
   RUN_TEST(test_newest_frame_wins);

@@ -81,6 +81,9 @@ type Session struct {
 	stats         link.Stats
 	calib         calib.Model
 	reportAt      time.Time
+	pose          protocol.Pose
+	poseAt        time.Time
+	havePose      bool
 	log           []LogLine
 	frames        []FrameLine
 	strayLines    int
@@ -133,6 +136,7 @@ func (s *Session) LinkState(st link.State) {
 			s.stats = link.Stats{}
 			s.calib.Forget()
 			s.haveTelemetry = false
+			s.havePose = false
 		}
 		return nil
 	})
@@ -149,6 +153,8 @@ func (s *Session) Frame(f protocol.Frame, st link.Stats) {
 		case protocol.TypeCalibrationReport:
 			s.calib.Report(f.CalibrationReport)
 			s.reportAt = now
+		case protocol.TypePose:
+			s.pose, s.poseAt, s.havePose = f.Pose, now, true
 		}
 		s.frames = appendCapped(s.frames, FrameLine{At: now, Text: protocol.Summary(f)}, MaxFrameLines)
 		return nil
@@ -324,6 +330,13 @@ type Snapshot struct {
 	Stats      link.Stats
 	StrayLines int
 
+	// The latest pose frame on this connection; PoseFresh when it is no
+	// older than StaleAfter.
+	HavePose  bool
+	PoseFresh bool
+	PoseAge   time.Duration
+	Pose      protocol.Pose
+
 	HaveReport   bool
 	ReportAge    time.Duration
 	Joints       [calib.Joints]JointView
@@ -367,6 +380,10 @@ func (s *Session) Snapshot() Snapshot {
 	}
 	if snap.HaveReport {
 		snap.ReportAge = now.Sub(s.reportAt)
+	}
+	if s.havePose {
+		snap.HavePose, snap.Pose, snap.PoseAge = true, s.pose, now.Sub(s.poseAt)
+		snap.PoseFresh = snap.PoseAge <= StaleAfter
 	}
 	for i := range snap.Joints {
 		v := JointView{Reported: s.calib.Reported(i), Result: s.calib.Result(i)}

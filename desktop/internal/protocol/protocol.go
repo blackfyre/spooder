@@ -8,7 +8,7 @@
 //	0      start marker 0xA5
 //	1      protocol version
 //	2      type (1 = command, 2 = telemetry, 3 = calibration set,
-//	       4 = calibration report)
+//	       4 = calibration report, 5 = pose)
 //	3      sequence number (wraps)
 //	4      payload length N (fixed per type and version)
 //	5      payload, N bytes, little-endian
@@ -28,6 +28,7 @@ const (
 	TypeTelemetry         FrameType = 2
 	TypeCalibrationSet    FrameType = 3
 	TypeCalibrationReport FrameType = 4
+	TypePose              FrameType = 5 // robot to the USB host only
 )
 
 const (
@@ -39,10 +40,13 @@ const (
 	CalibrationJointSize         = 7
 	CalibrationSetPayloadSize    = 9
 	CalibrationReportPayloadSize = 2 + CalibrationJoints*CalibrationJointSize // 128
+	PoseJointSize                = 6
+	PosePayloadSize              = 2 + CalibrationJoints*PoseJointSize // 110
 	CommandFrameSize             = HeaderSize + CommandPayloadSize + CRCSize
 	TelemetryFrameSize           = HeaderSize + TelemetryPayloadSize + CRCSize
 	CalibrationSetFrameSize      = HeaderSize + CalibrationSetPayloadSize + CRCSize
 	CalibrationReportFrameSize   = HeaderSize + CalibrationReportPayloadSize + CRCSize
+	PoseFrameSize                = HeaderSize + PosePayloadSize + CRCSize
 	MaxFrameSize                 = CalibrationReportFrameSize // 135
 )
 
@@ -141,6 +145,23 @@ type CalibrationReport struct {
 	Joints        [CalibrationJoints]CalibrationJoint
 }
 
+// PoseOutputsOn is the pose flag for servo output on.
+const PoseOutputsOn uint8 = 1 << 0
+
+// PoseJoint is one joint of a pose frame.
+type PoseJoint struct {
+	CommandedCentideg int16  // IK result, before the calibration offset
+	ServoCentideg     int16  // commanded + applied offset, before the 0–180° clamp
+	PulseUs           uint16 // last pulse set for the output; 0 = never set
+}
+
+// Pose is what the robot commands each joint, sent to the USB host only,
+// at 10 Hz.
+type Pose struct {
+	Flags  uint8 // Pose* bits
+	Joints [CalibrationJoints]PoseJoint
+}
+
 // CRC16 is CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF, no reflection).
 func CRC16(data []byte) uint16 {
 	crc := uint16(0xFFFF)
@@ -178,6 +199,8 @@ func PayloadSize(t FrameType) int {
 		return CalibrationSetPayloadSize
 	case TypeCalibrationReport:
 		return CalibrationReportPayloadSize
+	case TypePose:
+		return PosePayloadSize
 	}
 	return -1
 }
@@ -268,6 +291,20 @@ func EncodeCalibrationReport(r CalibrationReport, seq uint8) []byte {
 	return finish(f)
 }
 
+// EncodePose returns the complete pose frame.
+func EncodePose(p Pose, seq uint8) []byte {
+	f, b := newFrame(TypePose, seq)
+	b[0] = p.Flags
+	// b[1] reserved, zero
+	for i, j := range p.Joints {
+		o := b[2+i*PoseJointSize:]
+		put16(o, uint16(j.CommandedCentideg))
+		put16(o[2:], uint16(j.ServoCentideg))
+		put16(o[4:], j.PulseUs)
+	}
+	return finish(f)
+}
+
 func parseCommand(p []byte) Command {
 	return Command{
 		Mode: p[0], TranslateX: int8(p[1]), TranslateY: int8(p[2]), Rotate: int8(p[3]),
@@ -305,6 +342,17 @@ func parseCalibrationReport(p []byte) CalibrationReport {
 	return r
 }
 
+func parsePose(b []byte) Pose {
+	p := Pose{Flags: b[0]}
+	for i := range p.Joints {
+		o := b[2+i*PoseJointSize:]
+		p.Joints[i] = PoseJoint{
+			CommandedCentideg: int16(get16(o)), ServoCentideg: int16(get16(o[2:])), PulseUs: get16(o[4:]),
+		}
+	}
+	return p
+}
+
 // Frame is one decoded frame; only the field of its Type is meaningful.
 type Frame struct {
 	Type              FrameType
@@ -313,4 +361,5 @@ type Frame struct {
 	Telemetry         Telemetry
 	CalibrationSet    CalibrationSet
 	CalibrationReport CalibrationReport
+	Pose              Pose
 }

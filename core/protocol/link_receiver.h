@@ -118,6 +118,14 @@ int processCalibration(Receiver &r, joint_calibration::Table &requested, bool ca
  */
 protocol::CalibrationReport makeReport(const Receiver &r, const joint_calibration::Table &table);
 
+/**
+ * @brief The pose frame for the USB host: per joint, the commanded angle
+ * (the body's angle minus the offset its IK added), the servo angle (the
+ * body's angle, which toPulse converts) and @p pulses (servo output order,
+ * 0 = never set). Angles are rounded to centidegrees and saturated.
+ */
+protocol::Pose makePose(const body::BodyState &body, const uint16_t *pulses, bool outputsOn);
+
 // When to send calibration reports on one link.
 struct ReportSchedule
 {

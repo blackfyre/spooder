@@ -125,6 +125,39 @@ protocol::CalibrationReport makeReport(const Receiver &r, const joint_calibratio
   return rep;
 }
 
+static int16_t centidegrees(float deg)
+{
+  float v = deg * 100.0f;
+  if (!(v > -32768.0f)) // also catches NaN
+    return v != v ? 0 : -32768;
+  if (v >= 32767.0f)
+    return 32767;
+  return (int16_t)lroundf(v);
+}
+
+protocol::Pose makePose(const body::BodyState &body, const uint16_t *pulses, bool outputsOn)
+{
+  static_assert(protocol::CALIBRATION_JOINTS == kinematics::LEG_COUNT * kinematics::JOINTS_PER_LEG,
+                "one pose entry per joint");
+  protocol::Pose p = {};
+  p.flags = outputsOn ? protocol::POSE_OUTPUTS_ON : 0;
+  for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
+  {
+    const kinematics::JointAngles &a = body.angles[leg];
+    const Vector3 &o = body.offsets[leg];
+    const float servo[kinematics::JOINTS_PER_LEG] = {a.coxa, a.femur, a.tibia};
+    const float offset[kinematics::JOINTS_PER_LEG] = {o.x, o.y, o.z};
+    for (int j = 0; j < kinematics::JOINTS_PER_LEG; j++)
+    {
+      int i = kinematics::servoOutputIndex(leg, j);
+      p.joints[i].commandedCentideg = centidegrees(servo[j] - offset[j]);
+      p.joints[i].servoCentideg = centidegrees(servo[j]);
+      p.joints[i].pulseUs = pulses[i];
+    }
+  }
+  return p;
+}
+
 void requestReport(ReportSchedule &s)
 {
   s.due = true;

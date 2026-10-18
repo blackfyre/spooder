@@ -84,6 +84,16 @@ bool sendCalibrationReport(const joint_calibration::Table &table)
   return true;
 }
 
+bool sendPose(const protocol::Pose &p)
+{
+  uint8_t frame[protocol::MAX_FRAME_SIZE];
+  int n = protocol::encodePose(p, txSeq, frame);
+  if (!writeFrame(frame, n))
+    return false;
+  txSeq++;
+  return true;
+}
+
 uint32_t validFrames() { return decoder.validFrames(); }
 uint32_t discardedFrames() { return decoder.discardedFrames(); }
 

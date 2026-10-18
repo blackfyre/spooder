@@ -17,6 +17,8 @@ func (t FrameType) Name() string {
 		return "calibration_set"
 	case TypeCalibrationReport:
 		return "calibration_report"
+	case TypePose:
+		return "pose"
 	}
 	return "type" + strconv.Itoa(int(t))
 }
@@ -82,6 +84,15 @@ func Fields(f Frame) []string {
 			add(p+"pulse180Us", int(j.Pulse180Us))
 			add(p+"flags", int(j.Flags))
 		}
+	case TypePose:
+		p := f.Pose
+		add("flags", int(p.Flags))
+		for i, j := range p.Joints {
+			n := fmt.Sprintf("joint%d.", i)
+			add(n+"commandedCentideg", int(j.CommandedCentideg))
+			add(n+"servoCentideg", int(j.ServoCentideg))
+			add(n+"pulseUs", int(j.PulseUs))
+		}
 	}
 	return out
 }
@@ -97,6 +108,8 @@ func Encode(f Frame) []byte {
 		return EncodeCalibrationSet(f.CalibrationSet, f.Seq)
 	case TypeCalibrationReport:
 		return EncodeCalibrationReport(f.CalibrationReport, f.Seq)
+	case TypePose:
+		return EncodePose(f.Pose, f.Seq)
 	}
 	return nil
 }
@@ -104,8 +117,11 @@ func Encode(f Frame) []byte {
 // Summary is a one-line description of a frame for a log view.
 func Summary(f Frame) string {
 	fields := Fields(f)[2:] // without version and type
-	if f.Type == TypeCalibrationReport {
+	switch f.Type {
+	case TypeCalibrationReport:
 		fields = fields[:3]
+	case TypePose:
+		fields = fields[:2] // seq and flags
 	}
 	return f.Type.Name() + " " + strings.Join(fields, " ")
 }

@@ -63,14 +63,14 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
     - `calibration_defaults.cpp`: the compiled defaults, in a fixed format that a front-end's export replaces whole. Its values are free to change; host tests check that it parses, stays within the guards and round-trips through the exporters.
     - `movement_command.h`: the request a controller hands to movement.
   - `protection/`: power protection and the emergency stop. It turns supply readings into "output allowed" and "force Sleep", with latched faults; `supervisor` decides when the body runs, stops or restarts.
-  - `protocol/`: the link's frames (version 2: command, telemetry, calibration set and report), CRC and incremental decoder (both firmwares), pinned by `test/golden/protocol_v2.txt`. `link_receiver` is the robot's handling of decoded frames: arrival stamping, clear and mode-request counters, baselines after a link gap, the calibration guards and reports, and the arbitration between the bridge and USB links.
+  - `protocol/`: the link's frames (version 2: command, telemetry, calibration set and report, and the pose for the USB host), CRC and incremental decoder (both firmwares), pinned by `test/golden/protocol_v2.txt`. `link_receiver` is the robot's handling of decoded frames: arrival stamping, clear and mode-request counters, baselines after a link gap, the calibration guards and reports, and the arbitration between the bridge and USB links.
   - `gamepad_mapping/`: gamepad input to the desired command state (bridge).
   - `status/led_pattern`: what the robot's six status LEDs show; `status/status_screen`: the bridge screen's text (normal and setup mode).
   - `setup/`: the bridge's setup mode. `portal_controller` (portal polls and buttons as the controller), `calibration_sync` (pending edits, one set in flight, confirmation by report), `calibration_export` (a reported table as `calibration_defaults.cpp`), `setup_entry` (the button hold and the boot decision) and `access_point` (SSID, password, QR text).
 - `firmware/servo2040/`: the pico-sdk CMake project.
   - `main.cpp`: the core 0 loop, every 20 ms: input (both links, arbitrated, or serial) → power read → protection → supervisor → calibration sets → calibration step → `body::step` → servo output → LEDs → telemetry every fifth tick and calibration reports, on both links.
   - `link`: UART1 on GPIO20/21 (J6), interrupt-driven RX ring and a 256-byte TX queue of whole frames.
-  - `usb_link`: link frames over USB stdio, sharing the port with `printf`; frames are written whole or dropped.
+  - `usb_link`: link frames over USB stdio, sharing the port with `printf`; frames are written whole or dropped. Only USB carries the 10 Hz pose frame.
   - `servo_output`: `ServoCluster` on PIO 0, GPIO0–17.
   - `power_monitor`: current and voltage via the analog mux.
   - `status_leds`: WS2812 on PIO 1, drawing `core/status/led_pattern`.
@@ -87,11 +87,12 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `cmd/spooder-monitor` + `internal/console`: the text console behind `mise run monitor`. It uses the link read-only (no source, so no writer) and never sends a frame; only `--keys` writes, printable ASCII only. No Gio, and cgo only on macOS.
   - `internal/protocol`: the link protocol in Go, byte for byte the C++ one, tested against `test/golden/protocol_v2.txt`.
   - `internal/link`: the serial port (`go.bug.st/serial`), the split of the stream into frames and debug text lines, the 20 ms writer (none for a nil source) and reconnecting by USB serial number.
-  - `internal/session`: the single state owner: observe or control, the e-stop, mode and clear counters, telemetry.
+  - `internal/session`: the single state owner: observe or control, the e-stop, mode and clear counters, telemetry, the latest pose.
+  - `internal/legview`: the legs pane's geometry: forward kinematics (tested against `test/golden/leg_pose.txt`), leg mounting, servo limits.
   - `internal/calib`: the joint table shown from reports, pending edits, one change in flight, resend and confirmation by request id.
   - `internal/export`: `calibration_defaults.cpp` in the fixed format (tested against the fixture `test/golden/calibration_defaults.cpp`), the checkout check, the diff and the atomic write.
   - `internal/ui`: the Gio window in the Blackfyre look; `internal/ui/fonts`: Archivo and JetBrains Mono with their OFL licences. `internal/appearance` and `internal/winreg` are copied from bopen (MIT, `desktop/LICENSE.bopen`).
-- `test/`: Unity host tests, one directory per area. `test/golden/` holds the golden files other implementations (the desktop calibrator) test against. They are fixed fixtures: never copy a calibration export over `calibration_defaults.cpp` there; regenerate `protocol_v2.txt` only for a deliberate protocol change (`SPOODER_WRITE_GOLDEN=1 mise run test`).
+- `test/`: Unity host tests, one directory per area. `test/golden/` holds the golden files other implementations (the desktop calibrator) test against. They are fixed fixtures: never copy a calibration export over `calibration_defaults.cpp` there; regenerate `protocol_v2.txt` and `leg_pose.txt` only for a deliberate protocol or kinematics change (`SPOODER_WRITE_GOLDEN=1 mise run test`).
 - `openspec/`: specifications (`specs/`) and changes (`changes/`). This is the source of truth for intended behaviour.
 
 ## Notes
