@@ -15,7 +15,7 @@
 
 - [x] 3.1 Add `test/test_leg_pose_golden`, writing `test/golden/leg_pose.txt` from `kinematics::solveLeg`; verify `mise run test` passes against the committed file
 - [x] 3.2 Add `desktop/internal/legview`: forward kinematics, side and top projections, leg mounting, limit classification and "not set"; verify its tests pass, including the round trip against `leg_pose.txt` and the calibration pose reading 0°/90°/90°
-- [ ] 3.3 Keep the latest pose and its age in `session` (forgotten on a new connection, stale after 1 s); verify the session tests pass
+- [x] 3.3 Keep the latest pose and its age in `session` (forgotten on a new connection, stale after 1 s); verify the session tests pass
 
 ## 4. Desktop UI
 
