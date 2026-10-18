@@ -152,19 +152,19 @@ public:
 /**
  * @brief Linearly interpolates between two values (f from 0.0 to 1.0).
  */
-inline float lerp(float a, float b, float f)
+inline float interpolate(float a, float b, float f)
 {
   return a * (1.0f - f) + (b * f);
 }
 
-inline Vector2 lerp(Vector2 a, Vector2 b, float f)
+inline Vector2 interpolate(Vector2 a, Vector2 b, float f)
 {
-  return Vector2(lerp(a.x, b.x, f), lerp(a.y, b.y, f));
+  return Vector2(interpolate(a.x, b.x, f), interpolate(a.y, b.y, f));
 }
 
-inline Vector3 lerp(Vector3 a, Vector3 b, float f)
+inline Vector3 interpolate(Vector3 a, Vector3 b, float f)
 {
-  return Vector3(lerp(a.x, b.x, f), lerp(a.y, b.y, f), lerp(a.z, b.z, f));
+  return Vector3(interpolate(a.x, b.x, f), interpolate(a.y, b.y, f), interpolate(a.z, b.z, f));
 }
 
 /**

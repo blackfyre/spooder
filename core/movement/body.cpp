@@ -294,7 +294,7 @@ static void stepSleep(BodyState &s, float dtS)
   bool allThere = true;
   for (int i = 0; i < LEG_COUNT; i++)
   {
-    Vector3 next = lerp(s.feet[i], REST_POSE, a);
+    Vector3 next = interpolate(s.feet[i], REST_POSE, a);
     if (next.distanceTo(REST_POSE) < SLEEP_SNAP_MM)
       next = REST_POSE;
     setFoot(s, i, next);
@@ -401,9 +401,9 @@ bool transitionActive(const BodyState &s)
 
 static void smoothCommand(BodyState &s, const MovementCommand &cmd, float dtS)
 {
-  s.translate = lerp(s.translate, cmd.translate, smoothing(dtS, TRANSLATE_TAU_S));
-  s.rotate = lerp(s.rotate, cmd.rotate, smoothing(dtS, ROTATE_TAU_S));
-  s.height = lerp(s.height, cmd.height, smoothing(dtS, HEIGHT_TAU_S));
+  s.translate = interpolate(s.translate, cmd.translate, smoothing(dtS, TRANSLATE_TAU_S));
+  s.rotate = interpolate(s.rotate, cmd.rotate, smoothing(dtS, ROTATE_TAU_S));
+  s.height = interpolate(s.height, cmd.height, smoothing(dtS, HEIGHT_TAU_S));
 }
 
 // Resolves the requested mode against the current mode. Sleep (requested or

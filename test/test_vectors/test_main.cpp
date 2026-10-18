@@ -8,9 +8,9 @@ void test_lerp_vector3_end_points_and_midpoint()
 {
   Vector3 a(0, 10, -20);
   Vector3 b(100, -10, 20);
-  TEST_ASSERT_TRUE(lerp(a, b, 0) == a);
-  TEST_ASSERT_TRUE(lerp(a, b, 1) == b);
-  Vector3 mid = lerp(a, b, 0.5f);
+  TEST_ASSERT_TRUE(interpolate(a, b, 0) == a);
+  TEST_ASSERT_TRUE(interpolate(a, b, 1) == b);
+  Vector3 mid = interpolate(a, b, 0.5f);
   TEST_ASSERT_FLOAT_WITHIN(1e-4, 50, mid.x);
   TEST_ASSERT_FLOAT_WITHIN(1e-4, 0, mid.y);
   TEST_ASSERT_FLOAT_WITHIN(1e-4, 0, mid.z);
