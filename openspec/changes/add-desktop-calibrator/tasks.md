@@ -2,15 +2,15 @@
 
 ## 1. Module and protocol
 
-- [ ] 1.1 Create the `desktop/` Go module (design D1) with Go, Gio and `go.bug.st/serial` pinned (design D2), and the `desktop-build`, `desktop-run` and `desktop-test` mise tasks including the dependency check. Verify `mise run desktop-test` on an empty test and `mise run desktop-build`.
-- [ ] 1.2 `internal/protocol`: frames, CRC and the incremental decoder for version 2. Verify `go test` against `test/golden/protocol_v2.txt` (decode every vector and re-encode it byte for byte), corruption rejection and resynchronisation.
-- [ ] 1.3 `internal/link`: the stream split into frames and text lines, the 20 ms writer, port discovery by USB ID, and reconnect (design D3). Verify `go test` with an in-memory port: interleaved text and frames, a stray 0xA5, partial reads, and reconnect.
+- [x] 1.1 Create the `desktop/` Go module (design D1) with Go, Gio and `go.bug.st/serial` pinned (design D2), and the `desktop-build`, `desktop-run` and `desktop-test` mise tasks including the dependency check. Verify `mise run desktop-test` on an empty test and `mise run desktop-build`.
+- [x] 1.2 `internal/protocol`: frames, CRC and the incremental decoder for version 2. Verify `go test` against `test/golden/protocol_v2.txt` (decode every vector and re-encode it byte for byte), corruption rejection and resynchronisation.
+- [x] 1.3 `internal/link`: the stream split into frames and text lines, the 20 ms writer, port discovery by USB ID, and reconnect (design D3). Verify `go test` with an in-memory port: interleaved text and frames, a stray 0xA5, partial reads, and reconnect.
 
 ## 2. Models (no window)
 
-- [ ] 2.1 `internal/session` (design D4): observe and control, e-stop, mode and clear counters, stale telemetry after 1 s, and the source and conflict flags. Verify `go test` for each requirement scenario that does not need hardware.
-- [ ] 2.2 `internal/calib` (design D5). Verify `go test` for pending, resend with the same id, confirmation, clamps and rejections shown as reported, and editing disabled outside control or Calibrate.
-- [ ] 2.3 `internal/export` (design D6). Verify `go test`: the golden test against `test/golden/calibration_defaults.cpp`, the checkout check, the diff, and an atomic write that touches only the one file.
+- [x] 2.1 `internal/session` (design D4): observe and control, e-stop, mode and clear counters, stale telemetry after 1 s, and the source and conflict flags. Verify `go test` for each requirement scenario that does not need hardware.
+- [x] 2.2 `internal/calib` (design D5). Verify `go test` for pending, resend with the same id, confirmation, clamps and rejections shown as reported, and editing disabled outside control or Calibrate.
+- [x] 2.3 `internal/export` (design D6). Verify `go test`: the golden test against `test/golden/calibration_defaults.cpp`, the checkout check, the diff, and an atomic write that touches only the one file.
 
 ## 3. User interface
 
