@@ -21,7 +21,7 @@ The pioarduino platform builds `partitions.bin` from `board_build.partitions` (i
 
 ### A PlatformIO post script, not a step in the mise task
 
-`firmware/bridge/scripts/check_image_size.py` is a `post:` entry in `extra_scripts`. It defines an always-built `checkimagesize` alias whose sources are `$BUILD_DIR/${PROGNAME}.bin` and `$BUILD_DIR/partitions.bin`, adds it to the default targets, and makes `upload` depend on it.
+`firmware/bridge/scripts/check_image_size.py` is a `post:` entry in `extra_scripts`. It defines an always-built `checkimagesize` alias whose sources are `$BUILD_DIR/${PROGNAME}.bin` and `$BUILD_DIR/partitions.bin`, adds it to the default targets, and makes `upload` and `erase_upload`, the targets that write the app image, depend on it.
 
 - A check run by the mise task after `pio run` cannot gate `upload-bridge`: `pio run -t upload` builds and flashes in one go, so the check would run after the board was written. Splitting the upload task into build, check and upload would work for the mise task but not for `pio run -t upload` run directly or from an IDE.
 - Inside SCons the script reads the exact paths and the app offset (`$ESP32_APP_OFFSET`) the platform uses, instead of re-deriving them.

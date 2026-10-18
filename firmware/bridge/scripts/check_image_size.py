@@ -39,4 +39,6 @@ check = env.AlwaysBuild(  # noqa: F821
     env.Alias("checkimagesize", [IMAGE, TABLE], env.VerboseAction(_check, "Checking app image size"))  # noqa: F821
 )
 env.Default(check)  # noqa: F821
-env.Depends("upload", check)  # noqa: F821
+# Both targets that write the app image (uploadfs writes the filesystem only).
+for upload_target in ("upload", "erase_upload"):
+    env.Depends(upload_target, check)  # noqa: F821
