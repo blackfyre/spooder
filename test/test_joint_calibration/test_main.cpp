@@ -373,7 +373,8 @@ static void checkDefaultsFile(const char *path, Joint parsed[JOINT_COUNT])
   {
     Joint j = parsed[i];
     TEST_ASSERT_FALSE_MESSAGE(clampJoint(j, parsed[i]), "a joint outside the guards' hard limits");
-    TEST_ASSERT_TRUE_MESSAGE(fabsf(parsed[i].offsetDeg * 100) <= 32767, "an offset the wire cannot carry");
+    long centideg = lroundf(parsed[i].offsetDeg * 100);
+    TEST_ASSERT_TRUE_MESSAGE(centideg >= INT16_MIN && centideg <= INT16_MAX, "an offset the wire cannot carry");
   }
   exportDefaults(parsed, exported, sizeof(exported));
   TEST_ASSERT_EQUAL_STRING(text, exported);
@@ -387,6 +388,12 @@ static void checkDefaultsFile(const char *path, Joint parsed[JOINT_COUNT])
 }
 
 // Equal as the file and the wire carry them: centidegrees and whole pulses.
+// An offset moved by @p deg towards zero, so it stays on the wire.
+static float towardsZero(float offsetDeg, float deg)
+{
+  return offsetDeg < 0 ? offsetDeg + deg : offsetDeg - deg;
+}
+
 static bool sameAsWritten(const Joint &a, const Joint &b)
 {
   return lroundf(a.offsetDeg * 100) == lroundf(b.offsetDeg * 100) && a.pulse0Us == b.pulse0Us &&
@@ -415,9 +422,9 @@ void test_an_exported_calibration_passes_every_check()
   // format check does not depend on it.
   Table t;
   loadDefaults(t);
-  t.joints[0] = joint(t.joints[0].offsetDeg + 12.34f, 612, 2390, true);
-  t.joints[8] = joint(t.joints[8].offsetDeg - 0.5f, 2500, 500);
-  t.joints[17] = joint(t.joints[17].offsetDeg - 7.07f, 400, 2600);
+  t.joints[0] = joint(towardsZero(t.joints[0].offsetDeg, 12.34f), 612, 2390, !t.joints[0].reversed);
+  t.joints[8] = joint(towardsZero(t.joints[8].offsetDeg, 0.5f), 2500, 500);
+  t.joints[17] = joint(towardsZero(t.joints[17].offsetDeg, 7.07f), 400, 2600);
   link_receiver::Receiver r;
   protocol::CalibrationReport rep = link_receiver::makeReport(r, t);
   static char text[calibration_export::MAX_TEXT_SIZE];

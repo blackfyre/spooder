@@ -111,6 +111,15 @@ func TestCommittedDefaultsRoundTrip(t *testing.T) {
 	checkDefaultsFile(t, filepath.Join(repoRoot, DefaultsPath))
 }
 
+// towardsZero moves an offset by c centidegrees towards zero, so it stays
+// on the wire.
+func towardsZero(offset, c int16) int16 {
+	if offset < 0 {
+		return offset + c
+	}
+	return offset - c
+}
+
 // A calibration exported into a checkout (here a temporary copy of the
 // committed defaults) passes the defaults checks, and the format check does
 // not depend on it.
@@ -127,9 +136,9 @@ func TestExportedCalibrationPassesEveryCheck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	table[0].OffsetCentideg += 1234
+	table[0].OffsetCentideg = towardsZero(table[0].OffsetCentideg, 1234)
 	table[0].Reversed = !table[0].Reversed
-	table[8] = calib.Joint{OffsetCentideg: table[8].OffsetCentideg - 50, Pulse0Us: 2500, Pulse180Us: 500}
+	table[8] = calib.Joint{OffsetCentideg: towardsZero(table[8].OffsetCentideg, 50), Pulse0Us: 2500, Pulse180Us: 500}
 	table[17].Pulse0Us, table[17].Pulse180Us = 400, 2600
 	plan, err := Prepare(dir, table)
 	if err != nil {
