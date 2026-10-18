@@ -150,6 +150,26 @@ description = "Build and start the desktop calibrator"
 depends = ["desktop-build"]
 run = "build/desktop/spooder-calibrator"
 
+# The virtual robot keeps the terminal (its commands: supply, estop, unplug...);
+# the calibrator opens on its port. Closing either one ends both.
+[tasks.desktop-sim]
+description = "Build and run the virtual robot with the desktop calibrator on its port"
+depends = ["virtual-robot", "desktop-build"]
+raw = true # the robot reads its commands from this terminal
+run = '''
+usb=build/virtual-robot/usb
+rm -f "$usb"
+robot=$$
+(
+  until [ -e "$usb" ]; do sleep 0.1; done
+  build/desktop/spooder-calibrator --port "$usb" &
+  calibrator=$!
+  while kill -0 "$robot" 2>/dev/null && kill -0 "$calibrator" 2>/dev/null; do sleep 0.2; done
+  kill "$calibrator" "$robot" 2>/dev/null
+) &
+exec build/virtual-robot/virtual-robot --link "$usb" --echo
+'''
+
 [tasks.desktop-test]
 description = "Run the desktop calibrator's Go tests (vet, then go test)"
 depends = ["desktop-deps"]

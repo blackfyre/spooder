@@ -38,6 +38,7 @@ mise run desktop-test    # gofmt, go vet and go test of desktop/
 mise run desktop-deps    # name the missing Linux packages for the Gio build
 mise run virtual-robot   # the virtual robot -> build/virtual-robot/virtual-robot
 mise run virtual-robot-run  # run it, USB terminal linked at build/virtual-robot/usb
+mise run desktop-sim      # both: the virtual robot in this terminal, the calibrator on its port
 mise run e2e             # build it, then the desktop end-to-end tests against it
 mise run clean
 ```
