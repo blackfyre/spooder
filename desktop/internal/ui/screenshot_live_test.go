@@ -17,6 +17,7 @@ import (
 	"github.com/blackfyre/spooder/desktop/internal/appearance"
 	"github.com/blackfyre/spooder/desktop/internal/calib"
 	"github.com/blackfyre/spooder/desktop/internal/link"
+	"github.com/blackfyre/spooder/desktop/internal/protocol"
 	"github.com/blackfyre/spooder/desktop/internal/session"
 	"github.com/blackfyre/spooder/desktop/internal/virtualrobot"
 )
@@ -114,6 +115,15 @@ func TestLiveScreenshots(t *testing.T) {
 		waitFor("Calibrate", func(s session.Snapshot) bool {
 			return s.Body == session.BodyCalibrate && s.Editable && s.Telemetry.OutputsOn
 		})
+		// The legs pane with the robot's live pose in the calibration pose.
+		time.Sleep(3 * time.Second) // the legs reach the calibration pose
+		w.tab = tabLegs
+		waitFor("a live pose with output on", func(s session.Snapshot) bool {
+			return s.HavePose && s.PoseFresh && s.Pose.Flags&protocol.PoseOutputsOn != 0
+		})
+		shoot("calibrate-legs")
+		w.tab = tabLog
+
 		w.sel = selection{joint: 8, field: calib.FieldPulse0}
 		pending := false
 		for try := 0; try < 20 && !pending; try++ {
@@ -135,6 +145,9 @@ func TestLiveScreenshots(t *testing.T) {
 		})
 		time.Sleep(1200 * time.Millisecond)
 		shoot("estop")
+		w.tab = tabLegs
+		frame(w, router)
+		shoot("estop-legs")
 
 		s.Shutdown()
 		l.Close()

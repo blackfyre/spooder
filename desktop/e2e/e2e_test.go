@@ -36,6 +36,9 @@ func TestObserveSendsNoController(t *testing.T) {
 	if !hasLog(s, "supply ") {
 		t.Fatal("no debug text in the log")
 	}
+	if !s.HavePose || !s.PoseFresh {
+		t.Fatal("no pose frames on USB")
+	}
 }
 
 // In control and in Calibrate, a joint change is confirmed by the robot's
