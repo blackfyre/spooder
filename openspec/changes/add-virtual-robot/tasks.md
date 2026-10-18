@@ -8,8 +8,8 @@
 
 ## 2. Virtual robot
 
-- [ ] 2.1 `tools/virtual-robot/` with CMake and the `virtual-robot` mise task (D3): terminals, link path, the timing modes. Verify it builds without warnings and a pty client reads text and telemetry.
-- [ ] 2.2 Simulated outputs, supply, current, simulated bridge, control commands and observation output. Verify by hand in stepped mode: overvoltage trips, e-stop latches, unplug and plug.
+- [x] 2.1 `tools/virtual-robot/` with CMake and the `virtual-robot` mise task (D3): terminals, link path, the timing modes. Verify it builds without warnings and a pty client reads text and telemetry.
+- [x] 2.2 Simulated outputs, supply, current, simulated bridge, control commands and observation output. Verify by hand in stepped mode: overvoltage trips, e-stop latches, unplug and plug.
 
 ## 3. Desktop and end to end
 

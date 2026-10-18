@@ -83,6 +83,20 @@ run = "rm -rf build .pio/build firmware/bridge/.pio/build"
 description = "Run host-side unit tests"
 run = "pio test -e native"
 
+# The virtual robot (tools/virtual-robot): the robot's control tick on the
+# host, speaking the link protocol over pseudo-terminals.
+[tasks.virtual-robot]
+description = "Build the virtual robot (build/virtual-robot/virtual-robot)"
+run = [
+  'cmake -S tools/virtual-robot -B build/virtual-robot -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPOODER_POWER_LIMITS=${SPOODER_POWER_LIMITS:-$PWD/firmware/servo2040/src/power_limits.h}',
+  "cmake --build build/virtual-robot",
+]
+
+[tasks.virtual-robot-run]
+description = "Build and run the virtual robot, its USB port linked at build/virtual-robot/usb"
+depends = ["virtual-robot"]
+run = "build/virtual-robot/virtual-robot --link build/virtual-robot/usb --echo"
+
 # Desktop calibrator (desktop/). Gio needs cgo and the Wayland, X11 and EGL
 # development packages on Linux; desktop-deps names any that are missing.
 [tasks.desktop-deps]
