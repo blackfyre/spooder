@@ -1,6 +1,6 @@
 ---
 name: spooder-firmware-shape
-description: Structural rules for the Spooder firmware on the Pimoroni Servo 2040 — core/ versus firmware/ split, the core 0 control loop, the power-protection layer between commands, movement and servo output, J6 pin allocation, PIO/DMA usage, state machines, named constants and failure handling. Use before adding a module or sensor, moving code, using the second core, or reviewing a change for structure.
+description: Structural rules for the Spooder firmwares (robot on the Pimoroni Servo 2040, gamepad bridge on the TTGO T-Display) — core/ versus firmware/ split, the core 0 control loop, the power-protection layer between commands, movement and servo output, the bridge link boundary, J6 pin allocation, PIO/DMA/UART usage, the bridge's task layout, state machines, named constants and failure handling. Use before adding a module or sensor, moving code, using the second core, changing the link, or reviewing a change for structure.
 ---
 
 # Spooder firmware shape
@@ -11,8 +11,8 @@ Adapted from architecture guidance on modules, explicit state machines, named co
 
 | Layer | Where | Rules |
 |---|---|---|
-| Hardware-free core | `core/` (`movement/`, `protection/`) | Only `<math.h>`, `<stdint.h>` and other `core/` headers. No pico-sdk, no pimoroni, no globals with hidden state; pass state structs explicitly. Every behaviour change needs host tests (`test/`, `mise run test`). Built into the firmware as `spooder_core` with `-Wall -Wextra`. |
-| Hardware adapters | `firmware/servo2040/src/` | Thin: read hardware into core inputs, or apply core outputs to hardware. No decisions that could live in `core/`. Each adapter exposes `setup()` plus a small API in its header; file-local state is `static`. |
+| Hardware-free core | `core/` (`movement/`, `protection/`, `protocol/`, `gamepad_mapping/`, `status/`) | Only `<math.h>`, `<stdint.h>` and other `core/` headers (`status/status_screen` also uses `<stdio.h>` for `snprintf`). No SDKs, no globals with hidden state; pass state structs explicitly. Every behaviour change needs host tests (`test/`, `mise run test`). Built into the robot as `spooder_core` with `-Wall -Wextra`; the bridge compiles the parts it uses into its `main` component. |
+| Hardware adapters | `firmware/servo2040/src/`, `firmware/bridge/main/` | Thin: read hardware into core inputs, or apply core outputs to hardware. No decisions that could live in `core/`. Each adapter exposes `setup()`/`start()` plus a small API in its header; file-local state is `static`. |
 
 New logic goes into `core/` unless it truly needs hardware. A controller mapping, a filter or a protocol parser is core logic.
 
@@ -21,18 +21,20 @@ New logic goes into `core/` unless it truly needs hardware. A controller mapping
 `main.cpp` runs a 20 ms period loop (`LOOP_PERIOD_MS`, `sleep_until`; an overrun restarts the period):
 
 ```
+input   = readInput(now)                      // link::poll, or serial_commands::poll; bounded, never blocks
 reading = power_monitor::read()
-prot    = protection::step(state, reading, now, clearFromPreviousTick)  // first, always
+prot    = protection::step(state, reading, now, input.clearFaults, input.emergencyStop)
 servo_output::setInhibited(!prot.allowOutput)
-input   = serial_commands::poll(now)          // bounded per tick; later: the bridge link
-run     = protection::supervise(supervisor, prot, input.mode, input.requestSeq)
+requested = command fresh (≤ 1 s) ? input.mode : Sleep
+run     = protection::supervise(supervisor, prot, requested, input.requestSeq)
 if run.stopBody:  servo_output::stop()                 // output-cutting fault: body stops
 if run.startBody: body::init(bodyState)                // boot, and restart after such a fault
 if run.runBody:   body::step(bodyState, cmd with run.mode, now); servo_output::apply(bodyState)
 status_leds::show(...)
+every fifth tick: link::sendTelemetry(...)   // non-blocking
 ```
 
-- **Protection runs first in the tick.** Nothing in the tick can delay a trip, and input reading is bounded (`MAX_CHARS_PER_POLL`).
+- **Input, then protection, at the top of the tick.** Input comes first so an emergency stop in a frame that has already arrived acts in this tick (within 20 ms). Both sources are bounded and non-blocking (`MAX_CHARS_PER_POLL`; the link drains at most its 256-byte ring), so they cannot meaningfully delay a trip.
 - **Input sources count explicit mode requests (`requestSeq`).** After any fault, nothing moves until the count changes, so clearing a fault never restarts motion by itself.
 - **Recovery:**
   - Faults that cut output stop the body; it restarts through Initialise once output is allowed and a new request has been made.
@@ -52,19 +54,42 @@ status_leds::show(...)
 | PIO 1 SM 0 + DMA + a repeating timer | WS2812 LEDs (`status_leds`, 10 fps) |
 | ADC via the 74LV4051 mux (GPIO22/24/25 address, GPIO29 `SHARED_ADC`) | `power_monitor` (current at address 7, voltage at 6); sensor headers at 0–5 |
 | USB | stdio console |
-| UART | **none**: GPIO0/1 are servos; never enable stdio UART |
+| UART1 on GPIO20/21 + `UART1_IRQ` | the bridge link (`link`): RX ring and TX feed under the interrupt |
+| UART0 / stdio UART | **none**: GPIO0/1 are servos; never enable stdio UART |
 
 J6 header (unpopulated; solder a header) allocation:
 
 | J6 pin | GPIO | Use |
 |---|---|---|
-| 14 / 13 | 20 / 21 | UART1 TX/RX to the gamepad bridge (`add-gamepad-bridge`); enable the RX pull-up |
+| 14 / 13 | 20 / 21 | UART1 TX/RX to the gamepad bridge (`link`); RX pull-up enabled in `link::setup` |
 | 10 / 9 | 26 / 27 | I²C1 SDA/SCL to the sensors (`add-body-sensing`); needs external pull-ups |
 | 8 | 28 | IMU interrupt |
 | 12 | 19 | spare (`I2C_INT`) |
 | 15 / 16 / 17 | — | 3V3 / GND / 5V |
 
 The board has no pull-ups on GPIO19–21 or 26–28. Check for clashes before claiming any pin or PIO resource.
+
+## The bridge link
+
+- **Boundary:** `core/protocol` owns framing (versioned, CRC-16/CCITT-FALSE, fixed little-endian payloads, incremental decoder). `core/protocol/link_receiver` owns what a decoded command means to the robot. The two `link` adapters only move bytes. Both firmwares compile the same protocol code; change it in one place and bump `protocol::VERSION` when the layout changes.
+- **Frames carry desired state, never events.** Counters stand in for events: the fault-clear counter (one clear per change) and the mode-request counter (advances `requestSeq` for the resume gate). After a link gap of 200 ms or more, the first frame only sets the counter baselines, so a restarted bridge cannot clear faults or count as a request.
+- **Staleness:** commands are stamped on arrival; the body's 1 s stale rule turns a silent link into Sleep, and a stale command never starts a stopped body.
+- **Decoder false starts:** the earliest candidate is kept until its CRC is checked. Each side calls `Decoder::idle()` when the line has been quiet longer than one frame, so a false start cannot hide a frame behind it.
+- **Rates:** commands every 20 ms (bridge), telemetry every 100 ms (robot), 115200 8N1.
+
+## The bridge (TTGO T-Display, ESP32)
+
+| Context | Core | Work |
+|---|---|---|
+| BTstack / Bluepad32 | 0 | Bluetooth; callbacks into `bridge.cpp` |
+| `robot_link` task, priority 5 | 1 | every 20 ms (`xTaskDelayUntil`): sample the GPIO35 e-stop button, send a command frame, decode telemetry |
+| Arduino `loop()`, priority 1 | 1 | `BP32.update()`, `gamepad_mapping::update`, hand the desired state to the link task, redraw the screen (≤ 4 Hz, changed lines only) |
+
+- Shared state between `loop()` and the link task is copied under one spinlock (`portMUX`); nothing else is shared.
+- The screen must never delay command frames: keep drawing in `loop()`, never in the link task.
+- One controller slot (`CONFIG_BLUEPAD32_MAX_DEVICES=1`, plus a refusal in `onConnected`). WiFi is never started.
+- Pins: link UART1 TX GPIO27, RX GPIO26; e-stop GPIO35 (input only, board pull-up); display SPI MOSI 19, SCLK 18, CS 5, DC 16, RST 23, backlight 4. GPIO0 is a strapping pin: leave it unused.
+- The Bluepad32 console owns UART0 (the USB bridge); use `Console`, not `Serial`.
 
 ## State and constants
 
@@ -85,6 +110,6 @@ The board has no pull-ups on GPIO19–21 or 26–28. Check for clashes before cl
 
 ## Verification
 
-- **Gates:** `mise run test`, plus the firmware build with limits configured, with no new warnings in `core/` or `firmware/`.
+- **Gates:** `mise run test`; `mise run build` with limits configured, with and without `--serial`; `mise run build-bridge`. No new warnings in `core/` or `firmware/`.
 - **Logic tests** live with `core/`. Each bug fix there gets a regression test that fails without the fix.
 - **Hardware behaviour** is checked with the `spooder-hardware-check` skill.

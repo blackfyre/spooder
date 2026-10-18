@@ -71,17 +71,20 @@ offset size field
   - both sides share one C++ definition;
   - the version byte allows the format to evolve.
 - **Why a 1-byte length with resynchronisation on the start marker:** it bounds parser state. A start marker byte inside a payload is harmless, because the CRC rejects a false frame.
+- **Abandoning a false start:** the decoder keeps the earliest candidate until its CRC can be checked, so a start marker inside a payload never splits a genuine frame. A false start is abandoned when the line goes quiet: each side calls the decoder's `idle()` when no byte has arrived for longer than a frame takes to send (a tick with no received bytes is enough at both rates). The rescan then recovers any complete frame behind it.
 
 ### D3. Rates and baud
 
 - **Baud:** 115200 8N1. A command frame of 19 bytes at 50 Hz uses about 8 % of the link; telemetry of about 39 bytes at 10 Hz uses about 3 %.
 - **Robot side:** an interrupt-driven RX ring buffer. Each 20 ms tick drains it and keeps the newest valid command. Telemetry TX happens from the main loop every fifth tick, using the UART FIFO with no blocking writes.
-- **Bridge side:** command TX on a 20 ms software timer in `loop()`, and the RX parse also runs in `loop()`.
+- **Bridge side:** a dedicated FreeRTOS task (priority 5, above Arduino's `loop()` at 1, on the same core) sends a command frame every 20 ms with `xTaskDelayUntil`, samples the e-stop button, and decodes telemetry. `loop()` runs Bluepad32, the mapping and the screen, and hands the newest desired state to the task under a spinlock. Revised from "TX in `loop()`": a full-screen redraw takes about 13 ms at 40 MHz SPI, which would push frames past their 20 ms slot.
 
 ### D4. Robot integration
 
 - `link` produces `{MovementCommand, controllerConnected, estop, clearCounter}` from the newest valid frame and stamps `issuedAtMs = millis()` on arrival.
-- It keeps the last-seen clear counter and turns each new value into one clear request for `protection::step`.
+- It keeps the last-seen clear counter and turns each new value into one clear request for `protection::step`. Each change of the mode-request counter advances the robot's own `requestSeq` for the resume gate.
+- After a link gap of 200 ms or more (power-up, cable pull, bridge restart), the first frame only sets the counter baselines. A rebooted bridge starts its counters again and its e-stop toggle released; without the baseline, that change would clear the robot's faults and count as a new request, and so restart motion with nobody asking.
+- This logic is hardware-free, in `core/protocol/link_receiver`, and host-tested; `firmware/servo2040/src/link` only moves bytes.
 - **Emergency stop** becomes a protection input. `core/protection` gains an `estop` input and an `EmergencyStop` fault that inhibits output and clears only when the stop is released and a clear is requested. Its tests live with the other protection tests.
 - **Controller disconnected:** the bridge already requests Sleep in that case. The robot also treats a frame without a connected controller as a Sleep request, as a second line of defence.
 - The serial command hook becomes `-DSPOODER_SERIAL_COMMANDS`, off by default. When it is on, it replaces the link as the command source.
@@ -110,6 +113,21 @@ offset size field
   - Fallback: ESP-IDF `esp_lcd` with an ST7789 panel driver and a small bitmap font. The first bridge task verifies LovyanGFX builds and runs; if it doesn't, it switches to the fallback.
 - **Screen redraws:** run in `loop()` on core 1, at most every 250 ms, drawing only the fields that changed. A full-screen redraw happens only when the link state changes.
 - `mise` tasks: `build-bridge`, `upload-bridge` and `monitor-bridge`, which call `pio run -d firmware/bridge`.
+- **Pinned versions (verified building on 2026-10-17):**
+
+  | Component | Pin |
+  |---|---|
+  | Bluepad32 template | `external/bluepad32-template`, tag 5.0.0-beta0, commit `2c881858b6d7` |
+  | Bluepad32 | 5.0.0 (vendored in the template) |
+  | Arduino core | 3.3.12, template submodule commit `94afccf35fb1` |
+  | BTstack | template submodule commit `8a8b616e04b0` |
+  | pioarduino platform | 55.03.31-2, which provides ESP-IDF 5.5.1 |
+  | pioarduino PlatformIO core | 6.1.18, installed by the platform into `.pio-core/penv` |
+  | LovyanGFX | `external/LovyanGFX`, tag 1.2.32, commit `e2cc321544fd` |
+
+  The template's README asks for ESP-IDF 5.5.5; the pinned platform provides 5.5.1 and the build succeeds. Revisit if Bluetooth misbehaves at bring-up.
+- **Two PlatformIO cores:** mise's PlatformIO 6.2.0 (host tests) and pioarduino's 6.1.18 pin different SCons versions; building with 6.2.0 reinstalls SCons under the running build and fails. The bridge tasks therefore run the platform's own core, with `PLATFORMIO_CORE_DIR=.pio-core` so its ESP-IDF Python environment is built from mise's Python 3.13. (`pydantic-core` does not yet build on Python 3.14.) `pyyaml` is added to mise's PlatformIO, because the platform imports it while bootstrapping.
+- **Namespace clashes on ESP-IDF:** the bridge's link module is `robot_link`, because POSIX `link()` is visible there. `core/movement/vectors.h` calls its helpers `interpolate`, not `lerp`, because C++20 `std::lerp` is visible.
 
 ### D7. Testing
 

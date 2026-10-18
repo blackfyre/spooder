@@ -5,3 +5,7 @@
 .vscode/ipch
 .codegraph/
 build/
+.pio-core/
+firmware/bridge/managed_components/
+firmware/bridge/sdkconfig.*
+!firmware/bridge/sdkconfig.defaults

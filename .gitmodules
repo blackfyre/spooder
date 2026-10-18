@@ -4,3 +4,9 @@
 [submodule "external/pimoroni-pico"]
 	path = external/pimoroni-pico
 	url = https://github.com/pimoroni/pimoroni-pico
+[submodule "external/bluepad32-template"]
+	path = external/bluepad32-template
+	url = https://github.com/ricardoquesada/esp-idf-arduino-bluepad32-template
+[submodule "external/LovyanGFX"]
+	path = external/LovyanGFX
+	url = https://github.com/lovyan03/LovyanGFX
