@@ -96,6 +96,7 @@ type window struct {
 	portSel    int // index into ports, -1 for none
 	portsCh    chan []link.PortInfo
 	portClicks []widget.Clickable
+	portList   layout.List
 	// device is the device the operator connected to, nil when released.
 	device *link.PortInfo
 
@@ -244,19 +245,27 @@ func (w *window) loop(win *app.Window) error {
 		case app.DestroyEvent:
 			return e.Err
 		case app.ConfigEvent:
-			// Windows has no appearance change notification; read it again
-			// when the window regains focus (as bopen does).
-			if e.Config.Focused {
-				select {
-				case w.looks <- appearance.Read():
-				default:
-				}
-			}
+			w.focusChanged(e.Config.Focused)
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, e)
 			w.frame(gtx)
 			e.Frame(gtx.Ops)
 		}
+	}
+}
+
+// focusChanged follows the window focus. Losing it forgets a held Space,
+// whose release then goes elsewhere. Windows has no appearance change
+// notification, so the appearance is read again on regaining it (as bopen
+// does).
+func (w *window) focusChanged(focused bool) {
+	if !focused {
+		w.space.reset()
+		return
+	}
+	select {
+	case w.looks <- appearance.Read():
+	default:
 	}
 }
 
@@ -326,7 +335,7 @@ func (w *window) handle(gtx layout.Context) {
 			continue
 		}
 		if ke.Name == key.NameSpace {
-			if w.space.press(ke.State, gtx.Now) {
+			if w.space.press(ke.State) {
 				s.ToggleEmergencyStop()
 			}
 			continue

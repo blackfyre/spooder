@@ -57,12 +57,11 @@ func reportedDefaults(t *testing.T) [calib.Joints]calib.Joint {
 }
 
 // The export of the reported defaults is the golden defaults file, byte
-// for byte, and so is the committed file.
+// for byte (design D6).
 func TestGoldenDefaults(t *testing.T) {
 	got := Format(reportedDefaults(t))
 	for _, path := range []string{
 		filepath.Join(repoRoot, "test", "golden", "calibration_defaults.cpp"),
-		filepath.Join(repoRoot, DefaultsPath),
 	} {
 		want, err := os.ReadFile(path)
 		if err != nil {

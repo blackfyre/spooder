@@ -51,30 +51,36 @@ func (w *window) connectionBlock(gtx layout.Context) layout.Dimensions {
 	snap := w.snap
 	return stacked(gtx, 6,
 		func(gtx layout.Context) layout.Dimensions {
-			ws := []layout.Widget{tracked(w.th, sizeLabel, w.pal.Muted, "Port")}
-			if len(w.ports) == 0 {
-				ws = append(ws, valueLabel(w.th, sizeLabel, w.pal.Muted, "no serial ports").Layout)
-			}
-			for i := range w.ports {
-				p := w.ports[i]
-				kind := kindQuiet
-				if i == w.portSel {
-					kind = kindActive
-				}
-				label := p.Name
-				if p.IsServo2040() {
-					label += " servo 2040"
-				}
-				ws = append(ws, w.button(&w.portClicks[i], kind, label, w.device == nil).Layout)
-			}
-			ws = append(ws, w.button(&w.refresh, kindQuiet, "Refresh", w.device == nil).Layout)
 			label := "Connect"
 			enabled := w.portSel >= 0
 			if w.device != nil {
 				label, enabled = "Disconnect", true
 			}
-			ws = append(ws, w.button(&w.connect, kindNeutral, label, enabled).width(110).Layout)
-			return sideBySide(gtx, 6, ws...)
+			// The ports scroll sideways, so Refresh and Connect always fit.
+			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(tracked(w.th, sizeLabel, w.pal.Muted, "Port")),
+				layout.Rigid(layout.Spacer{Width: 6}.Layout),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					if len(w.ports) == 0 {
+						return valueLabel(w.th, sizeLabel, w.pal.Muted, "no serial ports").Layout(gtx)
+					}
+					return w.portList.Layout(gtx, len(w.ports), func(gtx layout.Context, i int) layout.Dimensions {
+						p := w.ports[i]
+						kind := kindQuiet
+						if i == w.portSel {
+							kind = kindActive
+						}
+						label := p.Name
+						if p.IsServo2040() {
+							label += " servo 2040"
+						}
+						return layout.Inset{Right: 6}.Layout(gtx, w.button(&w.portClicks[i], kind, label, w.device == nil).Layout)
+					})
+				}),
+				layout.Rigid(w.button(&w.refresh, kindQuiet, "Refresh", w.device == nil).Layout),
+				layout.Rigid(layout.Spacer{Width: 6}.Layout),
+				layout.Rigid(w.button(&w.connect, kindNeutral, label, enabled).width(110).Layout),
+			)
 		},
 		func(gtx layout.Context) layout.Dimensions {
 			c := w.pal.Muted
@@ -84,9 +90,13 @@ func (w *window) connectionBlock(gtx layout.Context) layout.Dimensions {
 			case link.Waiting:
 				c = w.pal.Yellow
 			}
-			return sideBySide(gtx, 8,
-				dot(c, 9),
-				oneLine(valueLabel(w.th, sizeLabel, w.pal.Fg, connectionText(snap.Link))).Layout,
+			// The message wraps: the permission hint must be readable at
+			// any window width.
+			return layout.Flex{}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Inset{Top: 3, Right: 8}.Layout(gtx, dot(c, 9))
+				}),
+				layout.Flexed(1, wrapped(valueLabel(w.th, sizeLabel, w.pal.Fg, connectionText(snap.Link)))),
 			)
 		},
 	)

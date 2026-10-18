@@ -196,10 +196,18 @@ func TestHeldSpaceTogglesOnce(t *testing.T) {
 	if s.Command().Flags&protocol.FlagEmergencyStop != 0 {
 		t.Fatal("second press did not release")
 	}
-	// A press whose release was lost, then a new press much later.
+	// However long the key is held, repeats never toggle it back.
 	router.Queue(key.Event{Name: key.NameSpace, State: key.Press})
 	frame(w, router)
-	clock = clock.Add(2 * repeatGap)
+	clock = clock.Add(5 * time.Second)
+	router.Queue(key.Event{Name: key.NameSpace, State: key.Press})
+	frame(w, router)
+	if s.Command().Flags&protocol.FlagEmergencyStop == 0 {
+		t.Fatal("a slow repeat released the e-stop")
+	}
+	// The window loses the focus while Space is down, so its release is
+	// lost: the next press still counts.
+	w.focusChanged(false)
 	router.Queue(key.Event{Name: key.NameSpace, State: key.Press})
 	frame(w, router)
 	if s.Command().Flags&protocol.FlagEmergencyStop != 0 {
