@@ -179,7 +179,7 @@ Setup mode turns the bridge into a WiFi access point with a captive portal; Blue
 2. Pick a leg and joint. Nudge the offset (±0.5°, ±1°, ±5°), the 0° and 180° pulses (±10, ±50 µs) or the direction. `Waiting for the robot...` shows until a report confirms the change; the shown values are always the robot's, and `Last change: clamped` or `rejected` says the robot changed or refused it. The joint follows at 60°/s at most.
 3. **E-stop:** the bridge's right button stops output as in normal operation, and the portal shows `EMERGENCY STOP`. The button toggles: press it again to release the stop, then press **Clear faults** and a mode button to move again.
 4. **Phone away:** close or lock the phone, or walk out of range. Within about 1 s the portal stops counting as a controller, and the robot sleeps. The portal's mode stays Sleep when it comes back, until a mode button is pressed.
-5. **Export:** press Export, then Copy (or select the text by hand). Paste it over `core/movement/calibration_defaults.cpp` whole, then copy it to `test/golden/calibration_defaults.cpp` too, as the host tests require both to be equal. Rebuild and flash the robot, then check in Calibrate that the robot reports the same table.
+5. **Export:** press Export, then Copy (or select the text by hand). Paste it over `core/movement/calibration_defaults.cpp` whole (leave `test/golden/` alone: its files are format fixtures), and run `mise run test`. Rebuild and flash the robot, then check in Calibrate that the robot reports the same table.
 
 Record results in `openspec/changes/add-bridge-setup-portal/tasks.md` (task 3.2).
 
@@ -202,8 +202,7 @@ The desktop app in `desktop/` speaks the link protocol on the robot's USB port. 
 4. **Calibrate.** Select a joint with the arrow keys or the pointer; `=`/`-` nudge fine, Shift coarse, `R` flips the direction. A change shows `pending` until the robot's report confirms it; clamped or rejected changes are marked and show the robot's value. The joint moves at 60°/s at most.
 5. **Release control.** The robot sleeps (LED 6 fast amber without a bridge). Closing the window or pulling the cable does the same within about 1 s.
 6. **Conflict.** Take control while the gamepad is connected: the app and the bridge screen show the conflict, LED 6 alternates magenta and cyan, and the robot sleeps until one side lets go.
-7. **Export.** Show difference, check it, Write file: only `core/movement/calibration_defaults.cpp` changes. Or Copy text. Rebuild and flash, then confirm the robot reports the same table in Calibrate.
-   - The host tests pin the seed defaults: after an export, `test/golden/calibration_defaults.cpp` and `test_defaults_are_the_former_leg_offsets` no longer match the file, so `mise run test` fails until they are brought in line.
+7. **Export.** Show difference, check it, Write file: only `core/movement/calibration_defaults.cpp` changes. Or Copy text. Run `mise run test` (it checks the file's format and round trip, not its values), rebuild and flash, then confirm the robot reports the same table in Calibrate. Leave `test/golden/` alone: its files are format fixtures.
 
 Record results in `openspec/changes/add-desktop-calibrator/tasks.md` (task 4.2).
 

@@ -1,76 +1,159 @@
 package export
 
 import (
-	"bufio"
-	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/blackfyre/spooder/desktop/internal/calib"
-	"github.com/blackfyre/spooder/desktop/internal/protocol"
 )
 
 var repoRoot = filepath.Join("..", "..", "..")
 
-// reportedDefaults decodes the golden report of the compiled defaults
-// (calibration_report_defaults in test/golden/protocol_v2.txt, written by
-// the C++ encoder from joint_calibration::DEFAULTS).
-func reportedDefaults(t *testing.T) [calib.Joints]calib.Joint {
-	t.Helper()
-	f, err := os.Open(filepath.Join(repoRoot, "test", "golden", "protocol_v2.txt"))
+// fixture is the format fixture of test/test_joint_calibration (the same
+// table in every exporter's tests). Its export is
+// test/golden/calibration_defaults.cpp, which never changes with
+// calibration.
+var fixture = [calib.Joints]calib.Joint{
+	joint(-50, 2450, 610, true), joint(0, 500, 2500, false), joint(-2999, 2500, 500, false),
+	joint(7650, 612, 2390, true), joint(10525, 400, 2600, false), joint(-1807, 1000, 2000, false),
+	joint(9001, 520, 2480, false), joint(-12040, 2600, 1600, true), joint(700, 1400, 400, false),
+	joint(8733, 505, 2495, false), joint(8010, 498, 2502, true), joint(-2600, 700, 2300, false),
+	joint(8599, 1500, 2500, false), joint(-1, 500, 1500, false), joint(-1650, 2400, 600, true),
+	joint(17999, 450, 2550, false), joint(-18000, 2550, 450, true), joint(1234, 640, 2360, false),
+}
+
+func joint(offsetCentideg int16, pulse0Us, pulse180Us uint16, reversed bool) calib.Joint {
+	return calib.Joint{OffsetCentideg: offsetCentideg, Pulse0Us: pulse0Us, Pulse180Us: pulse180Us, Reversed: reversed}
+}
+
+// The export of the fixture is the golden file, byte for byte (design D6).
+func TestGoldenFixture(t *testing.T) {
+	path := filepath.Join(repoRoot, "test", "golden", "calibration_defaults.cpp")
+	want, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 64*1024), 1024*1024)
-	for sc.Scan() {
-		parts := strings.Split(sc.Text(), " ")
-		if parts[0] != "calibration_report_defaults" {
-			continue
-		}
-		raw, err := hex.DecodeString(parts[1])
-		if err != nil {
-			t.Fatal(err)
-		}
-		var d protocol.Decoder
-		for _, b := range raw {
-			d.Push(b)
-		}
-		frame, ok := d.Next()
-		if !ok || frame.Type != protocol.TypeCalibrationReport {
-			t.Fatal("golden defaults report does not decode")
-		}
-		var table [calib.Joints]calib.Joint
-		for i, j := range frame.CalibrationReport.Joints {
-			table[i] = calib.FromWire(j)
-		}
-		return table
+	if got := Format(fixture); got != string(want) {
+		t.Errorf("export differs from %s:\n%s", path, render(Diff(string(want), got)))
 	}
-	t.Fatal("no calibration_report_defaults vector")
-	return [calib.Joints]calib.Joint{}
+	if parsed, err := parse(string(want)); err != nil || parsed != fixture {
+		t.Errorf("golden file parses as %v, %v", parsed, err)
+	}
 }
 
-// The export of the reported defaults is the golden defaults file, byte
-// for byte (design D6).
-func TestGoldenDefaults(t *testing.T) {
-	got := Format(reportedDefaults(t))
-	for _, path := range []string{
-		filepath.Join(repoRoot, "test", "golden", "calibration_defaults.cpp"),
-	} {
-		want, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got != string(want) {
-			t.Errorf("export differs from %s:\n%s", path, render(Diff(string(want), got)))
-		}
+var jointLine = regexp.MustCompile(`^  \{(-?)(\d+)\.(\d\d), (\d+), (\d+), (true|false)\}, // leg (\d) (coxa|femur|tibia)$`)
+
+// parse reads the 18 joint lines of a defaults file, which must name the
+// joints in output order. The rest of the text is checked by the round trip.
+func parse(text string) ([calib.Joints]calib.Joint, error) {
+	var table [calib.Joints]calib.Joint
+	const open = "const joint_calibration::Joint DEFAULTS[18] = {\n"
+	at := strings.Index(text, open)
+	if at < 0 {
+		return table, errors.New("no table")
 	}
+	lines := strings.Split(text[at+len(open):], "\n")
+	if len(lines) < calib.Joints {
+		return table, errors.New("too few joint lines")
+	}
+	for i := range table {
+		m := jointLine.FindStringSubmatch(lines[i])
+		if m == nil || m[7] != strconv.Itoa(calib.Leg(i)) || m[8] != calib.Name(i) {
+			return table, fmt.Errorf("joint %d: %q", i, lines[i])
+		}
+		whole, _ := strconv.Atoi(m[2])
+		frac, _ := strconv.Atoi(m[3])
+		c := whole*100 + frac
+		if m[1] == "-" {
+			c = -c
+		}
+		p0, err0 := strconv.ParseUint(m[4], 10, 16)
+		p180, err180 := strconv.ParseUint(m[5], 10, 16)
+		if c < math.MinInt16 || c > math.MaxInt16 || err0 != nil || err180 != nil {
+			return table, fmt.Errorf("joint %d: %q out of range", i, lines[i])
+		}
+		table[i] = calib.Joint{OffsetCentideg: int16(c), Pulse0Us: uint16(p0), Pulse180Us: uint16(p180), Reversed: m[6] == "true"}
+	}
+	return table, nil
+}
+
+// checkDefaultsFile checks a defaults file, whatever its values: it parses
+// as 18 joints in output order and the export of what it holds reproduces
+// it byte for byte.
+func checkDefaultsFile(t *testing.T, path string) [calib.Joints]calib.Joint {
+	t.Helper()
+	text, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := parse(string(text))
+	if err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	if got := Format(table); got != string(text) {
+		t.Fatalf("export of %s differs from it:\n%s", path, render(Diff(string(text), got)))
+	}
+	return table
+}
+
+// The committed defaults round-trip through the export, whatever the
+// calibration in them.
+func TestCommittedDefaultsRoundTrip(t *testing.T) {
+	checkDefaultsFile(t, filepath.Join(repoRoot, DefaultsPath))
+}
+
+// towardsZero moves an offset by c centidegrees towards zero, so it stays
+// on the wire.
+func towardsZero(offset, c int16) int16 {
+	if offset < 0 {
+		return offset + c
+	}
+	return offset - c
+}
+
+// A calibration exported into a checkout (here a temporary copy of the
+// committed defaults) passes the defaults checks, and the format check does
+// not depend on it.
+func TestExportedCalibrationPassesEveryCheck(t *testing.T) {
+	dir := checkout(t)
+	committed, err := os.ReadFile(filepath.Join(repoRoot, DefaultsPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, DefaultsPath), committed, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	table, err := parse(string(committed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	table[0].OffsetCentideg = towardsZero(table[0].OffsetCentideg, 1234)
+	table[0].Reversed = !table[0].Reversed
+	table[8] = calib.Joint{OffsetCentideg: towardsZero(table[8].OffsetCentideg, 50), Pulse0Us: 2500, Pulse180Us: 500}
+	table[17].Pulse0Us, table[17].Pulse180Us = 400, 2600
+	plan, err := Prepare(dir, table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.Changed {
+		t.Fatal("no change to write")
+	}
+	if err := plan.Write(); err != nil {
+		t.Fatal(err)
+	}
+	if got := checkDefaultsFile(t, filepath.Join(dir, DefaultsPath)); got != table {
+		t.Fatalf("written %v, want %v", got, table)
+	}
+	TestGoldenFixture(t)
 }
 
 func render(d []DiffLine) string {
@@ -169,7 +252,7 @@ func TestWriteTouchesOnlyTheDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := tree(t, dir)
-	table := reportedDefaults(t)
+	table := fixture
 	table[4].Pulse0Us = 2450
 	plan, err := Prepare(dir, table)
 	if err != nil {
@@ -235,7 +318,7 @@ func keys(m map[string]entry) []string {
 // Spec "Not a checkout": the app refuses and says why.
 func TestNotACheckout(t *testing.T) {
 	empty := t.TempDir()
-	_, err := Prepare(empty, reportedDefaults(t))
+	_, err := Prepare(empty, fixture)
 	if !errors.Is(err, ErrNotCheckout) || !strings.Contains(err.Error(), "core/movement/calibration_defaults.cpp") {
 		t.Fatalf("empty dir: %v", err)
 	}
@@ -293,7 +376,7 @@ func TestSymlinkedDirectoriesAreRefused(t *testing.T) {
 		if err := os.Symlink(outside, filepath.Join(dir, linked)); err != nil {
 			t.Skip("no symlinks:", err)
 		}
-		if _, err := Prepare(dir, reportedDefaults(t)); !errors.Is(err, ErrNotCheckout) {
+		if _, err := Prepare(dir, fixture); !errors.Is(err, ErrNotCheckout) {
 			t.Errorf("%s linked: %v", linked, err)
 		}
 	}
@@ -301,7 +384,7 @@ func TestSymlinkedDirectoriesAreRefused(t *testing.T) {
 
 func TestWriteRefusesAFileChangedSinceTheDiff(t *testing.T) {
 	dir := checkout(t)
-	plan, err := Prepare(dir, reportedDefaults(t))
+	plan, err := Prepare(dir, fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +406,7 @@ func TestWriteFailureLeavesTheFileAndNoTemporary(t *testing.T) {
 		t.Skip("root ignores directory permissions")
 	}
 	dir := checkout(t)
-	plan, err := Prepare(dir, reportedDefaults(t))
+	plan, err := Prepare(dir, fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +439,7 @@ func assertNoTemporaries(t *testing.T, dir string) {
 
 func TestUnchangedExportWritesNothing(t *testing.T) {
 	dir := checkout(t)
-	table := reportedDefaults(t)
+	table := fixture
 	path := filepath.Join(dir, DefaultsPath)
 	if err := os.WriteFile(path, []byte(Format(table)), 0o644); err != nil {
 		t.Fatal(err)

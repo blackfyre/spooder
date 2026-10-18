@@ -24,7 +24,7 @@
 core/movement/joint_calibration.{h,cpp}   table type, clamping, rate-limited apply, angle -> pulse
 core/movement/calibration_defaults.cpp    compiled defaults (the export target, fixed format)
 core/protocol/                            version 2: calibration set/report, source-conflict flag
-test/golden/calibration_defaults.cpp      golden copy, checked by every exporter
+test/golden/calibration_defaults.cpp      format fixture: the export of a fixed table, checked by every exporter
 test/golden/protocol_v2.txt               golden frames: hex bytes + decoded fields per line
 firmware/servo2040/src/usb_link.{h,cpp}   frames over USB stdio, sharing the port with printf
 ```
@@ -83,7 +83,9 @@ firmware/servo2040/src/usb_link.{h,cpp}   frames over USB stdio, sharing the por
 ### D6. Compiled-defaults format
 
 - `calibration_defaults.cpp`: a fixed header comment naming the format, then `const joint_calibration::Joint DEFAULTS[18] = {`, then one line per joint in output order: `{offset, pulse0, pulse180, reversed}, // leg N coxa|femur|tibia`, with the offset printed to two decimals. Then `};`.
-- The golden copy in `test/golden/` equals the committed file (a host test checks this), so "export of the defaults reproduces the file" is testable by any exporter.
+- `test/golden/calibration_defaults.cpp` is a format fixture: the export of a fixed fixture table (signs, fractions, three-digit offsets, falling end points, reversed joints), held by every exporter's tests and compared byte for byte. It never changes with calibration.
+- The committed file holds whatever calibration was last exported. Host tests check it whatever its values: it parses as 18 joints in output order, matches the compiled `DEFAULTS`, stays within the guards' hard limits (pulses, minimum span, an offset within ±180°, so it and the guard tests' changes fit the wire), and the reference, portal and desktop exporters reproduce it exactly (export(parse(file)) == file). A test exports a changed table over a temporary copy and runs the same checks on it.
+- **Amendment** (made after implementation): the defaults file was first pinned by a golden copy equal to it, and a test pinned the seed values, so exporting a real calibration broke the gates and updating the copy broke the desktop export test, which read the seed from `protocol_v2.txt`. The golden file became a format fixture and the defaults checks became value-independent. `calibration_report_defaults` in `protocol_v2.txt` stays a fixed wire vector and is not tied to the defaults file.
 
 ## Risks / Trade-offs
 

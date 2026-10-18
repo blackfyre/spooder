@@ -1,4 +1,5 @@
 #include <unity.h>
+#include <math.h>
 #include "protocol/link_receiver.h"
 
 using namespace link_receiver;
@@ -30,7 +31,7 @@ static protocol::CalibrationSet set(uint8_t id, uint8_t joint, int16_t offsetCen
 
 static int16_t defaultCentideg(int joint)
 {
-  return (int16_t)(DEFAULTS[joint].offsetDeg * 100);
+  return (int16_t)lroundf(DEFAULTS[joint].offsetDeg * 100);
 }
 
 // Queues one set and processes it in Calibrate with output allowed (unless
@@ -178,9 +179,9 @@ void test_report_before_any_set()
   for (int i = 0; i < joint_calibration::JOINT_COUNT; i++)
   {
     TEST_ASSERT_EQUAL_INT16(defaultCentideg(i), rep.joints[i].offsetCentideg);
-    TEST_ASSERT_EQUAL_UINT16(500, rep.joints[i].pulse0Us);
-    TEST_ASSERT_EQUAL_UINT16(2500, rep.joints[i].pulse180Us);
-    TEST_ASSERT_EQUAL_UINT8(0, rep.joints[i].flags);
+    TEST_ASSERT_EQUAL_UINT16(lroundf(DEFAULTS[i].pulse0Us), rep.joints[i].pulse0Us);
+    TEST_ASSERT_EQUAL_UINT16(lroundf(DEFAULTS[i].pulse180Us), rep.joints[i].pulse180Us);
+    TEST_ASSERT_EQUAL_UINT8(DEFAULTS[i].reversed ? protocol::CALIBRATION_REVERSED : 0, rep.joints[i].flags);
   }
 }
 

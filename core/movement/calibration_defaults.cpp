@@ -5,7 +5,7 @@
 // leg 2 ...):
 //   {offset in degrees (two decimals), pulse at 0 degrees in us,
 //    pulse at 180 degrees in us, reversed},
-// test/golden/calibration_defaults.cpp must equal this file.
+// Its format is pinned by a fixture, test/golden/calibration_defaults.cpp.
 #include "joint_calibration.h"
 
 namespace joint_calibration

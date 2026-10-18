@@ -75,7 +75,7 @@ The calibration table, guards, rate limit, reports, protocol version 2 and sourc
 
 ### D7. Export
 
-`calibration_export` writes the complete `calibration_defaults.cpp` in the format fixed by `add-live-joint-calibration` (its D6). Its golden test exports the compiled defaults and compares them with `test/golden/calibration_defaults.cpp` byte for byte. The page shows the text with a Copy button; the phone has no checkout to write into.
+`calibration_export` writes the complete `calibration_defaults.cpp` in the format fixed by `add-live-joint-calibration` (its D6). Its golden test exports the format fixture table and compares it with `test/golden/calibration_defaults.cpp` byte for byte; the export of the reported compiled defaults must equal the committed defaults file (amended with `add-live-joint-calibration` D6). The page shows the text with a Copy button; the phone has no checkout to write into.
 
 ### D8. Setup screen
 

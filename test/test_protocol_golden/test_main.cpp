@@ -231,7 +231,8 @@ static void buildGolden(Text &t)
   f.calibrationSet = {255, 255, -32768, 0, 65535, 0xFF};
   addFrame(t, "calibration_set_extremes", f);
 
-  // The compiled defaults as the robot reports them before any set.
+  // A report of the seed defaults before any set: a fixed wire vector, not
+  // tied to core/movement/calibration_defaults.cpp.
   const int16_t defaults[CALIBRATION_JOINTS] = {9000, 7500, -1800, 9300, 7500, -1500, 9300, 7500, -1800,
                                                 8700, 8000, -2600, 8500, 8900, -1600, 9300, 8500, -2400};
   f = frame(FrameType::CalibrationReport, 0);
