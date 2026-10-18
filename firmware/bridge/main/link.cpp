@@ -11,9 +11,12 @@ constexpr int TX_PIN = 27;
 constexpr int RX_PIN = 26;
 constexpr uint32_t BAUD = 115200;
 constexpr int ESTOP_PIN = 35; // right-hand button, active low, board pull-up
-// A gap this long in received bytes is longer than any telemetry frame takes
-// to send (39 bytes, about 3.4 ms): an incomplete candidate is a false start.
+// The robot sends whole frames back to back, so a gap this long in received
+// bytes never falls inside a frame: an incomplete candidate is a false start.
 constexpr uint32_t RX_IDLE_MS = 10;
+// More than one command period of bytes at full line rate (about 230 bytes
+// per 20 ms), with room for a late link task.
+constexpr int RX_BUFFER_SIZE = 1024;
 
 static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
 // Shared with loop(), guarded by lock.
@@ -24,6 +27,9 @@ static uint32_t telemetryAtMs;
 static bool emergencyStop;
 static uint32_t validFrames;
 static uint32_t discardedFrames;
+static bool haveReport;
+static uint32_t reportAtMs;
+static protocol::CalibrationReport report;
 
 static protocol::Decoder decoder;
 
@@ -82,13 +88,22 @@ static void receive()
   protocol::Frame f;
   while (decoder.next(f))
   {
-    if (f.type != protocol::FrameType::Telemetry)
-      continue;
-    portENTER_CRITICAL(&lock);
-    telemetry = f.telemetry;
-    haveTelemetry = true;
-    telemetryAtMs = now;
-    portEXIT_CRITICAL(&lock);
+    if (f.type == protocol::FrameType::Telemetry)
+    {
+      portENTER_CRITICAL(&lock);
+      telemetry = f.telemetry;
+      haveTelemetry = true;
+      telemetryAtMs = now;
+      portEXIT_CRITICAL(&lock);
+    }
+    else if (f.type == protocol::FrameType::CalibrationReport)
+    {
+      portENTER_CRITICAL(&lock);
+      report = f.calibrationReport;
+      haveReport = true;
+      reportAtMs = now;
+      portEXIT_CRITICAL(&lock);
+    }
   }
   portENTER_CRITICAL(&lock);
   validFrames = decoder.validFrames();
@@ -115,7 +130,7 @@ void start()
   initialDesired();
   pinMode(ESTOP_PIN, INPUT); // input-only pin; the board has the pull-up
   Serial1.setTxBufferSize(256);
-  Serial1.setRxBufferSize(256);
+  Serial1.setRxBufferSize(RX_BUFFER_SIZE);
   Serial1.begin(BAUD, SERIAL_8N1, RX_PIN, TX_PIN);
   // Above loop() (priority 1) so screen redraws cannot delay frames; pinned
   // to loop()'s core, leaving core 0 to the Bluetooth stack.
@@ -139,6 +154,9 @@ Status status()
   s.emergencyStop = emergencyStop;
   s.validFrames = validFrames;
   s.discardedFrames = discardedFrames;
+  s.haveReport = haveReport;
+  s.reportAtMs = reportAtMs;
+  s.report = report;
   portEXIT_CRITICAL(&lock);
   return s;
 }

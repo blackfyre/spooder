@@ -19,7 +19,7 @@
 
 ## 3. Bridge
 
-- [ ] 3.1 Move the bridge to protocol version 2: decode reports and the new telemetry flags, and show a source conflict on the status screen. Verify `mise run build-bridge` and the status screen tests.
+- [x] 3.1 Move the bridge to protocol version 2: decode reports and the new telemetry flags, and show a source conflict on the status screen. Verify `mise run build-bridge` and the status screen tests.
 
 ## 4. Verification and documentation
 

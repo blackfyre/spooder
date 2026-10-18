@@ -108,7 +108,13 @@ void compose(const Inputs &in, Line out[LINE_COUNT])
   }
 
   const protocol::Telemetry &t = in.telemetry;
-  set(out[1], Tone::Good, "Link: ok");
+  // Line 1: the link, and which operator source the robot follows.
+  if (t.flags & protocol::TELEMETRY_SOURCE_CONFLICT)
+    set(out[1], Tone::Bad, "Link: ok  CONFLICT with USB");
+  else if (t.flags & protocol::TELEMETRY_USB_IN_CONTROL)
+    set(out[1], Tone::Warn, "Link: ok  USB in control");
+  else
+    set(out[1], Tone::Good, "Link: ok");
   // Longest: "Body Initialise  Gait Ripple", exactly LINE_CHARS.
   snprintf(buf, sizeof(buf), "Body %s  Gait %s", name(BODY_MODES, 5, t.bodyMode), name(GAITS, 6, t.gait));
   set(out[2], Tone::Normal, buf);

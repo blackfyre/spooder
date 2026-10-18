@@ -98,6 +98,30 @@ void test_every_fault_combination_shows_every_name()
   }
 }
 
+void test_source_conflict_is_shown()
+{
+  Inputs in = healthy();
+  in.telemetry.flags = protocol::TELEMETRY_SOURCE_CONFLICT;
+  compose(in, out);
+  TEST_ASSERT_TRUE(screenContains("CONFLICT"));
+  TEST_ASSERT_TRUE(out[1].tone == Tone::Bad);
+  TEST_ASSERT_TRUE(strlen(out[1].text) <= (size_t)LINE_CHARS);
+}
+
+void test_usb_in_control_is_shown()
+{
+  Inputs in = healthy();
+  in.telemetry.flags = protocol::TELEMETRY_USB_IN_CONTROL;
+  compose(in, out);
+  TEST_ASSERT_TRUE(screenContains("USB in control"));
+  TEST_ASSERT_TRUE(out[1].tone == Tone::Warn);
+  in.telemetry.flags = protocol::TELEMETRY_BRIDGE_IN_CONTROL;
+  compose(in, out);
+  TEST_ASSERT_FALSE(screenContains("USB"));
+  TEST_ASSERT_FALSE(screenContains("CONFLICT"));
+  TEST_ASSERT_TRUE(out[1].tone == Tone::Good);
+}
+
 void test_link_lost_hides_robot_values()
 {
   Inputs in = healthy();
@@ -183,6 +207,8 @@ int main()
   RUN_TEST(test_emergency_stop_is_shown);
   RUN_TEST(test_undervoltage_fault_shows_name_and_voltage);
   RUN_TEST(test_every_fault_combination_shows_every_name);
+  RUN_TEST(test_source_conflict_is_shown);
+  RUN_TEST(test_usb_in_control_is_shown);
   RUN_TEST(test_link_lost_hides_robot_values);
   RUN_TEST(test_sensors_shown_only_when_available);
   RUN_TEST(test_sensors_and_all_faults_fit_together_at_extremes);

@@ -21,6 +21,11 @@ struct Status
   bool emergencyStop;           // the bridge's own e-stop toggle
   uint32_t validFrames;
   uint32_t discardedFrames;
+  // The newest calibration report (the robot sends them in Calibrate). The
+  // bridge sends no calibration sets in normal operation.
+  bool haveReport;
+  uint32_t reportAtMs;
+  protocol::CalibrationReport report;
 };
 
 /**
