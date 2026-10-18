@@ -14,3 +14,4 @@ firmware/bridge/sdkconfig.*
 desktop/spooder-calibrator
 desktop/cmd/spooder-calibrator/spooder-calibrator
 .claude/worktrees/
+__pycache__/

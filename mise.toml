@@ -81,7 +81,12 @@ run = "rm -rf build .pio/build firmware/bridge/.pio/build"
 
 [tasks.test]
 description = "Run host-side unit tests"
-run = "pio test -e native"
+run = ["pio test -e native", "mise run test-bridge-build"]
+
+[tasks.test-bridge-build]
+description = "Test the bridge build's image-size check (host Python, no ESP-IDF)"
+dir = "firmware/bridge/scripts"
+run = "python -m unittest -v test_image_size"
 
 # Desktop calibrator (desktop/). Gio needs cgo and the Wayland, X11 and EGL
 # development packages on Linux; desktop-deps names any that are missing.
