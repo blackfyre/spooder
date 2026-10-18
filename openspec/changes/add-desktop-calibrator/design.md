@@ -64,12 +64,17 @@ A separate module keeps Gio and cgo out of anything the firmware build or the ho
 ### D5. Calibration model (`internal/calib`)
 
 - The same rules as the bridge's `calibration_sync`: the latest value per joint, the oldest pending sent first, a request id per send, confirmation by the report's request id, a resend after 200 ms with the same id, and the reported value replacing the shown one, including clamps and rejections.
+  - **One change in flight.** The robot recognises only its last request id per link as a retransmission, so a resend of an older change after a newer one was processed would be processed again (and, if output was meanwhile disallowed, reported as rejected although applied). Until the sent change is confirmed, only it is resent; other edits wait, keeping their latest value. A newer value for the joint in flight replaces it and is sent with a new id.
+  - **Request ids** start after the `lastRequestId` of the first report on a connection (the robot keeps it across a desktop restart), and a new id never equals the latest reported one. A report with result "none yet" confirms nothing.
+  - Unconfirmed edits are dropped when control is released or the link is lost; sets are sent only while in control. On a new connection the table is cleared until the robot reports again (it reports at 1 Hz in Calibrate and after each processed set).
 - Keyboard: arrow keys select a joint and field; `+`/`-` nudge fine, Shift+`+`/`-` coarse (0.5° and 5°; 10 µs and 50 µs); `R` toggles direction.
 
 ### D6. Export
 
 - The writer produces the format of `add-live-joint-calibration` D6. Its test exports the defaults and compares them with `test/golden/calibration_defaults.cpp` byte for byte.
 - **Checkout check:** the chosen directory must contain `core/movement/calibration_defaults.cpp` and `openspec/`. The file is written atomically (temporary file plus rename), after a line diff is shown and confirmed. The last chosen directory is remembered in the user config directory.
+  - Neither the file nor `core/` and `core/movement/` may be symbolic links, so the write cannot land outside the checkout.
+  - Before writing, the file is read again; if it no longer holds what the diff was made from, nothing is written and the export must be repeated. The temporary file is removed on any failure, and the file keeps its permissions.
 
 ### D7. Look
 

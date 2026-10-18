@@ -270,6 +270,36 @@ func TestNotACheckout(t *testing.T) {
 	}
 }
 
+// Review finding: a symlinked core or core/movement would let the write
+// land outside the chosen checkout.
+func TestSymlinkedDirectoriesAreRefused(t *testing.T) {
+	for _, linked := range []string{"core", filepath.Join("core", "movement")} {
+		dir := checkout(t)
+		outside := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(outside, "movement"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(outside, "movement", "calibration_defaults.cpp"), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(outside, "calibration_defaults.cpp"), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.RemoveAll(filepath.Join(dir, linked)); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, linked)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(outside, filepath.Join(dir, linked)); err != nil {
+			t.Skip("no symlinks:", err)
+		}
+		if _, err := Prepare(dir, reportedDefaults(t)); !errors.Is(err, ErrNotCheckout) {
+			t.Errorf("%s linked: %v", linked, err)
+		}
+	}
+}
+
 func TestWriteRefusesAFileChangedSinceTheDiff(t *testing.T) {
 	dir := checkout(t)
 	plan, err := Prepare(dir, reportedDefaults(t))

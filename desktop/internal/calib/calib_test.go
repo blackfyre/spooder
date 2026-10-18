@@ -126,18 +126,39 @@ func TestOldestPendingFirst(t *testing.T) {
 	m.Nudge(2, FieldOffset, 1, false)
 	m.Nudge(9, FieldOffset, 1, false) // updating 9 keeps its place
 	a, _ := m.Next(t0)
-	b, _ := m.Next(t0.Add(20 * time.Millisecond))
-	if a.Joint != 9 || b.Joint != 2 || a.OffsetCentideg != 9100 {
-		t.Fatalf("order %d %d", a.Joint, b.Joint)
+	if a.Joint != 9 || a.OffsetCentideg != 9100 {
+		t.Fatalf("first %+v", a)
 	}
-	if _, ok := m.Next(t0.Add(40 * time.Millisecond)); ok {
-		t.Fatal("nothing should be due")
+	// One change in flight: joint 2 waits until joint 9 is confirmed.
+	if _, ok := m.Next(t0.Add(20 * time.Millisecond)); ok {
+		t.Fatal("a second change sent while the first is in flight")
 	}
-	// Both unconfirmed: the oldest is resent first.
-	r1, _ := m.Next(t0.Add(ResendAfter + 20*time.Millisecond))
-	r2, _ := m.Next(t0.Add(ResendAfter + 40*time.Millisecond))
-	if r1 != a || r2 != b {
-		t.Fatalf("resends %+v %+v", r1, r2)
+	if r, _ := m.Next(t0.Add(ResendAfter)); r != a {
+		t.Fatalf("resend %+v", r)
+	}
+	m.Report(reportFor(a, protocol.ResultAccepted, wire(a)))
+	b, ok := m.Next(t0.Add(ResendAfter + 20*time.Millisecond))
+	if !ok || b.Joint != 2 || b.RequestID == a.RequestID {
+		t.Fatalf("second %+v", b)
+	}
+}
+
+// Review finding: with two changes in flight, resending the older one
+// after the robot processed the newer would be processed again (the robot
+// knows only its last id) and could be reported as rejected though it was
+// applied. One change in flight avoids that: the resend repeats the
+// robot's last id and is answered with its stored result.
+func TestResendIsAlwaysTheRobotsLastRequest(t *testing.T) {
+	var m Model
+	m.Report(defaults(0, protocol.ResultNoneYet))
+	m.Nudge(0, FieldOffset, 1, false)
+	m.Nudge(1, FieldOffset, 1, false)
+	a, _ := m.Next(t0)
+	// The report for a is lost; until it is confirmed, only a is sent.
+	for d := 20 * time.Millisecond; d < 2*time.Second; d += 20 * time.Millisecond {
+		if set, ok := m.Next(t0.Add(d)); ok && set != a {
+			t.Fatalf("sent %+v while %d is unconfirmed", set, a.RequestID)
+		}
 	}
 }
 
@@ -192,27 +213,34 @@ func TestNoneYetNeverConfirms(t *testing.T) {
 	}
 }
 
-// Request ids wrap, but never repeat the robot's last id or one in flight.
-func TestRequestIDsSkipLastAndInFlight(t *testing.T) {
+// Request ids wrap, but a new change never repeats the robot's last id,
+// which it would take for a retransmission.
+func TestRequestIDsWrapAndSkipTheRobotsLastID(t *testing.T) {
 	var m Model
-	m.Report(defaults(255, protocol.ResultAccepted))
-	m.Nudge(0, FieldOffset, 1, false)
-	a, _ := m.Next(t0) // id 0
-	if a.RequestID != 0 {
-		t.Fatalf("id %d", a.RequestID)
-	}
-	// Cycle another joint through 255 ids while joint 0 waits.
+	m.Report(defaults(254, protocol.ResultAccepted))
 	now := t0
-	for i := 0; i < 300; i++ {
-		now = now.Add(time.Millisecond)
-		m.Nudge(1, FieldOffset, 1, false)
+	last := uint8(254)
+	for i := 0; i < 600; i++ {
+		now = now.Add(20 * time.Millisecond)
+		m.Nudge(i%Joints, FieldOffset, 1, false)
 		set, ok := m.Next(now)
 		if !ok {
-			t.Fatal("nothing sent")
+			t.Fatalf("round %d: nothing sent", i)
 		}
-		if set.Joint == 1 && (set.RequestID == a.RequestID || set.RequestID == 255) {
-			t.Fatalf("id %d reused", set.RequestID)
+		if set.RequestID == last {
+			t.Fatalf("round %d: id %d repeats the robot's last", i, set.RequestID)
 		}
+		last = set.RequestID
+		m.Report(reportFor(set, protocol.ResultAccepted, wire(set)))
+	}
+	// An earlier session left the robot at id 7 while the model's counter
+	// would hand out 7 next: it is skipped.
+	var m2 Model
+	m2.Report(defaults(6, protocol.ResultAccepted)) // next would be 7
+	m2.Report(defaults(7, protocol.ResultAccepted)) // a later report: the robot's last is 7
+	m2.Nudge(0, FieldPulse0, 1, false)
+	if set, _ := m2.Next(t0); set.RequestID == 7 {
+		t.Fatal("id 7 reused")
 	}
 }
 

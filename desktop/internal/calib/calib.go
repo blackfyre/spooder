@@ -5,7 +5,8 @@
 // calibration_sync: the latest value per joint, the oldest pending sent
 // first, a request id per send, confirmation by the report's request id, a
 // resend after 200 ms with the same id, and the reported value replacing the
-// shown one, including clamps and rejections. Every guard is on the robot;
+// shown one, including clamps and rejections. One change is in flight at a
+// time (see Next). Every guard is on the robot;
 // this model only keeps values within their wire types.
 package calib
 
@@ -224,17 +225,27 @@ func clamp(v, lo, hi int) int {
 	return min(max(v, lo), hi)
 }
 
-// Next returns the calibration set to send now, if any: the oldest pending
-// joint whose current value has not been sent, or whose send has waited
-// ResendAfter without confirmation (resent with the same id).
+// Next returns the calibration set to send now, if any. One change is in
+// flight at a time, because the robot recognises only its last request id
+// as a retransmission: while a sent value awaits its report, only that
+// change is sent again, with the same id, once it has waited ResendAfter.
+// Otherwise the oldest pending joint is sent with a new id.
 func (m *Model) Next(now time.Time) (protocol.CalibrationSet, bool) {
 	best := -1
 	for i, p := range m.pending {
-		if p == nil || (p.sent && now.Sub(p.at) < ResendAfter) {
-			continue
-		}
-		if best < 0 || p.order < m.pending[best].order {
+		if p != nil && p.sent {
+			if now.Sub(p.at) < ResendAfter {
+				return protocol.CalibrationSet{}, false
+			}
 			best = i
+			break
+		}
+	}
+	if best < 0 {
+		for i, p := range m.pending {
+			if p != nil && (best < 0 || p.order < m.pending[best].order) {
+				best = i
+			}
 		}
 	}
 	if best < 0 {

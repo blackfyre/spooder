@@ -70,11 +70,28 @@ func Format(table [calib.Joints]calib.Joint) string {
 var ErrNotCheckout = errors.New("not a spooder checkout")
 
 // Check verifies that dir is a spooder checkout: it holds DefaultsPath as a
-// regular file (not a link, which a rename would replace) and an openspec
-// directory.
+// regular file and an openspec directory. Neither the file nor the
+// directories on the way to it may be symbolic links, so the write cannot
+// land outside the checkout (and a rename would replace a link, not its
+// target).
 func Check(dir string) error {
 	if dir == "" {
 		return fmt.Errorf("%w: no directory chosen", ErrNotCheckout)
+	}
+	sub := dir
+	for _, part := range []string{"core", "movement"} {
+		sub = filepath.Join(sub, part)
+		fi, err := os.Lstat(sub)
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("%w: %s has no %s", ErrNotCheckout, dir, filepath.ToSlash(DefaultsPath))
+		}
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrNotCheckout, err)
+		}
+		if !fi.IsDir() || fi.Mode()&fs.ModeSymlink != 0 {
+			rel, _ := filepath.Rel(dir, sub)
+			return fmt.Errorf("%w: %s is not a plain directory", ErrNotCheckout, filepath.ToSlash(rel))
+		}
 	}
 	fi, err := os.Lstat(filepath.Join(dir, DefaultsPath))
 	switch {
