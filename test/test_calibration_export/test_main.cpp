@@ -32,24 +32,54 @@ static protocol::CalibrationReport reportOf(const joint_calibration::Table &t)
   return link_receiver::makeReport(r, t);
 }
 
-void test_export_of_the_reported_defaults_is_the_golden_file()
+// The format fixture of test/test_joint_calibration (the same table in every
+// exporter's tests); its export is test/golden/calibration_defaults.cpp.
+static const joint_calibration::Joint FIXTURE[joint_calibration::JOINT_COUNT] = {
+    {-0.50f, 2450, 610, true},   {0.00f, 500, 2500, false},    {-29.99f, 2500, 500, false},
+    {76.50f, 612, 2390, true},   {105.25f, 400, 2600, false},  {-18.07f, 1000, 2000, false},
+    {90.01f, 520, 2480, false},  {-120.40f, 2600, 1600, true}, {7.00f, 1400, 400, false},
+    {87.33f, 505, 2495, false},  {80.10f, 498, 2502, true},    {-26.00f, 700, 2300, false},
+    {85.99f, 1500, 2500, false}, {-0.01f, 500, 1500, false},   {-16.50f, 2400, 600, true},
+    {179.99f, 450, 2550, false}, {-180.00f, 2550, 450, true},  {12.34f, 640, 2360, false},
+};
+
+static joint_calibration::Table fixtureTable()
+{
+  joint_calibration::Table t;
+  for (int i = 0; i < joint_calibration::JOINT_COUNT; i++)
+    t.joints[i] = FIXTURE[i];
+  return t;
+}
+
+void test_export_of_the_reported_fixture_is_the_golden_file()
 {
   static char golden[4096], exported[calibration_export::MAX_TEXT_SIZE];
   TEST_ASSERT_TRUE_MESSAGE(readFile("test/golden/calibration_defaults.cpp", golden, sizeof(golden)) > 0,
                            "cannot read test/golden/calibration_defaults.cpp");
-  joint_calibration::Table t;
-  joint_calibration::loadDefaults(t);
-  protocol::CalibrationReport rep = reportOf(t);
+  protocol::CalibrationReport rep = reportOf(fixtureTable());
   int n = calibration_export::write(rep.joints, exported, sizeof(exported));
   TEST_ASSERT_EQUAL_INT((int)strlen(golden), n);
   TEST_ASSERT_EQUAL_STRING(golden, exported);
 }
 
+void test_export_of_the_reported_defaults_is_the_committed_file()
+{
+  // Whatever the calibration: the robot's report of its compiled defaults
+  // exports as the committed defaults file, unchanged.
+  static char committed[4096], exported[calibration_export::MAX_TEXT_SIZE];
+  TEST_ASSERT_TRUE_MESSAGE(readFile("core/movement/calibration_defaults.cpp", committed, sizeof(committed)) > 0,
+                           "cannot read core/movement/calibration_defaults.cpp");
+  joint_calibration::Table t;
+  joint_calibration::loadDefaults(t);
+  protocol::CalibrationReport rep = reportOf(t);
+  TEST_ASSERT_TRUE(calibration_export::write(rep.joints, exported, sizeof(exported)) > 0);
+  TEST_ASSERT_EQUAL_STRING(committed, exported);
+}
+
 void test_export_of_a_changed_table()
 {
   static char exported[calibration_export::MAX_TEXT_SIZE];
-  joint_calibration::Table t;
-  joint_calibration::loadDefaults(t);
+  joint_calibration::Table t = fixtureTable();
   t.joints[4] = {76.5f, 612, 2390, true};    // leg 2 femur
   t.joints[17] = {-0.5f, 400, 2600, false};  // leg 6 tibia
   t.joints[0] = {-29.99f, 2500, 500, false}; // leg 1 coxa, end points swapped
@@ -59,7 +89,7 @@ void test_export_of_a_changed_table()
   TEST_ASSERT_NOT_NULL(strstr(exported, "  {-0.50, 400, 2600, false}, // leg 6 tibia\n"));
   TEST_ASSERT_NOT_NULL(strstr(exported, "  {-29.99, 2500, 500, false}, // leg 1 coxa\n"));
   // Unchanged joints keep their lines.
-  TEST_ASSERT_NOT_NULL(strstr(exported, "  {93.00, 500, 2500, false}, // leg 2 coxa\n"));
+  TEST_ASSERT_NOT_NULL(strstr(exported, "  {76.50, 612, 2390, true}, // leg 2 coxa\n"));
   // Still a complete file.
   TEST_ASSERT_NOT_NULL(strstr(exported, "const joint_calibration::Joint DEFAULTS[18] = {\n"));
   const char *end = "};\n\n} // namespace joint_calibration\n";
@@ -91,7 +121,8 @@ void test_too_small_a_buffer_gives_an_empty_text()
 int main()
 {
   UNITY_BEGIN();
-  RUN_TEST(test_export_of_the_reported_defaults_is_the_golden_file);
+  RUN_TEST(test_export_of_the_reported_fixture_is_the_golden_file);
+  RUN_TEST(test_export_of_the_reported_defaults_is_the_committed_file);
   RUN_TEST(test_export_of_a_changed_table);
   RUN_TEST(test_extreme_values_fit);
   RUN_TEST(test_too_small_a_buffer_gives_an_empty_text);

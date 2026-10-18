@@ -17,7 +17,7 @@ Calibrating the new robot means adjusting 18 joints: their angle offsets and, fo
 - **The USB serial port becomes a second link port.** It carries the same frames, interleaved with debug text, so a computer can calibrate, monitor and control the robot without the bridge.
   - Source arbitration: whichever link reports a connected controller is in control. If both claim control, the robot sleeps and reports a conflict until one stops.
   - An e-stop from either link latches.
-- **The compiled-defaults file** has a fixed format, with a golden copy that every exporter's tests check.
+- **The compiled-defaults file** has a fixed format, with a golden format fixture that every exporter's tests check.
 - **Golden frame vectors** for protocol version 2 are generated from the C++ encoder and committed, so another implementation (the Go desktop app) can be tested against them.
 
 ## Capabilities

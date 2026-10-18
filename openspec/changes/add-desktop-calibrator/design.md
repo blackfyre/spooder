@@ -71,7 +71,7 @@ A separate module keeps Gio and cgo out of anything the firmware build or the ho
 
 ### D6. Export
 
-- The writer produces the format of `add-live-joint-calibration` D6. Its test exports the defaults and compares them with `test/golden/calibration_defaults.cpp` byte for byte.
+- The writer produces the format of `add-live-joint-calibration` D6. Its test exports the format fixture table and compares it with `test/golden/calibration_defaults.cpp` byte for byte, and checks that the committed defaults file round-trips (amended with `add-live-joint-calibration` D6).
 - **Checkout check:** the chosen directory must contain `core/movement/calibration_defaults.cpp` and `openspec/`. The file is written atomically (temporary file plus rename), after a line diff is shown and confirmed. The last chosen directory is remembered in the user config directory.
   - Neither the file nor `core/` and `core/movement/` may be symbolic links, so the write cannot land outside the checkout.
   - Before writing, the file is read again; if it no longer holds what the diff was made from, nothing is written and the export must be repeated. The temporary file is removed on any failure, and the file keeps its permissions.

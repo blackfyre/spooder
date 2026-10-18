@@ -105,7 +105,7 @@ These default offsets (`calibration_defaults.cpp`, all with 500/2500 µs and nor
 To recalibrate, put the robot on a stand and request Calibrate to reach the calibration pose. In that pose the coxa should be perpendicular to the body, the femur horizontal and the tibia vertical.
 
 - **Live:** a front-end (the bridge's setup portal, or the desktop calibrator on USB) sends calibration set frames, one joint at a time. The robot accepts them only in Calibrate with output allowed, clamps the offset to the default ±30° and each pulse to 400–2600 µs (end points at least 1000 µs apart), and moves the joint there at no more than 60°/s. Live values stay in RAM until the robot restarts. Reports show the accepted table.
-- **Defaults:** export the reported table as the complete text of `core/movement/calibration_defaults.cpp`, update `test/golden/calibration_defaults.cpp` to match, and rebuild. Without a front-end, edit both files by hand in the same format.
+- **Defaults:** export the reported table as the complete text of `core/movement/calibration_defaults.cpp`, run `mise run test` and rebuild. `test/golden/calibration_defaults.cpp` is a format fixture and stays as it is. Without a front-end, edit the file by hand in the same format.
 
 ## Gait table (`gait.cpp`)
 

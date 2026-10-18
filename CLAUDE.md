@@ -59,7 +59,7 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
     - `body`: the non-blocking state machine (Initialise, Stand, Walk, Sleep, Calibrate) on a fixed 5 ms internal grid.
     - `gait`, `kinematics` (IK, target validation, `servoOutputIndex`) and `vectors`.
     - `joint_calibration`: the per-joint calibration table (offset, 0° and 180° pulses, direction), its clamps, the 60°/s rate-limited `step` and `toPulse`.
-    - `calibration_defaults.cpp`: the compiled defaults, in a fixed format that a front-end's export replaces whole. `test/golden/calibration_defaults.cpp` must equal it.
+    - `calibration_defaults.cpp`: the compiled defaults, in a fixed format that a front-end's export replaces whole. Its values are free to change; host tests check that it parses, stays within the guards and round-trips through the exporters.
     - `movement_command.h`: the request a controller hands to movement.
   - `protection/`: power protection and the emergency stop. It turns supply readings into "output allowed" and "force Sleep", with latched faults; `supervisor` decides when the body runs, stops or restarts.
   - `protocol/`: the link's frames (version 2: command, telemetry, calibration set and report), CRC and incremental decoder (both firmwares), pinned by `test/golden/protocol_v2.txt`. `link_receiver` is the robot's handling of decoded frames: arrival stamping, clear and mode-request counters, baselines after a link gap, the calibration guards and reports, and the arbitration between the bridge and USB links.
@@ -87,9 +87,9 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `internal/link`: the serial port (`go.bug.st/serial`), the split of the stream into frames and debug text lines, the 20 ms writer and reconnecting by USB serial number.
   - `internal/session`: the single state owner: observe or control, the e-stop, mode and clear counters, telemetry.
   - `internal/calib`: the joint table shown from reports, pending edits, one change in flight, resend and confirmation by request id.
-  - `internal/export`: `calibration_defaults.cpp` in the fixed format (tested against `test/golden/calibration_defaults.cpp`), the checkout check, the diff and the atomic write.
+  - `internal/export`: `calibration_defaults.cpp` in the fixed format (tested against the fixture `test/golden/calibration_defaults.cpp`), the checkout check, the diff and the atomic write.
   - `internal/ui`: the Gio window in the Blackfyre look; `internal/ui/fonts`: Archivo and JetBrains Mono with their OFL licences. `internal/appearance` and `internal/winreg` are copied from bopen (MIT, `desktop/LICENSE.bopen`).
-- `test/`: Unity host tests, one directory per area. `test/golden/` holds the golden files other implementations (the desktop calibrator) test against; regenerate `protocol_v2.txt` only for a deliberate protocol change (`SPOODER_WRITE_GOLDEN=1 mise run test`).
+- `test/`: Unity host tests, one directory per area. `test/golden/` holds the golden files other implementations (the desktop calibrator) test against. They are fixed fixtures: never copy a calibration export over `calibration_defaults.cpp` there; regenerate `protocol_v2.txt` only for a deliberate protocol change (`SPOODER_WRITE_GOLDEN=1 mise run test`).
 - `openspec/`: specifications (`specs/`) and changes (`changes/`). This is the source of truth for intended behaviour.
 
 ## Notes

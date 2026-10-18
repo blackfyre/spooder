@@ -2,9 +2,9 @@
 #define CALIBRATION_EXPORT_H
 
 // A reported calibration table as the complete text of
-// core/movement/calibration_defaults.cpp, in the fixed format pinned by
-// test/golden/calibration_defaults.cpp: the portal's Export, to paste into
-// the robot's source.
+// core/movement/calibration_defaults.cpp, in the fixed format pinned by the
+// fixture test/golden/calibration_defaults.cpp: the portal's Export, to paste
+// into the robot's source.
 // Hardware-free (snprintf only): compiled for the bridge and for host tests.
 #include <stdint.h>
 #include "protocol/protocol.h"
