@@ -313,7 +313,8 @@ func (w *window) say(gtx layout.Context, err error) {
 // focus never moves onto a button, which would take Space for itself:
 // Space is always the e-stop.
 var keyFilters = []event.Filter{
-	key.Filter{Name: key.NameSpace, Optional: key.ModShift},
+	// Every modifier, so that each release reaches the e-stop latch.
+	key.Filter{Name: key.NameSpace, Optional: key.ModShift | key.ModCtrl | key.ModAlt | key.ModSuper | key.ModCommand},
 	key.Filter{Name: key.NameTab, Optional: key.ModShift},
 	key.Filter{Name: key.NameLeftArrow}, key.Filter{Name: key.NameRightArrow},
 	key.Filter{Name: key.NameUpArrow}, key.Filter{Name: key.NameDownArrow},

@@ -205,6 +205,14 @@ func TestHeldSpaceTogglesOnce(t *testing.T) {
 	if s.Command().Flags&protocol.FlagEmergencyStop == 0 {
 		t.Fatal("a slow repeat released the e-stop")
 	}
+	// Released while Ctrl is held: the release still reaches the latch.
+	router.Queue(key.Event{Name: key.NameSpace, Modifiers: key.ModCtrl, State: key.Release})
+	frame(w, router)
+	press(w, router, key.NameSpace, 0)
+	if s.Command().Flags&protocol.FlagEmergencyStop != 0 {
+		t.Fatal("press after a release with Ctrl ignored")
+	}
+	press(w, router, key.NameSpace, 0)
 	// The window loses the focus while Space is down, so its release is
 	// lost: the next press still counts.
 	w.focusChanged(false)
