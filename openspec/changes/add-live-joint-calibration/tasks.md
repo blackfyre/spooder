@@ -2,7 +2,7 @@
 
 ## 1. Hardware-free core (host-tested)
 
-- [ ] 1.1 Create `core/movement/joint_calibration` and `calibration_defaults.cpp` in the format of design D6, seeded with today's `LEG_OFFSETS`, 500/2500 µs and normal direction. Remove `kinematics::LEG_OFFSETS`; `solveLeg` and the pulse conversion use the table. Verify host tests for:
+- [x] 1.1 Create `core/movement/joint_calibration` and `calibration_defaults.cpp` in the format of design D6, seeded with today's `LEG_OFFSETS`, 500/2500 µs and normal direction. Remove `kinematics::LEG_OFFSETS`; `solveLeg` and the pulse conversion use the table. Verify host tests for:
   - the spec's pulse scenarios (calibrated range, reversed joint, clamping) and the offset scenario;
   - the existing IK and body tests passing unchanged with the defaults;
   - the rate limit (a 20° offset change takes at least 1/3 s) and convergence;

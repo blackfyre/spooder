@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include "vectors.h"
 #include "kinematics.h"
+#include "joint_calibration.h"
 #include "gait.h"
 #include "movement_command.h"
 
@@ -66,6 +67,11 @@ struct BodyState
   bool newlyRejected[LEG_COUNT];
   Vector3 rejectedTarget[LEG_COUNT];
 
+  // Calibration offsets (coxa, femur, tibia) the IK adds, per leg. A change
+  // re-solves the leg in the next step even if its foot did not move.
+  Vector3 offsets[LEG_COUNT];
+  bool offsetsChanged[LEG_COUNT];
+
   // false once Sleep has folded the legs: servo output should be off.
   bool outputsEnabled;
 
@@ -94,6 +100,12 @@ struct BodyState
  * @brief Puts the body into Initialise. Call once before the first step.
  */
 void init(BodyState &s);
+
+/**
+ * @brief Sets a leg's calibration offsets (the applied table's), used from
+ * the next step on. init() loads the compiled defaults.
+ */
+void setOffsets(BodyState &s, int leg, Vector3 offsets);
 
 /**
  * @brief Advances the body by the time since the previous step (clamped to

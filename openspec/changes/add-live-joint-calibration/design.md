@@ -33,14 +33,16 @@ firmware/servo2040/src/usb_link.{h,cpp}   frames over USB stdio, sharing the por
 
 ### D2. The calibration table
 
-- `joint_calibration::Joint { float offsetDeg; uint16_t pulse0Us, pulse180Us; bool reversed; }`, 18 per table.
+- `joint_calibration::Joint { float offsetDeg; float pulse0Us, pulse180Us; bool reversed; }`, 18 per table. Pulses are whole microseconds in the defaults and in requested tables; they are held as `float` so the applied values can follow a change smoothly at low rates.
 - The robot keeps two tables: **requested** (the latest accepted values, after clamping) and **applied** (what the IK and servo output use).
-- `joint_calibration::step(applied, requested, dtS)` moves each applied value towards the requested one, by at most 60°/s for offsets and 667 µs/s for pulse end points (60°/s at the default 2000 µs per 180°). It runs every tick before `servo_output::apply`.
-- **IK:** `solveLeg` takes the leg's three applied offsets. **Pulse:** `joint_calibration::toPulse(joint, angle)` clamps, mirrors if reversed, and interpolates between the end points. It replaces `angleToMicroseconds` in `servo_output`.
+- `joint_calibration::step(applied, requested, dtS)` moves each applied value towards the requested one, by at most 60°/s for offsets and 60°/s through the joint's current span for pulse end points (667 µs/s at the default 2000 µs per 180°; a span below 1000 µs, which occurs only while end points cross, counts as 1000 µs). It runs every tick before `servo_output::apply`.
+  - Per joint, the offset converges first and the end points only then, so the two rates never add up.
+  - A change of direction is approached as the equivalent swapped end points (reversed with (p0, p180) outputs what normal with (p180, p0) does). The direction flips only once the output is the same either way, so the output never jumps.
+- **IK:** `solveLeg` takes the leg's three applied offsets. The body holds them (`body::setOffsets`, defaults loaded by `body::init`) and re-solves a leg whose offsets changed even if its foot did not move. **Pulse:** `joint_calibration::toPulse(joint, angle)` clamps, mirrors if reversed, and interpolates between the end points. It replaces `angleToMicroseconds` in `servo_output`.
 - **Guards** (in `link_receiver`, with the body mode and `allowOutput` passed in):
   - reject unless the body is in Calibrate and output is allowed;
   - clamp the offset to its default ±30° and each pulse to 400–2600 µs;
-  - keep the end points at least 1000 µs apart, moving the requested 180° pulse away from the 0° pulse if needed;
+  - keep the end points at least 1000 µs apart, moving the requested 180° pulse away from the 0° pulse if needed, on its own side (equal pulses count as rising). If that would leave 400–2600 µs, the 180° pulse stops at the limit and the 0° pulse moves to keep the span, so the direction of travel is kept;
   - treat a repeated request id on the same link as a retransmission: report again, change nothing.
 
 ### D3. Protocol version 2

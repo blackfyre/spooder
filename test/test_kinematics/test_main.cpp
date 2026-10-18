@@ -48,13 +48,12 @@ void test_nan_target_is_rejected()
   TEST_ASSERT_FALSE(solveLeg(Vector3(200, 0, INFINITY), NO_OFFSETS, a));
 }
 
-void test_angle_to_microseconds_range_and_clamp()
+void test_femur_offset_scenario()
 {
-  TEST_ASSERT_EQUAL_UINT16(500, angleToMicroseconds(0));
-  TEST_ASSERT_EQUAL_UINT16(1500, angleToMicroseconds(90));
-  TEST_ASSERT_EQUAL_UINT16(2500, angleToMicroseconds(180));
-  TEST_ASSERT_EQUAL_UINT16(500, angleToMicroseconds(-20));
-  TEST_ASSERT_EQUAL_UINT16(2500, angleToMicroseconds(200));
+  // Spec scenario: a 5° femur offset in the calibration pose gives 95°.
+  JointAngles a;
+  TEST_ASSERT_TRUE(solveLeg(Vector3(224, 0, 116), Vector3(0, 5, 0), a));
+  TEST_ASSERT_FLOAT_WITHIN(0.5, 95, a.femur);
 }
 
 void test_servo_output_mapping()
@@ -73,7 +72,7 @@ int main()
   RUN_TEST(test_unreachable_target_is_rejected_and_output_untouched);
   RUN_TEST(test_target_at_reach_is_accepted);
   RUN_TEST(test_nan_target_is_rejected);
-  RUN_TEST(test_angle_to_microseconds_range_and_clamp);
+  RUN_TEST(test_femur_offset_scenario);
   RUN_TEST(test_servo_output_mapping);
   return UNITY_END();
 }

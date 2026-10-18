@@ -19,7 +19,9 @@ include(drivers/analogmux/analogmux)
 set(SPOODER_CORE ${CMAKE_CURRENT_LIST_DIR}/../../core)
 add_library(spooder_core STATIC
   ${SPOODER_CORE}/movement/body.cpp
+  ${SPOODER_CORE}/movement/calibration_defaults.cpp
   ${SPOODER_CORE}/movement/gait.cpp
+  ${SPOODER_CORE}/movement/joint_calibration.cpp
   ${SPOODER_CORE}/movement/kinematics.cpp
   ${SPOODER_CORE}/protocol/link_receiver.cpp
   ${SPOODER_CORE}/protocol/protocol.cpp

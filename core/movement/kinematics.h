@@ -27,10 +27,6 @@ constexpr int servoOutputIndex(int leg, int joint)
   return leg * JOINTS_PER_LEG + joint;
 }
 
-// Per-leg calibration offsets in degrees (coxa, femur, tibia), indexed by leg.
-// Inherited from upstream Aecert's Hexapod V1; not yet measured on this robot.
-extern const Vector3 LEG_OFFSETS[LEG_COUNT];
-
 struct JointAngles
 {
   float coxa;
@@ -46,18 +42,13 @@ bool isValidTarget(Vector3 target);
 
 /**
  * @brief Solves the joint angles for a foot target in the leg's own frame
- * (origin at the coxa pivot, x outward, z up, millimetres).
+ * (origin at the coxa pivot, x outward, z up, millimetres), adding the
+ * leg's (coxa, femur, tibia) calibration offsets in degrees.
  *
  * @return false, leaving @p out untouched, when the target is not finite or
  *         lies further than LEG_REACH from the coxa pivot.
  */
 bool solveLeg(Vector3 target, Vector3 offsets, JointAngles &out);
-
-/**
- * @brief Converts a joint angle to a servo pulse width: 0° → 500 µs,
- * 180° → 2500 µs. Angles outside 0–180° are clamped.
- */
-uint16_t angleToMicroseconds(float angle);
 
 } // namespace kinematics
 

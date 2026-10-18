@@ -3,6 +3,7 @@
 
 // Servo output on the Servo 2040's 18 PIO-driven outputs (GPIO0-17).
 #include "movement/body.h"
+#include "movement/joint_calibration.h"
 
 namespace servo_output
 {
@@ -20,11 +21,12 @@ bool setup();
 void setInhibited(bool inhibited);
 
 /**
- * @brief Applies one movement step: writes the joints the body updated and
- * switches output on or off as the body and protection require. All changes
- * take effect in the same frame.
+ * @brief Applies one movement step: converts every joint the body has set
+ * through @p calibration (so a calibration change moves a joint even when
+ * its angle did not change) and switches output on or off as the body and
+ * protection require. All changes take effect in the same frame.
  */
-void apply(const body::BodyState &body);
+void apply(const body::BodyState &body, const joint_calibration::Table &calibration);
 
 /**
  * @brief Switches output off immediately (the body has stopped). Output comes

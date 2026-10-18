@@ -11,6 +11,7 @@ namespace servo_output
 
 constexpr int OUTPUT_COUNT = kinematics::LEG_COUNT * kinematics::JOINTS_PER_LEG;
 static_assert(OUTPUT_COUNT == servo2040::NUM_SERVOS, "one output per joint");
+static_assert(OUTPUT_COUNT == joint_calibration::JOINT_COUNT, "one calibration per output");
 // Longest pulse ServoCluster can produce (its hard limit) plus margin: within
 // this time every pulse in progress has finished.
 constexpr uint64_t MAX_PULSE_WAIT_US = 2700;
@@ -24,6 +25,8 @@ static ServoCluster cluster(pio0, 0, servo2040::SERVO_1, OUTPUT_COUNT);
 // is off, so switching on restores the commanded pose instead of ServoCluster's
 // default mid-position.
 static uint16_t desiredUs[OUTPUT_COUNT];
+// Legs whose angles the body has solved at least once since power-up.
+static bool legSet[kinematics::LEG_COUNT];
 static bool on = false;
 static bool inhibited = true;
 // Pins are forced low through the GPIO output override while output is off.
@@ -90,19 +93,21 @@ static void switchOff()
   switchedOffAt = get_absolute_time();
 }
 
-void apply(const body::BodyState &body)
+void apply(const body::BodyState &body, const joint_calibration::Table &calibration)
 {
   bool changed[OUTPUT_COUNT] = {};
   for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
   {
-    if (!body.legUpdated[leg])
+    if (body.legUpdated[leg])
+      legSet[leg] = true;
+    if (!legSet[leg])
       continue;
     const kinematics::JointAngles &a = body.angles[leg];
     const float angles[kinematics::JOINTS_PER_LEG] = {a.coxa, a.femur, a.tibia};
     for (int j = 0; j < kinematics::JOINTS_PER_LEG; j++)
     {
       int i = kinematics::servoOutputIndex(leg, j);
-      uint16_t us = kinematics::angleToMicroseconds(angles[j]);
+      uint16_t us = joint_calibration::toPulse(calibration.joints[i], angles[j]);
       if (us != desiredUs[i])
       {
         desiredUs[i] = us;

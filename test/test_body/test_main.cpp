@@ -429,6 +429,41 @@ void test_leaving_calibrate_passes_through_stand()
   TEST_ASSERT_TRUE(s.mode == Mode::Stand);
 }
 
+void test_init_loads_default_offsets()
+{
+  init(s);
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+  {
+    TEST_ASSERT_EQUAL_FLOAT(joint_calibration::DEFAULTS[leg * 3 + 0].offsetDeg, s.offsets[leg].x);
+    TEST_ASSERT_EQUAL_FLOAT(joint_calibration::DEFAULTS[leg * 3 + 1].offsetDeg, s.offsets[leg].y);
+    TEST_ASSERT_EQUAL_FLOAT(joint_calibration::DEFAULTS[leg * 3 + 2].offsetDeg, s.offsets[leg].z);
+  }
+}
+
+void test_offset_change_resolves_a_still_leg()
+{
+  bootToStand();
+  run(command(RequestedMode::Calibrate), 5000);
+  // Sleep folds the legs and then holds them: no foot moves any more.
+  run(command(RequestedMode::Sleep), 5000);
+  run(command(RequestedMode::Sleep), 20);
+  TEST_ASSERT_FALSE(s.legUpdated[1]);
+  float femur = s.angles[1].femur;
+  float otherFemur = s.angles[0].femur;
+  Vector3 o = s.offsets[1];
+  setOffsets(s, 1, Vector3(o.x, o.y + 5, o.z));
+  run(command(RequestedMode::Sleep), 20);
+  TEST_ASSERT_TRUE(s.legUpdated[1]);
+  TEST_ASSERT_FALSE(s.legUpdated[0]);
+  TEST_ASSERT_FLOAT_WITHIN(1e-3, femur + 5, s.angles[1].femur);
+  TEST_ASSERT_EQUAL_FLOAT(otherFemur, s.angles[0].femur);
+  run(command(RequestedMode::Sleep), 20);
+  TEST_ASSERT_FALSE(s.legUpdated[1]); // re-solved once only
+  setOffsets(s, 1, Vector3(o.x, o.y + 5, o.z)); // unchanged: no re-solve
+  run(command(RequestedMode::Sleep), 20);
+  TEST_ASSERT_FALSE(s.legUpdated[1]);
+}
+
 // --- elapsed-time bound and target rejection --------------------------------
 
 void test_large_elapsed_time_is_bounded()
@@ -665,6 +700,8 @@ int main()
   RUN_TEST(test_calibrate_raises_only_low_legs_first);
   RUN_TEST(test_calibrate_approaches_from_above_without_jumping);
   RUN_TEST(test_leaving_calibrate_passes_through_stand);
+  RUN_TEST(test_init_loads_default_offsets);
+  RUN_TEST(test_offset_change_resolves_a_still_leg);
   RUN_TEST(test_large_elapsed_time_is_bounded);
   RUN_TEST(test_rejected_target_keeps_position_and_reports_once);
   RUN_TEST(test_initialise_holds_second_pose_for_full_duration);

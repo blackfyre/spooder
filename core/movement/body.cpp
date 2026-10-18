@@ -367,6 +367,8 @@ static void stepInitialise(BodyState &s, uint32_t dtMs)
 
 void init(BodyState &s)
 {
+  joint_calibration::Table defaults;
+  joint_calibration::loadDefaults(defaults);
   s = BodyState();
   s.mode = Mode::Initialise;
   s.started = false;
@@ -379,9 +381,21 @@ void init(BodyState &s)
     s.feet[i] = INIT_POSES[1];
     s.legCycles[i] = gait::LegCycle{LegPhase::Reset, s.feet[i]};
     s.stand.controlPoints[i][0] = s.feet[i];
+    s.offsets[i] = joint_calibration::legOffsets(defaults, i);
   }
   for (int j = 0; j < 3; j++)
     s.stand.currentLegs[j] = -1;
+}
+
+void setOffsets(BodyState &s, int leg, Vector3 offsets)
+{
+  if (leg < 0 || leg >= LEG_COUNT)
+    return;
+  Vector3 &o = s.offsets[leg];
+  if (o.x == offsets.x && o.y == offsets.y && o.z == offsets.z)
+    return;
+  o = offsets;
+  s.offsetsChanged[leg] = true;
 }
 
 bool transitionActive(const BodyState &s)
@@ -517,11 +531,12 @@ static void solveAngles(BodyState &s)
 {
   for (int i = 0; i < LEG_COUNT; i++)
   {
-    if (!s.pendingSolve[i])
+    if (!s.pendingSolve[i] && !s.offsetsChanged[i])
       continue;
     s.pendingSolve[i] = false;
+    s.offsetsChanged[i] = false;
     // setFoot only records targets solveLeg accepts, so this succeeds.
-    if (kinematics::solveLeg(s.feet[i], kinematics::LEG_OFFSETS[i], s.angles[i]))
+    if (kinematics::solveLeg(s.feet[i], s.offsets[i], s.angles[i]))
       s.legUpdated[i] = true;
   }
 }

@@ -3,15 +3,6 @@
 namespace kinematics
 {
 
-const Vector3 LEG_OFFSETS[LEG_COUNT] = {
-    {90, 75, -18},
-    {93, 75, -15},
-    {93, 75, -18},
-    {87, 80, -26},
-    {85, 89, -16},
-    {93, 85, -24},
-};
-
 static float clampf(float v, float lo, float hi)
 {
   return v < lo ? lo : (v > hi ? hi : v);
@@ -52,12 +43,6 @@ bool solveLeg(Vector3 target, Vector3 offsets, JointAngles &out)
   out.femur = toDegrees(phi1 + phi2) + offsets.y;
   out.tibia = 180 - toDegrees(phi3) + offsets.z;
   return true;
-}
-
-uint16_t angleToMicroseconds(float angle)
-{
-  float clamped = clampf(angle, 0, 180);
-  return (uint16_t)(500.0f + ((2500.0f - 500.0f) / 180.0f) * clamped);
 }
 
 } // namespace kinematics

@@ -23,6 +23,7 @@ constexpr int TELEMETRY_EVERY_TICKS = 5; // 100 ms
 static body::BodyState bodyState;
 static protection::State protectionState;
 static protection::Supervisor supervisor;
+static joint_calibration::Table calibration;
 
 // The LED pattern mirrors body::Mode by value.
 static_assert((int)led_pattern::BodyMode::Walk == (int)body::Mode::Walk &&
@@ -174,6 +175,7 @@ int main()
   link::setup();
 #endif
   protection::init(protectionState, config::POWER_LIMITS);
+  joint_calibration::loadDefaults(calibration);
 
   if (!servo_output::setup())
   {
@@ -234,7 +236,7 @@ int main()
       cmd.mode = run.mode; // protection only rewrites the request
       body::step(bodyState, cmd, now);
       reportRejections();
-      servo_output::apply(bodyState);
+      servo_output::apply(bodyState, calibration);
     }
 
     status_leds::show(ledState(now, prot, run.runBody, reading.currentA, input.source));
