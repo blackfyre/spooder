@@ -99,6 +99,21 @@ func TestStrayStartMarkerIsShownInTheText(t *testing.T) {
 	}
 }
 
+// A line carries the counts as of its own end, including the candidate its
+// stray marker started.
+func TestLineCarriesCurrentCounts(t *testing.T) {
+	_, _, rec, p := start(t, nil)
+	p.send([]byte("\xA5x\n"))
+	if !rec.waitFor(time.Second, func(r *recorder) bool { return len(r.lines) == 1 }) {
+		t.Fatal("no line")
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if rec.stats.Discarded != 1 || rec.stats.Stray != 1 {
+		t.Fatalf("stats %+v", rec.stats)
+	}
+}
+
 func TestPartialReads(t *testing.T) {
 	_, _, rec, p := start(t, nil)
 	var stream []byte

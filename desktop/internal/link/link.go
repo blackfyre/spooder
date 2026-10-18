@@ -321,14 +321,18 @@ func writeFrame(port Port, frame []byte, limit time.Duration) error {
 // read feeds the decoder until the port fails or is closed.
 func (l *Link) read(port Port) error {
 	var stats Stats
+	var dec protocol.Decoder
 	text := textAccumulator{}
-	text.emit = func(line Line) { l.h.Line(line, stats) }
-	dec := protocol.Decoder{Discard: func(b byte) {
+	text.emit = func(line Line) {
+		stats.Valid, stats.Discarded = dec.Valid(), dec.Discarded()
+		l.h.Line(line, stats)
+	}
+	dec.Discard = func(b byte) {
 		if b == protocol.Start {
 			stats.Stray++
 		}
 		text.add(b)
-	}}
+	}
 	next := func() {
 		for {
 			f, ok := dec.Next()
