@@ -38,6 +38,8 @@ static int payloadSize(uint8_t type)
     return CALIBRATION_SET_PAYLOAD_SIZE;
   case FrameType::CalibrationReport:
     return CALIBRATION_REPORT_PAYLOAD_SIZE;
+  case FrameType::Pose:
+    return POSE_PAYLOAD_SIZE;
   }
   return -1;
 }
@@ -122,6 +124,21 @@ int encodeCalibrationReport(const CalibrationReport &r, uint8_t seq, uint8_t *ou
   return finishFrame(FrameType::CalibrationReport, seq, out);
 }
 
+int encodePose(const Pose &p, uint8_t seq, uint8_t *out)
+{
+  uint8_t *b = out + HEADER_SIZE;
+  b[0] = p.flags;
+  b[1] = 0; // reserved
+  for (int i = 0; i < CALIBRATION_JOINTS; i++)
+  {
+    uint8_t *j = b + 2 + i * POSE_JOINT_SIZE;
+    put16(j, (uint16_t)p.joints[i].commandedCentideg);
+    put16(j + 2, (uint16_t)p.joints[i].servoCentideg);
+    put16(j + 4, p.joints[i].pulseUs);
+  }
+  return finishFrame(FrameType::Pose, seq, out);
+}
+
 static void parseCommand(const uint8_t *p, Command &c)
 {
   c.mode = p[0];
@@ -176,6 +193,18 @@ static void parseCalibrationReport(const uint8_t *p, CalibrationReport &r)
     r.joints[i].pulse0Us = get16(j + 2);
     r.joints[i].pulse180Us = get16(j + 4);
     r.joints[i].flags = j[6];
+  }
+}
+
+static void parsePose(const uint8_t *b, Pose &p)
+{
+  p.flags = b[0];
+  for (int i = 0; i < CALIBRATION_JOINTS; i++)
+  {
+    const uint8_t *j = b + 2 + i * POSE_JOINT_SIZE;
+    p.joints[i].commandedCentideg = (int16_t)get16(j);
+    p.joints[i].servoCentideg = (int16_t)get16(j + 2);
+    p.joints[i].pulseUs = get16(j + 4);
   }
 }
 
@@ -242,6 +271,9 @@ void Decoder::emit(int total, Frame &out)
     break;
   case FrameType::CalibrationReport:
     parseCalibrationReport(payload, out.calibrationReport);
+    break;
+  case FrameType::Pose:
+    parsePose(payload, out.pose);
     break;
   }
   valid_++;

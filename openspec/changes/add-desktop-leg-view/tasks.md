@@ -2,9 +2,9 @@
 
 ## 1. Protocol
 
-- [ ] 1.1 Add frame type 5 (`Pose`) to `core/protocol` (encoder, decoder, payload size), with round-trip and decoder tests in `test/test_protocol`; verify `mise run test` passes
-- [ ] 1.2 Append pose vectors to `test/golden/protocol_v2.txt` from `test/test_protocol_golden`, leaving every existing line unchanged; verify with `git diff` that the file only gains lines and `mise run test` passes
-- [ ] 1.3 Add the pose frame to `desktop/internal/protocol` (encode, parse, fields, summary) and require a pose vector in the golden test; verify `mise run desktop-test` passes
+- [x] 1.1 Add frame type 5 (`Pose`) to `core/protocol` (encoder, decoder, payload size), with round-trip and decoder tests in `test/test_protocol`; verify `mise run test` passes
+- [x] 1.2 Append pose vectors to `test/golden/protocol_v2.txt` from `test/test_protocol_golden`, leaving every existing line unchanged; verify with `git diff` that the file only gains lines and `mise run test` passes
+- [x] 1.3 Add the pose frame to `desktop/internal/protocol` (encode, parse, fields, summary) and require a pose vector in the golden test; verify `mise run desktop-test` passes
 
 ## 2. Robot
 

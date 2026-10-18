@@ -55,6 +55,8 @@ static const char *typeName(FrameType type)
     return "calibration_set";
   case FrameType::CalibrationReport:
     return "calibration_report";
+  case FrameType::Pose:
+    return "pose";
   }
   return "?";
 }
@@ -100,6 +102,15 @@ static void describe(Text &t, const Frame &f)
           r.joints[i].offsetCentideg, i, r.joints[i].pulse0Us, i, r.joints[i].pulse180Us, i, r.joints[i].flags);
     break;
   }
+  case FrameType::Pose:
+  {
+    const Pose &p = f.pose;
+    add(t, " flags=%u", p.flags);
+    for (int i = 0; i < CALIBRATION_JOINTS; i++)
+      add(t, " joint%d.commandedCentideg=%d joint%d.servoCentideg=%d joint%d.pulseUs=%u", i,
+          p.joints[i].commandedCentideg, i, p.joints[i].servoCentideg, i, p.joints[i].pulseUs);
+    break;
+  }
   }
 }
 
@@ -115,6 +126,8 @@ static int encode(const Frame &f, uint8_t *out)
     return encodeCalibrationSet(f.calibrationSet, f.seq, out);
   case FrameType::CalibrationReport:
     return encodeCalibrationReport(f.calibrationReport, f.seq, out);
+  case FrameType::Pose:
+    return encodePose(f.pose, f.seq, out);
   }
   return 0;
 }
@@ -279,6 +292,39 @@ static void buildGolden(Text &t)
   n = encode(bad, bytes);
   bytes[n - 1] ^= 0x01;
   addRejected(t, "reject_bad_crc_calibration_set", bytes, n);
+
+  // Pose frames (type 5, USB only), appended after the frames above.
+  // The calibration pose: commanded 0/90/90 on every leg, servo angles with
+  // the default offsets, pulses through the default 500-2500 us range.
+  f = frame(FrameType::Pose, 3);
+  f.pose.flags = POSE_OUTPUTS_ON;
+  const int16_t pose[3] = {0, 9000, 9000};
+  for (int i = 0; i < CALIBRATION_JOINTS; i++)
+  {
+    int16_t servo = (int16_t)(pose[i % 3] + defaults[i]);
+    int16_t clamped = servo < 0 ? 0 : (servo > 18000 ? 18000 : servo);
+    f.pose.joints[i] = {pose[i % 3], servo, (uint16_t)(500 + (clamped * 2000 + 9000) / 18000)};
+  }
+  addFrame(t, "pose_calibration_outputs_on", f);
+
+  // Output off, legs 4 and 5 never set (pulse 0), negative angles.
+  f = frame(FrameType::Pose, 200);
+  f.pose.flags = 0;
+  for (int i = 0; i < CALIBRATION_JOINTS; i++)
+    f.pose.joints[i] = i < 12 ? PoseJoint{(int16_t)(-1234 - i), (int16_t)(-50 + 3 * i), (uint16_t)(1500 + i)}
+                              : PoseJoint{0, 0, 0};
+  addFrame(t, "pose_output_off_legs_unset", f);
+
+  f = frame(FrameType::Pose, 255);
+  f.pose.flags = 0xFF;
+  for (int i = 0; i < CALIBRATION_JOINTS; i++)
+    f.pose.joints[i] = {(int16_t)(i % 2 ? -32768 : 32767), (int16_t)(i % 2 ? 32767 : -32768), 65535};
+  addFrame(t, "pose_extremes", f);
+
+  Frame badPose = frame(FrameType::Pose, 6);
+  n = encode(badPose, bytes);
+  bytes[n - 2] ^= 0x80;
+  addRejected(t, "reject_bad_crc_pose", bytes, n);
 }
 
 static void goldenPath(char *out, int size)

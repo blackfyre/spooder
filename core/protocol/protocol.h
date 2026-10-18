@@ -10,7 +10,7 @@
 //   0      start marker 0xA5
 //   1      protocol version
 //   2      type (1 = command, 2 = telemetry, 3 = calibration set,
-//          4 = calibration report)
+//          4 = calibration report, 5 = pose)
 //   3      sequence number (wraps)
 //   4      payload length N (fixed per type and version)
 //   5      payload, N bytes, little-endian
@@ -29,6 +29,7 @@ enum class FrameType : uint8_t
   Telemetry = 2,
   CalibrationSet = 3,
   CalibrationReport = 4,
+  Pose = 5, // robot to USB host only
 };
 
 constexpr int HEADER_SIZE = 5;
@@ -39,11 +40,15 @@ constexpr int CALIBRATION_JOINTS = 18;
 constexpr int CALIBRATION_JOINT_SIZE = 7;
 constexpr int CALIBRATION_SET_PAYLOAD_SIZE = 9;
 constexpr int CALIBRATION_REPORT_PAYLOAD_SIZE = 2 + CALIBRATION_JOINTS * CALIBRATION_JOINT_SIZE; // 128
+constexpr int POSE_JOINT_SIZE = 6;
+constexpr int POSE_PAYLOAD_SIZE = 2 + CALIBRATION_JOINTS * POSE_JOINT_SIZE; // 110
 constexpr int COMMAND_FRAME_SIZE = HEADER_SIZE + COMMAND_PAYLOAD_SIZE + CRC_SIZE;
 constexpr int TELEMETRY_FRAME_SIZE = HEADER_SIZE + TELEMETRY_PAYLOAD_SIZE + CRC_SIZE;
 constexpr int CALIBRATION_SET_FRAME_SIZE = HEADER_SIZE + CALIBRATION_SET_PAYLOAD_SIZE + CRC_SIZE;
 constexpr int CALIBRATION_REPORT_FRAME_SIZE = HEADER_SIZE + CALIBRATION_REPORT_PAYLOAD_SIZE + CRC_SIZE;
+constexpr int POSE_FRAME_SIZE = HEADER_SIZE + POSE_PAYLOAD_SIZE + CRC_SIZE;
 constexpr int MAX_FRAME_SIZE = CALIBRATION_REPORT_FRAME_SIZE; // 135
+static_assert(POSE_FRAME_SIZE <= MAX_FRAME_SIZE, "every frame fits the decoder buffer");
 
 // Command flags.
 constexpr uint8_t FLAG_CONTROLLER_CONNECTED = 1u << 0;
@@ -132,6 +137,23 @@ struct CalibrationReport
   CalibrationJoint joints[CALIBRATION_JOINTS];
 };
 
+// Pose flags.
+constexpr uint8_t POSE_OUTPUTS_ON = 1u << 0;
+
+struct PoseJoint
+{
+  int16_t commandedCentideg; // IK result, before the calibration offset
+  int16_t servoCentideg;     // commanded + applied offset, before toPulse's 0-180 clamp
+  uint16_t pulseUs;          // last pulse set for the output; 0 = never set
+};
+
+// Robot to the USB host only, at 10 Hz: what the robot commands each joint.
+struct Pose
+{
+  uint8_t flags; // POSE_* bits
+  PoseJoint joints[CALIBRATION_JOINTS]; // servo output order
+};
+
 /**
  * @brief CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF, no reflection).
  */
@@ -145,6 +167,7 @@ int encodeCommand(const Command &c, uint8_t seq, uint8_t *out);
 int encodeTelemetry(const Telemetry &t, uint8_t seq, uint8_t *out);
 int encodeCalibrationSet(const CalibrationSet &c, uint8_t seq, uint8_t *out);
 int encodeCalibrationReport(const CalibrationReport &r, uint8_t seq, uint8_t *out);
+int encodePose(const Pose &p, uint8_t seq, uint8_t *out);
 
 struct Frame
 {
@@ -154,6 +177,7 @@ struct Frame
   Telemetry telemetry;                 // valid when type == Telemetry
   CalibrationSet calibrationSet;       // valid when type == CalibrationSet
   CalibrationReport calibrationReport; // valid when type == CalibrationReport
+  Pose pose;                           // valid when type == Pose
 };
 
 // Incremental decoder. Feed every received byte with push(), and after each

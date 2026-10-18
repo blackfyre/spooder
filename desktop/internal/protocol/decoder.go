@@ -112,6 +112,8 @@ func (d *Decoder) emit(total int) Frame {
 		f.CalibrationSet = parseCalibrationSet(p)
 	case TypeCalibrationReport:
 		f.CalibrationReport = parseCalibrationReport(p)
+	case TypePose:
+		f.Pose = parsePose(p)
 	}
 	d.valid++
 	d.drop(total)
