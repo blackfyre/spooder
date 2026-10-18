@@ -23,7 +23,14 @@ constexpr int TELEMETRY_EVERY_TICKS = 5; // 100 ms
 static body::BodyState bodyState;
 static protection::State protectionState;
 static protection::Supervisor supervisor;
-static joint_calibration::Table calibration;
+// Requested: the latest accepted calibration (what reports show). Applied:
+// what the IK and servo output use, following requested at a bounded rate.
+// Both start from the compiled defaults; live changes last until restart.
+static joint_calibration::Table requestedCalibration;
+static joint_calibration::Table appliedCalibration;
+#ifndef SPOODER_SERIAL_COMMANDS
+static link_receiver::ReportSchedule bridgeReports;
+#endif
 
 // The LED pattern mirrors body::Mode by value.
 static_assert((int)led_pattern::BodyMode::Walk == (int)body::Mode::Walk &&
@@ -175,7 +182,8 @@ int main()
   link::setup();
 #endif
   protection::init(protectionState, config::POWER_LIMITS);
-  joint_calibration::loadDefaults(calibration);
+  joint_calibration::loadDefaults(requestedCalibration);
+  joint_calibration::loadDefaults(appliedCalibration);
 
   if (!servo_output::setup())
   {
@@ -195,11 +203,16 @@ int main()
   int telemetryTick = 0;
 #endif
   uint32_t lastReportMs = 0;
+  uint32_t lastTickMs = nowMs();
   absolute_time_t next = get_absolute_time();
 
   while (true)
   {
     uint32_t now = nowMs();
+    uint32_t elapsedMs = now - lastTickMs;
+    lastTickMs = now;
+    if (elapsedMs > body::MAX_STEP_MS)
+      elapsedMs = body::MAX_STEP_MS; // an overrun never makes one large calibration step
 
     // Input first, so an emergency stop in a frame that has arrived acts in
     // this tick. Both input sources are bounded and never block, so they
@@ -230,13 +243,24 @@ int main()
       body::init(bodyState);
       printf("output allowed: starting movement\n");
     }
+    // Calibration changes are guarded with this tick's output state and the
+    // body's mode; applied values then move towards them at the rate limit.
+#ifndef SPOODER_SERIAL_COMMANDS
+    bool calibrating = run.runBody && bodyState.mode == body::Mode::Calibrate;
+    if (link::processCalibration(requestedCalibration, calibrating, prot.allowOutput) > 0)
+      link_receiver::requestReport(bridgeReports);
+#endif
+    joint_calibration::step(appliedCalibration, requestedCalibration, elapsedMs / 1000.0f);
+
     if (run.runBody)
     {
       MovementCommand cmd = input.command;
       cmd.mode = run.mode; // protection only rewrites the request
+      for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
+        body::setOffsets(bodyState, leg, joint_calibration::legOffsets(appliedCalibration, leg));
       body::step(bodyState, cmd, now);
       reportRejections();
-      servo_output::apply(bodyState, calibration);
+      servo_output::apply(bodyState, appliedCalibration);
     }
 
     status_leds::show(ledState(now, prot, run.runBody, reading.currentA, input.source));
@@ -247,6 +271,10 @@ int main()
       telemetryTick = 0;
       sendTelemetry(reading, prot, servo_output::outputsOn());
     }
+    // In Calibrate, front-ends follow the table through these reports.
+    calibrating = run.runBody && bodyState.mode == body::Mode::Calibrate;
+    if (link_receiver::reportDue(bridgeReports, calibrating, now) && link::sendCalibrationReport(requestedCalibration))
+      link_receiver::reportSent(bridgeReports, now);
 #endif
 
     if (input.printReadings || now - lastReportMs >= REPORT_PERIOD_MS)

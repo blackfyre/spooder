@@ -5,6 +5,7 @@
 // 115200 8N1. Bytes move under interrupts; framing and the meaning of frames
 // live in core/protocol.
 #include <stdint.h>
+#include "movement/joint_calibration.h"
 #include "protocol/link_receiver.h"
 #include "protocol/protocol.h"
 
@@ -15,16 +16,25 @@ void setup();
 
 /**
  * @brief Drains received bytes, decodes them and returns this tick's input
- * (from the newest valid command). Bounded by the receive buffer size.
+ * (from the newest valid command). Calibration sets are queued for
+ * processCalibration(). Bounded by the receive buffer size.
  */
 link_receiver::Input poll(uint32_t nowMs);
 
 /**
- * @brief Queues a telemetry frame without blocking. Skipped if the previous
- * frame has not finished sending.
+ * @brief Runs this link's queued calibration sets through the guards into
+ * @p requested (see link_receiver::processCalibration).
+ * @return the number of sets processed
+ */
+int processCalibration(joint_calibration::Table &requested, bool calibrating, bool allowOutput);
+
+/**
+ * @brief Queue a frame without blocking, whole or not at all: dropped if the
+ * 256-byte transmit queue has no room for all of it.
  * @return whether the frame was queued
  */
 bool sendTelemetry(const protocol::Telemetry &t);
+bool sendCalibrationReport(const joint_calibration::Table &table);
 
 uint32_t validFrames();
 uint32_t discardedFrames();
