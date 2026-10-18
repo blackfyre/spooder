@@ -12,6 +12,13 @@ namespace servo_output
 constexpr int OUTPUT_COUNT = kinematics::LEG_COUNT * kinematics::JOINTS_PER_LEG;
 static_assert(OUTPUT_COUNT == servo2040::NUM_SERVOS, "one output per joint");
 static_assert(OUTPUT_COUNT == joint_calibration::JOINT_COUNT, "one calibration per output");
+// ServoCluster's hard pulse limits (Calibration::LOWER_HARD_LIMIT and
+// UPPER_HARD_LIMIT, private in pimoroni-pico v1.29).
+constexpr float CLUSTER_MIN_PULSE_US = 400;
+constexpr float CLUSTER_MAX_PULSE_US = 2600;
+static_assert(joint_calibration::MIN_PULSE_US >= CLUSTER_MIN_PULSE_US &&
+                  joint_calibration::MAX_PULSE_US <= CLUSTER_MAX_PULSE_US,
+              "every calibrated pulse is one ServoCluster can produce");
 // Longest pulse ServoCluster can produce (its hard limit) plus margin: within
 // this time every pulse in progress has finished.
 constexpr uint64_t MAX_PULSE_WAIT_US = 2700;
@@ -37,6 +44,11 @@ bool setup()
 {
   if (!cluster.init())
     return false;
+  // Pulses come from joint_calibration, already within 400-2600 µs. Each
+  // channel's default calibration would clamp them to 500-2500 µs; keep only
+  // ServoCluster's hard limits.
+  for (int i = 0; i < OUTPUT_COUNT; i++)
+    cluster.calibration(i).limit_to_calibration(false, false);
   cluster.disable_all(); // no pulses until the body and protection allow them
   on = false;
   return true;
