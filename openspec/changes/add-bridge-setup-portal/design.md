@@ -83,6 +83,20 @@ The calibration table, guards, rate limit, reports, protocol version 2 and sourc
 - A QR code (`WIFI:T:WPA;S:<ssid>;P:<password>;;`, drawn with LovyanGFX `qrcode`) on the right half.
 - `status_screen` gains a setup variant, host-tested like the normal one.
 
+### D9. Clarifications made during implementation
+
+- **Two more core helpers** (`core/setup/`), so the entry and credential rules are host-tested too:
+  - `setup_entry`: the 1 s hold detector and the boot decision (magic **and** a software restart).
+  - `access_point`: the SSID from the MAC, the password generator and check, and the QR text.
+- **Calibration sync** (D5):
+  - One set is in flight at a time. A report carries only the id of the last set the robot processed, so a second set in flight would hide the first one's confirmation.
+  - Ids continue after the robot's last reported id and never equal it, since the robot would take an equal id as a retransmission and change nothing.
+  - Edits are relative to the wanted value (the pending one, else the reported one), so quick repeated nudges add up. They need a report first; the robot reports only in Calibrate or after a set, so the portal asks for Calibrate before it offers the editor.
+  - A joint edited again while its set is in flight stays pending after the confirmation, and its newest value goes next.
+- **Clear faults on the portal:** an e-stop or a trip latches a fault that only a clear removes, and the robot loses its live calibration on a restart. The portal therefore has a Clear faults control, which advances the fault-clear counter like the gamepad's clear combination. It is not a mode request.
+- **Mode after a disconnect:** the portal's requested mode stays Sleep until the next mode press, so a page that comes back never resumes motion by itself.
+- **Setup screen layout:** text on the left (lines fit 100 px at the screen font), the QR code 135 px square on the right, so it keeps a quiet zone of about two modules. Line 7 shows the body mode, red while a fault is latched.
+
 ## Risks / Trade-offs
 
 - [A phone left on the portal keeps the bridge "connected"] → Only while the page polls; closing or locking the phone stops polling, and the robot sleeps within 1 s.

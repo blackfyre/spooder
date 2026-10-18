@@ -2,10 +2,10 @@
 
 ## 1. Hardware-free core (host-tested)
 
-- [ ] 1.1 `core/setup/portal_controller` (design D4). Verify host tests for connected within 1 s of a poll and disconnected after, mode buttons advancing the mode-request counter, zero translate and rotate, and Sleep on disconnect.
-- [ ] 1.2 `core/setup/calibration_sync` (design D5). Verify host tests for one set per period, oldest pending first, latest value only, confirmation by request id, the resend after 200 ms with the same id, and a clamped or rejected result replacing the shown value.
-- [ ] 1.3 `core/setup/calibration_export` (design D7). Verify the golden test against `test/golden/calibration_defaults.cpp`, and an export of a changed table.
-- [ ] 1.4 Setup variant of `core/status/status_screen` (design D8). Verify host tests for the content list in the spec, and that every line fits.
+- [x] 1.1 `core/setup/portal_controller` (design D4). Verify host tests for connected within 1 s of a poll and disconnected after, mode buttons advancing the mode-request counter, zero translate and rotate, and Sleep on disconnect.
+- [x] 1.2 `core/setup/calibration_sync` (design D5). Verify host tests for one set per period, oldest pending first, latest value only, confirmation by request id, the resend after 200 ms with the same id, and a clamped or rejected result replacing the shown value.
+- [x] 1.3 `core/setup/calibration_export` (design D7). Verify the golden test against `test/golden/calibration_defaults.cpp`, and an export of a changed table.
+- [x] 1.4 Setup variant of `core/status/status_screen` (design D8). Verify host tests for the content list in the spec, and that every line fits.
 
 ## 2. Bridge firmware (TTGO T-Display)
 

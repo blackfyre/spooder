@@ -39,6 +39,29 @@ struct Inputs
 
 void compose(const Inputs &in, Line out[LINE_COUNT]);
 
+// The setup-mode screen: text on the left, the joining QR code (135 px) on
+// the right. Lines hold at most SETUP_LINE_CHARS characters and must fit
+// SETUP_TEXT_WIDTH_PX at the screen font.
+constexpr int SETUP_LINE_CHARS = 14;
+constexpr int SETUP_TEXT_WIDTH_PX = 100; // left of the 135 px QR code
+
+struct SetupInputs
+{
+  const char *ssid;      // the access point's network name
+  const char *password;
+  const char *address;   // the portal's address
+  bool portalConnected;  // a portal page polled within the last second
+  bool emergencyStop;    // the bridge's own e-stop toggle
+  bool telemetryFresh;
+  protocol::Telemetry telemetry;
+};
+
+/**
+ * @brief The setup screen: SETUP MODE, network name, password, address,
+ * portal client, link state, e-stop and, while the link is up, the body mode.
+ */
+void composeSetup(const SetupInputs &in, Line out[LINE_COUNT]);
+
 /**
  * @brief Short name of one protection fault bit, or nullptr if unknown.
  */

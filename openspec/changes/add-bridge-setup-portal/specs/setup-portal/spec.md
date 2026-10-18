@@ -43,11 +43,15 @@ While a portal page is open and has polled the bridge within the last second, th
 - **THEN** the bridge's command frames report no controller connected
 
 ### Requirement: Safety in setup mode
-The command link, the emergency-stop button and the robot's protection SHALL work in setup mode exactly as in normal operation. The portal SHALL show the robot's telemetry and an emergency-stop indication.
+The command link, the emergency-stop button and the robot's protection SHALL work in setup mode exactly as in normal operation. The portal SHALL show the robot's telemetry and an emergency-stop indication. The portal SHALL offer a fault-clear control that acts as the gamepad's clear combination; it SHALL NOT count as a mode request.
 
 #### Scenario: Emergency stop during calibration
 - **WHEN** the e-stop button is pressed while the portal is calibrating a joint
 - **THEN** servo output switches off as in normal operation, and the portal shows the emergency stop
+
+#### Scenario: Clear after an emergency stop
+- **WHEN** the e-stop is released and the operator presses Clear faults on the portal
+- **THEN** the next command frames carry a new fault-clear counter value, and the robot stays asleep until the next mode request
 
 ### Requirement: Setup screen
 In setup mode the bridge screen SHALL show that it is in setup mode, the network name, the password, the portal address, a QR code for joining the network, whether a portal client is connected, and the robot link state.

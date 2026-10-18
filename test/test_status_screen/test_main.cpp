@@ -199,9 +199,136 @@ void test_unknown_mode_and_gait_do_not_crash()
   TEST_ASSERT_TRUE(screenContains("Body ?"));
 }
 
+// --- setup screen --------------------------------------------------------------
+
+// Glyph widths of the screen font (LovyanGFX fonts::Font2, widtbl_f16) for
+// characters 32..127.
+static const uint8_t FONT2_WIDTHS[96] = {
+    6, 3, 4, 9, 8, 9, 9, 3, 7, 7, 8, 6, 3, 6, 5, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 3, 3, 6, 6, 6, 8,
+    9, 8, 8, 8, 8, 8, 8, 8, 8, 4, 8, 8, 7, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 10, 8, 8, 8, 4, 7, 4, 7, 9,
+    4, 7, 7, 7, 7, 7, 6, 7, 7, 4, 5, 6, 4, 8, 7, 8, 7, 8, 6, 6, 5, 7, 8, 8, 6, 7, 7, 5, 3, 5, 8, 6,
+};
+
+static int textWidthPx(const char *text)
+{
+  int w = 0;
+  for (const char *c = text; *c; c++)
+    w += (*c >= 32 && *c < 128) ? FONT2_WIDTHS[*c - 32] : 10;
+  return w;
+}
+
+static SetupInputs setupHealthy()
+{
+  SetupInputs in = {};
+  in.ssid = "spooder-ab0f";
+  in.password = "abcdefgh23";
+  in.address = "192.168.4.1";
+  in.portalConnected = true;
+  in.telemetryFresh = true;
+  in.telemetry.bodyMode = 4;
+  in.telemetry.outputsOn = true;
+  in.telemetry.voltageMv = 6020;
+  return in;
+}
+
+static void assertSetupLinesFit()
+{
+  for (int l = 0; l < LINE_COUNT; l++)
+  {
+    TEST_ASSERT_TRUE_MESSAGE(strlen(out[l].text) <= (size_t)SETUP_LINE_CHARS, out[l].text);
+    TEST_ASSERT_TRUE_MESSAGE(textWidthPx(out[l].text) <= SETUP_TEXT_WIDTH_PX, out[l].text);
+  }
+}
+
+void test_setup_screen_shows_every_item()
+{
+  composeSetup(setupHealthy(), out);
+  TEST_ASSERT_EQUAL_STRING("SETUP MODE", out[0].text);
+  TEST_ASSERT_EQUAL_STRING("spooder-ab0f", out[1].text);
+  TEST_ASSERT_EQUAL_STRING("abcdefgh23", out[2].text);
+  TEST_ASSERT_EQUAL_STRING("192.168.4.1", out[3].text);
+  TEST_ASSERT_EQUAL_STRING("Portal: yes", out[4].text);
+  TEST_ASSERT_TRUE(out[4].tone == Tone::Good);
+  TEST_ASSERT_EQUAL_STRING("Link: ok", out[5].text);
+  TEST_ASSERT_TRUE(out[5].tone == Tone::Good);
+  TEST_ASSERT_EQUAL_STRING("E-stop: off", out[6].text);
+  TEST_ASSERT_EQUAL_STRING("Calibrate", out[7].text);
+  assertSetupLinesFit();
+}
+
+void test_setup_screen_states()
+{
+  SetupInputs in = setupHealthy();
+  in.portalConnected = false;
+  in.emergencyStop = true;
+  composeSetup(in, out);
+  TEST_ASSERT_EQUAL_STRING("Portal: no", out[4].text);
+  TEST_ASSERT_TRUE(out[4].tone == Tone::Warn);
+  TEST_ASSERT_EQUAL_STRING("E-STOP", out[6].text);
+  TEST_ASSERT_TRUE(out[6].tone == Tone::Bad);
+
+  in.telemetry.flags = protocol::TELEMETRY_SOURCE_CONFLICT;
+  composeSetup(in, out);
+  TEST_ASSERT_EQUAL_STRING("Link: CONFLICT", out[5].text);
+  TEST_ASSERT_TRUE(out[5].tone == Tone::Bad);
+  in.telemetry.flags = protocol::TELEMETRY_USB_IN_CONTROL;
+  composeSetup(in, out);
+  TEST_ASSERT_EQUAL_STRING("Link: USB", out[5].text);
+  TEST_ASSERT_TRUE(out[5].tone == Tone::Warn);
+
+  in.telemetry.faults = protection::OVERCURRENT;
+  composeSetup(in, out);
+  TEST_ASSERT_TRUE(out[7].tone == Tone::Bad);
+
+  in.telemetryFresh = false;
+  composeSetup(in, out);
+  TEST_ASSERT_EQUAL_STRING("Link: LOST", out[5].text);
+  TEST_ASSERT_TRUE(out[5].tone == Tone::Bad);
+  TEST_ASSERT_EQUAL_STRING("", out[7].text); // no robot values while lost
+  // The credentials stay on screen whatever the link does.
+  TEST_ASSERT_EQUAL_STRING("spooder-ab0f", out[1].text);
+  TEST_ASSERT_EQUAL_STRING("abcdefgh23", out[2].text);
+  assertSetupLinesFit();
+}
+
+void test_every_setup_line_fits_at_the_widest()
+{
+  // The widest password and network name the bridge can produce, every link
+  // state and every body mode.
+  SetupInputs in = setupHealthy();
+  in.ssid = "spooder-ffff";
+  in.password = "wwwwwwwwww";
+  const uint8_t flags[] = {0, protocol::TELEMETRY_SOURCE_CONFLICT, protocol::TELEMETRY_USB_IN_CONTROL};
+  for (int f = 0; f < 3; f++)
+    for (int m = 0; m < 6; m++)
+      for (int e = 0; e < 2; e++)
+      {
+        in.telemetry.flags = flags[f];
+        in.telemetry.bodyMode = (uint8_t)(m == 5 ? 200 : m);
+        in.emergencyStop = e != 0;
+        in.portalConnected = e == 0;
+        composeSetup(in, out);
+        assertSetupLinesFit();
+      }
+}
+
+void test_setup_screen_cuts_overlong_text()
+{
+  SetupInputs in = setupHealthy();
+  in.ssid = "a-network-name-far-too-long";
+  in.password = nullptr;
+  composeSetup(in, out);
+  TEST_ASSERT_EQUAL_INT(SETUP_LINE_CHARS, (int)strlen(out[1].text));
+  TEST_ASSERT_EQUAL_STRING("", out[2].text);
+}
+
 int main()
 {
   UNITY_BEGIN();
+  RUN_TEST(test_setup_screen_shows_every_item);
+  RUN_TEST(test_setup_screen_states);
+  RUN_TEST(test_every_setup_line_fits_at_the_widest);
+  RUN_TEST(test_setup_screen_cuts_overlong_text);
   RUN_TEST(test_healthy_screen_shows_every_item);
   RUN_TEST(test_no_gamepad_is_shown);
   RUN_TEST(test_emergency_stop_is_shown);

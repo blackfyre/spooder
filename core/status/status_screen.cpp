@@ -145,4 +145,39 @@ void compose(const Inputs &in, Line out[LINE_COUNT])
   }
 }
 
+// Like set(), but cut to SETUP_LINE_CHARS.
+static void setShort(Line &l, Tone tone, const char *text)
+{
+  snprintf(l.text, sizeof(l.text), "%.*s", SETUP_LINE_CHARS, text ? text : "");
+  l.tone = tone;
+}
+
+void composeSetup(const SetupInputs &in, Line out[LINE_COUNT])
+{
+  for (int i = 0; i < LINE_COUNT; i++)
+    set(out[i], Tone::Normal, "");
+
+  setShort(out[0], Tone::Warn, "SETUP MODE");
+  setShort(out[1], Tone::Normal, in.ssid);
+  setShort(out[2], Tone::Normal, in.password);
+  setShort(out[3], Tone::Normal, in.address);
+  setShort(out[4], in.portalConnected ? Tone::Good : Tone::Warn, in.portalConnected ? "Portal: yes" : "Portal: no");
+
+  if (!in.telemetryFresh)
+    setShort(out[5], Tone::Bad, "Link: LOST");
+  else if (in.telemetry.flags & protocol::TELEMETRY_SOURCE_CONFLICT)
+    setShort(out[5], Tone::Bad, "Link: CONFLICT");
+  else if (in.telemetry.flags & protocol::TELEMETRY_USB_IN_CONTROL)
+    setShort(out[5], Tone::Warn, "Link: USB");
+  else
+    setShort(out[5], Tone::Good, "Link: ok");
+
+  setShort(out[6], in.emergencyStop ? Tone::Bad : Tone::Normal, in.emergencyStop ? "E-STOP" : "E-stop: off");
+
+  // The body mode, red while any fault is latched; nothing while the link is
+  // down, as on the normal screen.
+  if (in.telemetryFresh)
+    setShort(out[7], in.telemetry.faults ? Tone::Bad : Tone::Normal, name(BODY_MODES, 5, in.telemetry.bodyMode));
+}
+
 } // namespace status_screen
