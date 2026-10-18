@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/blackfyre/spooder/desktop/internal/link"
 	"github.com/blackfyre/spooder/desktop/internal/protocol"
 )
 
@@ -34,13 +35,13 @@ func openPty(t *testing.T) (*os.File, string) {
 // frames written to the other side arrive, and only typed keys come back.
 func TestPseudoTerminalPort(t *testing.T) {
 	master, path := openPty(t)
-	p, err := (SerialSystem{}).Open(path)
+	p, err := (link.Serial{}).Open(path)
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)
 	}
 	p.Close()
 	keys := newKeyInput()
-	m := startMonitorEnv(t, Config{Port: path, Frames: true, TelemetryEvery: 1, Keys: true}, Env{System: SerialSystem{}, Keys: keys})
+	m := startMonitorEnv(t, Config{Port: path, Frames: true, TelemetryEvery: 1, Keys: true}, Env{System: link.Serial{}, Keys: keys})
 	m.out.waitFor(t, "-- connected "+path)
 	frame := protocol.EncodeTelemetry(calibrating, 5)
 	if _, err := master.Write(append(append([]byte("hello from the pty\r\n"), frame...), "bye\r\n"...)); err != nil {

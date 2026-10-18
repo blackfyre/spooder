@@ -6,31 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"go.bug.st/serial"
-
 	"github.com/blackfyre/spooder/desktop/internal/link"
 )
-
-// OpenSerial opens a port like link.Serial, with DTR and RTS raised. A
-// pseudo-terminal has no modem lines, so when setting them fails the port is
-// opened again without them (design D3).
-func OpenSerial(name string) (link.Port, error) {
-	p, err := link.Serial{}.Open(name)
-	var pe *serial.PortError
-	if err != nil && errors.As(err, &pe) && pe.Code() == serial.InvalidSerialPort {
-		return serial.Open(name, &serial.Mode{BaudRate: link.BaudRate})
-	}
-	return p, err
-}
-
-// SerialSystem is the computer's serial ports, opened with OpenSerial.
-type SerialSystem struct{}
-
-// List returns the serial ports with their USB details.
-func (SerialSystem) List() ([]link.PortInfo, error) { return link.Serial{}.List() }
-
-// Open opens a port with OpenSerial.
-func (SerialSystem) Open(name string) (link.Port, error) { return OpenSerial(name) }
 
 // system is the monitor's view of the ports: the base system's, plus a
 // named path that USB enumeration does not list (a pseudo-terminal), and

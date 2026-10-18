@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/blackfyre/spooder/desktop/internal/console"
+	"github.com/blackfyre/spooder/desktop/internal/link"
 )
 
 func main() {
@@ -39,7 +40,7 @@ func run() int {
 	}
 
 	err = console.Run(ctx, cfg, console.Env{
-		System: console.SerialSystem{},
+		System: link.Serial{},
 		Out:    os.Stdout,
 		Keys:   os.Stdin,
 	})

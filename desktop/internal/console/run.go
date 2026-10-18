@@ -72,7 +72,7 @@ func ParseFlags(args []string, out io.Writer) (Config, error) {
 
 // Env is what the monitor runs against.
 type Env struct {
-	System  link.System // the computer's ports (SerialSystem)
+	System  link.System // the computer's ports (link.Serial)
 	Exists  func(path string) bool
 	Out     io.Writer
 	Keys    io.Reader // standard input, read only with --keys
