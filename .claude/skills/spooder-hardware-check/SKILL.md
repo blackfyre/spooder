@@ -174,8 +174,8 @@ The desktop app in `desktop/` speaks the link protocol on the robot's USB port. 
 1. **Connect.** The Servo 2040 (USB ID 2e8a:000a) is preselected; press Connect.
    - The debug log shows the robot's text lines and the telemetry strip its mode, supply and faults. Frames go to the frames pane, never into the log.
    - A `Stray 0xA5` banner means a text line held a byte 0xA5 outside a frame: debug text must stay ASCII.
-2. **Observe.** The app reports no controller: with the gamepad driving, nothing changes on the robot (LED 6 stays cyan). Space (or E-stop) still stops it: all six LEDs steady red, output off.
-3. **Take control** with the bridge's gamepad off. LED 6 turns blue and the source shows `USB (this app)`. Clear fault (if the e-stop latched), then Calibrate.
+2. **Observe.** The app reports no controller: with the gamepad driving, nothing changes on the robot (LED 6 stays cyan). Space (or E-stop) still stops it: all six LEDs steady red, output off. Press Space again to release the app's e-stop; the fault stays latched.
+3. **Take control** with the bridge's gamepad off and the app's e-stop released. Clear fault (the fault cannot clear while any e-stop is still signalled), then Calibrate. LED 6 shows blue (USB in control) once the fault is cleared, and the source shows `USB (this app)`.
 4. **Calibrate.** Select a joint with the arrow keys or the pointer; `=`/`-` nudge fine, Shift coarse, `R` flips the direction. A change shows `pending` until the robot's report confirms it; clamped or rejected changes are marked and show the robot's value. The joint moves at 60°/s at most.
 5. **Release control.** The robot sleeps (LED 6 fast amber without a bridge). Closing the window or pulling the cable does the same within about 1 s.
 6. **Conflict.** Take control while the gamepad is connected: the app and the bridge screen show the conflict, LED 6 alternates magenta and cyan, and the robot sleeps until one side lets go.
