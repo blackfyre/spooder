@@ -9,7 +9,7 @@ Draws the robot's legs in the desktop calibrator as the robot commands them, so 
 ### Requirement: Leg drawing from the reported pose
 The calibrator SHALL draw the legs from the latest pose frame, using the reported commanded angles, the link lengths (coxa 41 mm, femur 116 mm, tibia 183 mm) and the robot's angle conventions, so that the drawn foot is where the robot's inverse kinematics placed it. It SHALL show:
 - the selected leg from the side, in the leg's vertical plane, with its coxa angle in a top view;
-- all six legs from above on a schematic body, with the leg numbers and the assumed front marked.
+- all six legs from above on a schematic body, with the leg numbers and the front (legs 1 and 6) marked.
 
 #### Scenario: Calibration pose
 - **WHEN** the robot reports the calibration pose (commanded 0°, 90°, 90°)

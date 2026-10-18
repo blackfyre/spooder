@@ -87,7 +87,9 @@ type Mount struct {
 
 // Mounts are derived from gait.cpp (design D6): legs 0–2 on the left,
 // 3–5 on the right, corners at LEG_PLACEMENT_ANGLE (56°) from the middle
-// legs. The pivots are schematic, not measured.
+// legs. The leg order is confirmed on the robot: legs 1 and 6 (indices 0
+// and 5) are the front pair, 3 and 4 the rear. The pivots are schematic, not
+// measured; upstream's frame STLs can supply real positions.
 var Mounts = [Legs]Mount{
 	{"front left", Vec2{-70, 120}, 180 - 56},
 	{"middle left", Vec2{-90, 0}, 180},

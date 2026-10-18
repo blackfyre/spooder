@@ -75,7 +75,7 @@ Derived from `gait.cpp` (`STRIDE_MULTIPLIER`, `ROTATION_MULTIPLIER`, `LEG_PLACEM
 - leg x axes in the body frame (counter-clockwise from the body's right, forward up): leg 0 124° (front left), 1 180°, 2 236° (rear left), 3 −56° (rear right), 4 0°, 5 56° (front right).
 - Coxa pivots are schematic (middle legs at ±90 mm, corners at (±70, ±120) mm); the legs are drawn to scale from them.
 
-The skill already asks to confirm which end is the front on the robot; the view labels legs by number and marks the assumed front, so a mismatch is visible rather than hidden.
+The leg order is confirmed (2026-10-18): legs 1 and 6 are the front pair and 3 and 4 the rear, as the gait tables assume, so the view marks the front without qualification. The body stays a simple hexapod outline until measurements are available (from the user, or derived from the upstream repository's frame STLs).
 
 ### D7. The legs pane
 
