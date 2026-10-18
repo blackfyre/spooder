@@ -19,8 +19,8 @@
 
 ## 4. Desktop UI
 
-- [ ] 4.1 Add the "legs" pane (side view with coxa inset, top view, pulses, servo angles, limit markers, editor selection, "no pose"); verify `mise run desktop-test` and `mise run desktop-build` pass
-- [ ] 4.2 Add leg-view states to the screenshot test (calibration pose, walking, a joint at its limit, no pose; light and dark), render them and check the layout by eye
+- [x] 4.1 Add the "legs" pane (side view with coxa inset, top view, pulses, servo angles, limit markers, editor selection, "no pose"); verify `mise run desktop-test` and `mise run desktop-build` pass
+- [x] 4.2 Add leg-view states to the screenshot test (calibration pose, walking, a joint at its limit, no pose; light and dark), render them and check the layout by eye
 
 ## 5. Wrap-up
 

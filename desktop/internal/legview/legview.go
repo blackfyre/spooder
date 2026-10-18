@@ -89,12 +89,12 @@ type Mount struct {
 // 3–5 on the right, corners at LEG_PLACEMENT_ANGLE (56°) from the middle
 // legs. The pivots are schematic, not measured.
 var Mounts = [Legs]Mount{
-	{"front left", Vec2{-60, 90}, 180 - 56},
-	{"middle left", Vec2{-75, 0}, 180},
-	{"rear left", Vec2{-60, -90}, 180 + 56},
-	{"rear right", Vec2{60, -90}, -56},
-	{"middle right", Vec2{75, 0}, 0},
-	{"front right", Vec2{60, 90}, 56},
+	{"front left", Vec2{-70, 120}, 180 - 56},
+	{"middle left", Vec2{-90, 0}, 180},
+	{"rear left", Vec2{-70, -120}, 180 + 56},
+	{"rear right", Vec2{70, -120}, -56},
+	{"middle right", Vec2{90, 0}, 0},
+	{"front right", Vec2{70, 120}, 56},
 }
 
 // ToBody maps a leg-frame point (its x and y) into the body frame.

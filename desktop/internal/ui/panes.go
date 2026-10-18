@@ -10,7 +10,8 @@ import (
 	"github.com/blackfyre/spooder/desktop/internal/export"
 )
 
-// sidePanes: the debug log, the decoded frames and the export, as tabs.
+// sidePanes: the debug log, the decoded frames, the export and the legs,
+// as tabs.
 func (w *window) sidePanes(gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -33,6 +34,8 @@ func (w *window) sidePanes(gtx layout.Context) layout.Dimensions {
 				return w.framesPane(gtx)
 			case tabExport:
 				return w.exportPane(gtx)
+			case tabLegs:
+				return w.legsPane(gtx)
 			}
 			return w.logPane(gtx)
 		}),

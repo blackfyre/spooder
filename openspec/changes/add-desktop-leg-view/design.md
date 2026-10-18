@@ -73,15 +73,15 @@ Checks: the calibration pose target (224, 0, 116) solves to 0°/90°/90° — fe
 Derived from `gait.cpp` (`STRIDE_MULTIPLIER`, `ROTATION_MULTIPLIER`, `LEG_PLACEMENT_ANGLE` 56°) and the command convention (translate +y forward, +x right):
 - legs 0–2 are on the left, 3–5 on the right; each leg frame is mirrored relative to the body (left: x outward, y forward; right: x outward, y backward), so in the body seen from above a positive coxa angle turns the leg clockwise;
 - leg x axes in the body frame (counter-clockwise from the body's right, forward up): leg 0 124° (front left), 1 180°, 2 236° (rear left), 3 −56° (rear right), 4 0°, 5 56° (front right).
-- Coxa pivots are schematic (middle legs at ±75 mm, corners at (±60, ±90) mm); the legs are drawn to scale from them.
+- Coxa pivots are schematic (middle legs at ±90 mm, corners at (±70, ±120) mm); the legs are drawn to scale from them.
 
 The skill already asks to confirm which end is the front on the robot; the view labels legs by number and marks the assumed front, so a mismatch is visible rather than hidden.
 
 ### D7. The legs pane
 
-- A fourth tab, "legs", in the right-hand column next to the log, frames and export. The selected leg is the editor's: `selection.joint / 3`, and its joint `selection.joint % 3` is drawn in the accent.
-- **Side view** of the selected leg (pivot, coxa, femur, tibia, foot; a ground-free grid; z up, outward to the right), with each joint's pulse and servo angle next to it, and a small top-view inset of the coxa angle in the leg frame.
-- **Top view** of all six legs on the body outline; the selected leg drawn in the accent.
+- A fourth tab, "legs", in the right-hand column next to the log, frames and export. The selected leg is the editor's: `selection.joint / 3`, and its joint `selection.joint % 3` is drawn in the accent. Legs are numbered 1–6 as in the editor (robot index + 1).
+- **Side view** of the selected leg, taking the pane's free height: pivot, coxa, femur, tibia and foot on a 50 mm grid, z up, outward to the right, the body to the left of the pivot. Each joint carries a tag with its pulse, placed away from its segments and clear of the other tags; a small top-view inset shows the coxa angle in the leg frame.
+- Below it, side by side: the **joint list** (commanded angle, servo angle, pulse, limit) and a square **top view** of all six legs on the body outline, the selected leg in the accent.
 - **Limits:** a joint whose servo angle is outside 0–180° is "at limit" (toPulse clamps it); within 5° of either end it is "near limit". Both are marked (yellow ring, label) on the drawing and in the list of joint values.
 - A leg whose three pulses are 0 has never been set: drawn as "not set", not as geometry.
 - **Staleness:** the session keeps the latest pose and its arrival time; when the pose is older than 1 s (the telemetry rule), or none has arrived on this connection, the pane shows "no pose" and no geometry. A new connection forgets the pose.

@@ -20,7 +20,7 @@ The calibrator SHALL draw the legs from the latest pose frame, using the reporte
 - **THEN** that leg is shown as not set rather than drawn
 
 ### Requirement: Joint details on the drawing
-The calibrator SHALL show each joint's pulse width and servo angle next to it on the side view, SHALL mark a joint whose servo angle is within 5° of 0° or 180° as near its limit and one outside 0–180° as at its limit, and SHALL highlight the leg and joint selected in the calibration editor.
+The calibrator SHALL show each joint's pulse width next to it on the side view, and the selected leg's commanded angles, servo angles and pulses in a list beside the drawings. It SHALL mark a joint whose servo angle is within 5° of 0° or 180° as near its limit and one outside 0–180° as at its limit, and SHALL highlight the leg and joint selected in the calibration editor. Legs SHALL be numbered as in the editor.
 
 #### Scenario: Joint at its limit
 - **WHEN** the robot reports a servo angle of 183° for leg 2's femur

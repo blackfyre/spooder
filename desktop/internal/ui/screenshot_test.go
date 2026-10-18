@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"gioui.org/gpu/headless"
 	"gioui.org/io/input"
@@ -78,6 +79,26 @@ func TestScreenshots(t *testing.T) {
 		frame(w, router)
 		click(w, router, &w.prepare)
 		shoot("export-estop")
+		s.ToggleEmergencyStop()
+
+		// The legs pane: calibration pose, walking, a joint at its limit,
+		// and no pose.
+		w.tab = tabLegs
+		w.sel = selection{joint: 7, field: calib.FieldOffset} // leg 2 femur
+		s.Frame(protocol.Frame{Type: protocol.TypePose, Pose: testPose(calibrationAngles(), true)}, link.Stats{})
+		frame(w, router)
+		shoot("legs-calibration")
+		w.sel = selection{joint: 14} // leg 4 tibia
+		s.Frame(protocol.Frame{Type: protocol.TypePose, Pose: testPose(walkingAngles, true)}, link.Stats{})
+		frame(w, router)
+		shoot("legs-walking")
+		w.sel = selection{joint: 6} // leg 2 coxa
+		s.Frame(protocol.Frame{Type: protocol.TypePose, Pose: testPose(limitAngles, false)}, link.Stats{})
+		frame(w, router)
+		shoot("legs-limit-output-off")
+		clock = clock.Add(2 * time.Second)
+		frame(w, router)
+		shoot("legs-no-pose")
 		_ = input.Router{}
 	}
 }
