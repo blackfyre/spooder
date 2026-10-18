@@ -28,12 +28,12 @@ RobotState  body, protection, supervisor, requested/applied tables,
             Arbiter, last source, telemetry counter, status timer, last tick time
 Inputs      bytes received on each link since the last tick (or the serial keys'
             input in --serial builds), the power reading
-tick(state, inputs, nowMs, Port &port)
+tick(state, inputs, nowMs, Hardware &hw)
 ```
 
-`Port` is a small interface the adapter implements: `setInhibited`, `stopServos`, `applyServos(body, applied)`, `servosOn`, `showLeds`, `sendFrame(link, bytes, n) -> bool` and `log(text)`. The tick calls it at exactly the points where `main.cpp` called `servo_output`, `status_leds`, the link senders and `printf`.
+`Hardware` is a small interface the adapter implements: `setInhibited`, `stopServos`, `applyServos(body, applied)`, `servosOn`, `showLeds`, `sendFrame(link, bytes, n) -> bool` and `log(text)`. The tick calls it at exactly the points where `main.cpp` called `servo_output`, `status_leds`, the link senders and `printf`.
 
-- *Why a port, not a pure `inputs -> outputs` function:* two results feed back within the tick. Telemetry carries `servo_output::outputsOn()` after `apply()`, which depends on the adapter's own state (pins forced low for 25 ms after a switch-off); and a frame's sequence number and a report's schedule advance only if the frame was actually queued, which only the adapter knows at the moment of sending. A two-phase split or a modelled output state would either reorder these calls or duplicate the adapter's rules in core; the port keeps the order exact and the adapters dumb.
+- *Why an interface, not a pure `inputs -> outputs` function:* two results feed back within the tick. Telemetry carries `servo_output::outputsOn()` after `apply()`, which depends on the adapter's own state (pins forced low for 25 ms after a switch-off); and a frame's sequence number and a report's schedule advance only if the frame was actually queued, which only the adapter knows at the moment of sending. A two-phase split or a modelled output state would either reorder these calls or duplicate the adapter's rules in core; the interface keeps the order exact and the adapters dumb.
 - *Decoding moves into the tick* (the decoders live in `RobotState`): it is hardware-free, and the virtual robot then decodes exactly as the board. The adapters' `poll()` becomes `read(buf, max)`: the UART ring drained as before (at most its 256 bytes), USB at most `MAX_BYTES_PER_POLL`. The tick pushes the bytes one by one with `handleFrames` after each, and calls `idle()` when none arrived, as `poll()` did.
 - *Ordering:* the adapter reads the link bytes, then the power reading, then calls `tick`; previously decoding ran between the two reads. Decoding has no effect on the reading, so only the reading's sampling moment shifts, by the decode time (microseconds). An e-stop in a frame that has arrived still acts in the same tick.
 - *Text:* the tick formats each message with `snprintf` into a line buffer and hands it to `log`; the firmware prints it with `printf("%s", ...)`, so the bytes are the same.
@@ -43,7 +43,7 @@ tick(state, inputs, nowMs, Port &port)
 
 ### D2. The pose frame hook
 
-The pose frame (USB only, joint angles) is being added in parallel. The tick marks the place where it belongs, after the servos are applied and next to telemetry, with a `HOOK(pose-frame)` comment; it is sent through `port.sendFrame(Link::Usb, ...)` so the firmware and the virtual robot get it together. Integration happens after both changes merge.
+The pose frame (USB only, joint angles) is being added in parallel. The tick marks the place where it belongs, after the servos are applied and next to telemetry, with a `HOOK(pose-frame)` comment; it is sent through `hw.sendFrame(Link::Usb, ...)` so the firmware and the virtual robot get it together. Integration happens after both changes merge.
 
 ### D3. Virtual robot program
 
@@ -66,11 +66,11 @@ tools/virtual-robot/
 
 ### D4. Desktop: `--port`
 
-`link.WithPort(sys, path)` wraps a `System`: `List` adds `PortInfo{Name: path}` when the path exists and the enumeration lacks it; `Open(path)` opens without `InitialStatusBits`, since a pseudo-terminal has no modem lines (go.bug.st/serial's `TIOCMGET` fails on one). `ui.Env.Port` preselects it ahead of a Servo 2040. `SameDevice` already compares names for devices without a serial number, so reconnection follows the path.
+`link.WithPort(sys, path)` wraps a `System`: `List` adds `PortInfo{Name: path}` when the path exists and the enumeration lacks it. `Serial.Open` falls back to opening without `InitialStatusBits` when setting them fails for want of modem lines, as on a pseudo-terminal (go.bug.st/serial's `TIOCMGET` fails on one). `ui.Env.Port` preselects it ahead of a Servo 2040, also when it appears later, unless the operator has picked a port. `SameDevice` already compares names for devices without a serial number, so reconnection follows the path.
 
 ### D5. End-to-end tests
 
-`desktop/e2e` (Go, test-only package): builds nothing itself; it looks for `build/virtual-robot/virtual-robot` (or `SPOODER_VIRTUAL_ROBOT`) and skips without it. Each test starts the robot with a fresh `--link` in a temporary directory and real-time pacing (the protocol's 200 ms link-gap and 1 s staleness rules are wall-clock rules for the front-end, so faster-than-real-time ticks would reset counter baselines between commands), then drives a real `session.Session` through a real `link.Link`, reading the robot's standard output for applied values and output state. `mise run e2e` builds the robot and runs them.
+`desktop/e2e` (Go, test-only package) with `internal/virtualrobot` (start, commands, output lines): builds nothing itself; it looks for `build/virtual-robot/virtual-robot` (or `SPOODER_VIRTUAL_ROBOT`) and skips without it. The calibrator side lists only the robot's terminal, never the computer's ports. Each test starts the robot with a fresh `--link` in a temporary directory and real-time pacing (the protocol's 200 ms link-gap and 1 s staleness rules are wall-clock rules for the front-end, so faster-than-real-time ticks would reset counter baselines between commands), then drives a real `session.Session` through a real `link.Link`, reading the robot's standard output for applied values and output state. `mise run e2e` builds the robot and runs them.
 
 ### D6. Screenshots against the live robot
 

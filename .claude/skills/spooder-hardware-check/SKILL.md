@@ -203,6 +203,8 @@ The desktop app in `desktop/` speaks the link protocol on the robot's USB port. 
 
 Record results in `openspec/changes/add-desktop-calibrator/tasks.md` (task 4.2).
 
+**Rehearse without the board first.** The virtual robot (`tools/virtual-robot`) runs the robot's own control tick (`core/robot/robot_tick`) behind a pseudo-terminal: `mise run virtual-robot-run` (its USB port linked at `build/virtual-robot/usb`, debug text echoed), then `build/desktop/spooder-calibrator --port build/virtual-robot/usb`. Type commands into the robot's terminal: `supply 7.5` (overvoltage), `estop` / `estop off` (the bridge's e-stop), `bridge gamepad` (a conflict), `load 5` (overcurrent), `unplug` / `plug`, `status`. Steps 1–6 behave as on the board, minus the LEDs and the servos; `mise run e2e` checks them automatically. It proves the logic and the protocol, not timing, wiring or power: the steps above still need the board.
+
 ## Gamepad controls
 
 Button names are Bluepad32's (Xbox layout: `a` bottom, `b` right, `x` left, `y` top). `core/gamepad_mapping` implements this table.

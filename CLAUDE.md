@@ -35,6 +35,9 @@ mise run desktop-build   # the desktop calibrator -> build/desktop/spooder-calib
 mise run desktop-run     # build and start it (run from the checkout: it exports there)
 mise run desktop-test    # gofmt, go vet and go test of desktop/
 mise run desktop-deps    # name the missing Linux packages for the Gio build
+mise run virtual-robot   # the virtual robot -> build/virtual-robot/virtual-robot
+mise run virtual-robot-run  # run it, USB terminal linked at build/virtual-robot/usb
+mise run e2e             # build it, then the desktop end-to-end tests against it
 mise run clean
 ```
 
@@ -50,11 +53,11 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
 
 **Flash both boards together** when the link protocol changes (`protocol::VERSION`, now 2). A mismatched pair fails safe: each side discards the other's frames, so the link looks lost and the robot sleeps.
 
-`mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test` and `mise run desktop-build` are the verification gates. Hardware behaviour can only be checked on the boards (see the `spooder-hardware-check` skill).
+`mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build` and `mise run e2e` are the verification gates. Hardware behaviour can only be checked on the boards (see the `spooder-hardware-check` skill).
 
 ## Layout
 
-- `core/`: hardware-free C++ shared by both firmwares and the host tests. It includes only `<math.h>`/`<stdint.h>` (plus `<stdio.h>` for `snprintf` in `status/status_screen`).
+- `core/`: hardware-free C++ shared by both firmwares and the host tests. It includes only `<math.h>`/`<stdint.h>` (plus `<stdio.h>` for `snprintf` in `status/status_screen` and `robot/robot_tick`).
   - `movement/`:
     - `body`: the non-blocking state machine (Initialise, Stand, Walk, Sleep, Calibrate) on a fixed 5 ms internal grid.
     - `gait`, `kinematics` (IK, target validation, `servoOutputIndex`) and `vectors`.
@@ -63,13 +66,14 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
     - `movement_command.h`: the request a controller hands to movement.
   - `protection/`: power protection and the emergency stop. It turns supply readings into "output allowed" and "force Sleep", with latched faults; `supervisor` decides when the body runs, stops or restarts.
   - `protocol/`: the link's frames (version 2: command, telemetry, calibration set and report), CRC and incremental decoder (both firmwares), pinned by `test/golden/protocol_v2.txt`. `link_receiver` is the robot's handling of decoded frames: arrival stamping, clear and mode-request counters, baselines after a link gap, the calibration guards and reports, and the arbitration between the bridge and USB links.
+  - `robot/robot_tick`: the robot's 20 ms control tick, shared by the firmware and the virtual robot: link decoding and arbitration (or the serial keys) → protection → supervisor → calibration sets → calibration step → `body::step` → servo output → LEDs → telemetry every fifth tick and calibration reports, on both links → the status line. It drives the hardware through its `Hardware` interface.
   - `gamepad_mapping/`: gamepad input to the desired command state (bridge).
   - `status/led_pattern`: what the robot's six status LEDs show; `status/status_screen`: the bridge screen's text (normal and setup mode).
   - `setup/`: the bridge's setup mode. `portal_controller` (portal polls and buttons as the controller), `calibration_sync` (pending edits, one set in flight, confirmation by report), `calibration_export` (a reported table as `calibration_defaults.cpp`), `setup_entry` (the button hold and the boot decision) and `access_point` (SSID, password, QR text).
 - `firmware/servo2040/`: the pico-sdk CMake project.
-  - `main.cpp`: the core 0 loop, every 20 ms: input (both links, arbitrated, or serial) → power read → protection → supervisor → calibration sets → calibration step → `body::step` → servo output → LEDs → telemetry every fifth tick and calibration reports, on both links.
+  - `main.cpp`: the core 0 loop, every 20 ms: read both links' bytes (or the serial keys) and the power reading, run `robot_tick::tick`, which drives the adapters below.
   - `link`: UART1 on GPIO20/21 (J6), interrupt-driven RX ring and a 256-byte TX queue of whole frames.
-  - `usb_link`: link frames over USB stdio, sharing the port with `printf`; frames are written whole or dropped.
+  - `usb_link`: bytes over USB stdio, sharing the port with `printf`; frames are written whole or dropped.
   - `servo_output`: `ServoCluster` on PIO 0, GPIO0–17.
   - `power_monitor`: current and voltage via the analog mux.
   - `status_leds`: WS2812 on PIO 1, drawing `core/status/led_pattern`.
@@ -88,7 +92,9 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `internal/session`: the single state owner: observe or control, the e-stop, mode and clear counters, telemetry.
   - `internal/calib`: the joint table shown from reports, pending edits, one change in flight, resend and confirmation by request id.
   - `internal/export`: `calibration_defaults.cpp` in the fixed format (tested against `test/golden/calibration_defaults.cpp`), the checkout check, the diff and the atomic write.
+  - `internal/virtualrobot`: runs the virtual robot for tests; `e2e/`: end-to-end tests of the real link and session against it (skipped when it is not built).
   - `internal/ui`: the Gio window in the Blackfyre look; `internal/ui/fonts`: Archivo and JetBrains Mono with their OFL licences. `internal/appearance` and `internal/winreg` are copied from bopen (MIT, `desktop/LICENSE.bopen`).
+- `tools/virtual-robot/`: the virtual robot, a native C++17 program (CMake, Ninja) running `core/robot/robot_tick` behind a pseudo-terminal that acts as the robot's USB port (frames and debug text as on the board), optionally a second one for the bridge link, or a simulated bridge. Simulated supply and servo current; commands on standard input (`supply V`, `current A|auto`, `load K`, `bridge off|idle|gamepad|clear`, `estop on|off`, `unplug`, `plug`, `step N`, `status`, `quit`); `--help` lists the options (`--link`, `--speed`, `--stepped`, `--bridge-pty`). The desktop calibrator connects with `--port build/virtual-robot/usb`.
 - `test/`: Unity host tests, one directory per area. `test/golden/` holds the golden files other implementations (the desktop calibrator) test against; regenerate `protocol_v2.txt` only for a deliberate protocol change (`SPOODER_WRITE_GOLDEN=1 mise run test`).
 - `openspec/`: specifications (`specs/`) and changes (`changes/`). This is the source of truth for intended behaviour.
 
@@ -105,5 +111,5 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `spooder-firmware-shape`: layout, loop, J6 pins, the protection layer, the link and the bridge.
   - `spooder-leg-kinematics`: the movement reference.
   - `spooder-hardware-check`: flashing both boards, wiring, power, bring-up, the gamepad controls, setup mode with the portal calibration workflow, and bench calibration with the desktop calibrator.
-- The desktop calibrator never opens a port by itself: it lists ports (the Servo 2040, USB ID 2e8a:000a, preselected) and connects on request. Its tests use in-memory ports only.
+- The desktop calibrator never opens a port by itself: it lists ports (the Servo 2040, USB ID 2e8a:000a, preselected; or the `--port` path) and connects on request. Its unit tests use in-memory ports or pseudo-terminals they create; the e2e tests use only the virtual robot's terminal.
 - A CodeGraph index lives in `.codegraph/` (git-ignored). Refresh it with `codegraph sync` after large changes.

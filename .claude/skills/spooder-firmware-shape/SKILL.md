@@ -18,11 +18,11 @@ New logic goes into `core/` unless it truly needs hardware. A controller mapping
 
 ## The control loop (core 0)
 
-`main.cpp` runs a 20 ms period loop (`LOOP_PERIOD_MS`, `sleep_until`; an overrun restarts the period):
+`main.cpp` runs a 20 ms period loop (`robot_tick::LOOP_PERIOD_MS`, `sleep_until`; an overrun restarts the period). It only reads `link::read`, `usb_link::read` (or `serial_commands::poll`) and `power_monitor::read`, then calls `robot_tick::tick` in `core/robot/robot_tick`, which holds the loop's logic and drives the adapters through its `Hardware` interface. The virtual robot (`tools/virtual-robot`) runs the same tick on the host; change the loop there, never in `main.cpp`, and test it in `test/test_robot_tick`.
 
 ```
-input   = readInput(now)                      // link::poll + usb_link::poll, then link_receiver::arbitrate;
-                                              // or serial_commands::poll. Bounded, never blocks
+input   = readInput(now)                      // decode both links' bytes, then link_receiver::arbitrate;
+                                              // or the serial keys. Bounded, never blocks
 reading = power_monitor::read()
 prot    = protection::step(state, reading, now, input.clearFaults, input.emergencyStop)
 servo_output::setInhibited(!prot.allowOutput)
