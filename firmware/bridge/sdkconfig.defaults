@@ -1,5 +1,6 @@
 # Spooder bridge: based on external/bluepad32-template/sdkconfig.defaults
-# (template 5.0.0-beta0). Changes: one controller slot; WiFi is never started.
+# (template 5.0.0-beta0). Changes: one controller slot; the lwIP task on core 0.
+# WiFi runs only in setup mode, which never starts Bluetooth (main/setup_mode.h).
 #
 # ESP32 options
 #
@@ -80,3 +81,13 @@ CONFIG_ARDUINO_SELECTIVE_ESP_SR=n
 # See: https://github.com/bluekitchen/btstack/issues/599
 #
 CONFIG_BTSTACK_AUDIO=n
+
+#
+# WiFi and lwIP (setup mode only)
+#
+# Keep the TCP/IP task off core 1, where the robot link task runs.
+CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0=y
+# WiFi code in flash rather than IRAM: with the Bluetooth controller linked
+# too, IRAM does not hold both. The portal needs no WiFi throughput.
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n

@@ -10,10 +10,11 @@
 ## 2. Bridge firmware (TTGO T-Display)
 
 - [ ] 2.1 Setup-mode boot path (design D2): GPIO0 held 1 s during the logo, RTC magic, `esp_restart()`; in `main.c`, skip Bluetooth and start Arduino and the setup task. Verify the build, then on the board that both paths boot (requires the TTGO on USB).
-- [ ] 2.2 WiFi soft AP (one station), the NVS-kept random password, `DNSServer` answering everything, and the HTTP endpoints including captive-portal probes (design D6). Verify the build.
-- [ ] 2.3 The portal page (design D6) in `portal_page.h`: joint editor with nudges, mode buttons, telemetry, e-stop and link indicators, Export and Exit; plain HTML and JavaScript only. Verify the build and the page size (under 16 KB).
-- [ ] 2.4 Wire the portal controller and calibration sync into `robot_link` in setup mode (command frames from the portal, one calibration set per period, reports decoded). Verify the build.
-- [ ] 2.5 The setup screen with the QR code (design D8). Verify the build.
+  - Implemented, and the build is verified (`mise run build-bridge`); the boot of both paths on the board is still to be checked.
+- [x] 2.2 WiFi soft AP (one station), the NVS-kept random password, `DNSServer` answering everything, and the HTTP endpoints including captive-portal probes (design D6). Verify the build.
+- [x] 2.3 The portal page (design D6) in `portal_page.h`: joint editor with nudges, mode buttons, telemetry, e-stop and link indicators, Export and Exit; plain HTML and JavaScript only. Verify the build and the page size (under 16 KB).
+- [x] 2.4 Wire the portal controller and calibration sync into `robot_link` in setup mode (command frames from the portal, one calibration set per period, reports decoded). Verify the build.
+- [x] 2.5 The setup screen with the QR code (design D8). Verify the build.
 
 ## 3. Verification and documentation
 

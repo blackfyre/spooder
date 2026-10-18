@@ -15,6 +15,9 @@
 #include <arduino_platform.h>
 #include <uni.h>
 
+// Spooder: the setup-mode boot path (setup_mode.cpp).
+#include "setup_mode.h"
+
 //
 // Autostart
 //
@@ -23,6 +26,17 @@ void initBluepad32() {
 #else
 int app_main(void) {
 #endif  // !CONFIG_AUTOSTART_ARDUINO
+    // Spooder: setup mode skips BTstack and Bluepad32 entirely, so Bluetooth
+    // never starts; the bridge leaves setup mode only by restarting.
+    if (setup_mode_requested()) {
+        setup_mode_start();
+#if !CONFIG_AUTOSTART_ARDUINO
+        return 0;
+#else
+        return;
+#endif
+    }
+
     // hci_dump_open(NULL, HCI_DUMP_STDOUT);
 
 // Don't use BTstack buffered UART. It conflicts with the console.

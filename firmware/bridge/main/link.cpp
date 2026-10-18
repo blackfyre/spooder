@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "setup/portal_controller.h"
 
 namespace robot_link
 {
@@ -30,6 +31,11 @@ static uint32_t discardedFrames;
 static bool haveReport;
 static uint32_t reportAtMs;
 static protocol::CalibrationReport report;
+// Setup mode only. portalMode is set before the task starts and never
+// changes afterwards.
+static bool portalMode;
+static portal_controller::Controller portal;
+static calibration_sync::Sync calibration;
 
 static protocol::Decoder decoder;
 
@@ -58,11 +64,30 @@ static void sampleEmergencyStop()
 static void sendCommand(uint8_t seq)
 {
   portENTER_CRITICAL(&lock);
+  // In setup mode the portal's heartbeat is judged here, every period, so a
+  // stalled web server cannot keep the controller connected. The time is
+  // taken inside the lock, so no poll can be stamped after it.
+  if (portalMode)
+    desired = portal_controller::desired(portal, millis());
   protocol::Command c = gamepad_mapping::toCommand(desired, emergencyStop);
   portEXIT_CRITICAL(&lock);
   uint8_t frame[protocol::MAX_FRAME_SIZE];
   int n = protocol::encodeCommand(c, seq, frame);
   // The TX buffer holds many frames, so this never waits.
+  Serial1.write(frame, n);
+}
+
+// Setup mode: at most one calibration set per period, after the command.
+static void sendCalibration(uint8_t seq, uint32_t now)
+{
+  protocol::CalibrationSet set;
+  portENTER_CRITICAL(&lock);
+  bool due = calibration_sync::next(calibration, now, set);
+  portEXIT_CRITICAL(&lock);
+  if (!due)
+    return;
+  uint8_t frame[protocol::MAX_FRAME_SIZE];
+  int n = protocol::encodeCalibrationSet(set, seq, frame);
   Serial1.write(frame, n);
 }
 
@@ -86,6 +111,8 @@ static void takeFrames(uint32_t now)
       report = f.calibrationReport;
       haveReport = true;
       reportAtMs = now;
+      if (portalMode)
+        calibration_sync::onReport(calibration, f.calibrationReport);
       portEXIT_CRITICAL(&lock);
     }
   }
@@ -130,13 +157,15 @@ static void linkTask(void *)
   {
     sampleEmergencyStop();
     sendCommand(seq++);
+    if (portalMode)
+      sendCalibration(seq++, millis());
     receive();
     // Fixed-rate: a late wake-up does not shift later frames.
     xTaskDelayUntil(&wake, pdMS_TO_TICKS(COMMAND_PERIOD_MS));
   }
 }
 
-void start()
+static void startTask()
 {
   initialDesired();
   pinMode(ESTOP_PIN, INPUT); // input-only pin; the board has the pull-up
@@ -146,6 +175,18 @@ void start()
   // Above loop() (priority 1) so screen redraws cannot delay frames; pinned
   // to loop()'s core, leaving core 0 to the Bluetooth stack.
   xTaskCreatePinnedToCore(linkTask, "link", 4096, nullptr, 5, nullptr, ARDUINO_RUNNING_CORE);
+}
+
+void start()
+{
+  portalMode = false;
+  startTask();
+}
+
+void startPortal()
+{
+  portalMode = true;
+  startTask();
 }
 
 void setDesired(const gamepad_mapping::Desired &d)
@@ -170,6 +211,51 @@ Status status()
   s.report = report;
   portEXIT_CRITICAL(&lock);
   return s;
+}
+
+void portalPoll()
+{
+  portENTER_CRITICAL(&lock);
+  portal_controller::poll(portal, millis());
+  portEXIT_CRITICAL(&lock);
+}
+
+bool portalRequestMode(RequestedMode mode)
+{
+  portENTER_CRITICAL(&lock);
+  bool taken = portal_controller::requestMode(portal, mode, millis());
+  portEXIT_CRITICAL(&lock);
+  return taken;
+}
+
+void portalRequestClear()
+{
+  portENTER_CRITICAL(&lock);
+  portal_controller::requestClear(portal, millis());
+  portEXIT_CRITICAL(&lock);
+}
+
+bool portalChange(int joint, calibration_sync::Field field, int32_t value, bool relative)
+{
+  portENTER_CRITICAL(&lock);
+  // Like the mode buttons, an edit comes from an open page: it counts as a
+  // poll.
+  portal_controller::poll(portal, millis());
+  bool changed = calibration_sync::change(calibration, joint, field, value, relative);
+  portEXIT_CRITICAL(&lock);
+  return changed;
+}
+
+void portalView(PortalView &out)
+{
+  portENTER_CRITICAL(&lock);
+  uint32_t nowMs = millis();
+  // Judged on a copy, so a view has no effect on the frames.
+  portal_controller::Controller c = portal;
+  out.connected = portal_controller::connected(c, nowMs);
+  out.desired = portal_controller::desired(c, nowMs);
+  out.sync = calibration;
+  portEXIT_CRITICAL(&lock);
 }
 
 } // namespace robot_link

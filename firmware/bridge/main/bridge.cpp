@@ -11,6 +11,8 @@
 #include "display.h"
 #include "gamepad_mapping/gamepad_mapping.h"
 #include "link.h"
+#include "setup/setup_entry.h"
+#include "setup_mode.h"
 
 // The mapping's button bits are Bluepad32's.
 static_assert(gamepad_mapping::BUTTON_A == BUTTON_A && gamepad_mapping::BUTTON_B == BUTTON_B &&
@@ -29,6 +31,11 @@ static_assert(gamepad_mapping::MISC_HOME == MISC_BUTTON_SYSTEM && gamepad_mappin
 // One controller slot; a second controller is refused.
 static ControllerPtr controller = nullptr;
 static gamepad_mapping::Mapper mapper;
+// The left button (GPIO0, active low, board pull-up): held during the logo,
+// it restarts the bridge into setup mode. Never read at reset: GPIO0 is a
+// strapping pin, and holding it then enters the ROM download mode.
+constexpr int SETUP_BUTTON_PIN = 0;
+static setup_entry::Hold setupHold;
 
 static void onConnected(ControllerPtr ctl)
 {
@@ -70,6 +77,7 @@ void setup()
 {
   Console.printf("spooder bridge, Bluepad32 %s\n", BP32.firmwareVersion());
   display::setup(); // logo first
+  pinMode(SETUP_BUTTON_PIN, INPUT_PULLUP);
   robot_link::start();
   display::bootMessage("Robot link: UART1 26/27");
   BP32.setup(&onConnected, &onDisconnected);
@@ -84,6 +92,17 @@ void loop()
 {
   BP32.update();
   uint32_t now = millis();
+
+  if (display::showingLogo())
+  {
+    bool pressed = digitalRead(SETUP_BUTTON_PIN) == LOW;
+    if (setup_entry::update(setupHold, pressed, now))
+    {
+      Console.println("setup button held: restarting into setup mode");
+      setup_mode::restartIntoSetup();
+    }
+    display::holdLogo(setup_entry::held(setupHold));
+  }
 
   gamepad_mapping::PadState pad = readPad();
   gamepad_mapping::Desired desired = gamepad_mapping::update(mapper, pad, now);

@@ -71,6 +71,7 @@ enum class Phase
 };
 static Phase phase = Phase::Logo;
 static uint32_t phaseSinceMs;
+static bool logoHeld;
 
 constexpr int BOOT_LINES = 8;
 static status_screen::Line bootLines[BOOT_LINES];
@@ -142,13 +143,18 @@ static void drawBootLog()
     drawLine(i, bootLines[i]);
 }
 
-void setup()
+static void initPanel()
 {
   lcd.init();
   lcd.setRotation(1); // landscape, USB connector on the left
   lcd.setBrightness(160);
   lcd.setFont(&fonts::Font2);
   lcd.setTextWrap(false);
+}
+
+void setup()
+{
+  initPanel();
   drawLogo();
   phase = Phase::Logo;
   phaseSinceMs = millis();
@@ -172,7 +178,7 @@ static bool startupDone(uint32_t nowMs, bool emergencyStop)
     phase = Phase::Status; // never hide an emergency stop behind the logo
     return true;
   }
-  if (phase == Phase::Logo && nowMs - phaseSinceMs >= LOGO_MS)
+  if (phase == Phase::Logo && nowMs - phaseSinceMs >= LOGO_MS && !logoHeld)
   {
     phase = Phase::BootLog;
     phaseSinceMs = nowMs;
@@ -216,6 +222,71 @@ void update(uint32_t nowMs, bool gamepadConnected, const gamepad_mapping::Desire
     }
   }
   shownFresh = linkStatus.telemetryFresh;
+  firstDraw = false;
+}
+
+bool showingLogo()
+{
+  return phase == Phase::Logo;
+}
+
+void holdLogo(bool hold)
+{
+  logoHeld = hold;
+}
+
+// --- setup mode ---------------------------------------------------------------
+
+// The QR code fills the screen height on the right; the text keeps to the
+// left of it (status_screen::SETUP_TEXT_WIDTH_PX).
+constexpr int QR_SIZE = 135;
+// The join code is 40 bytes: version 3 (29 modules) at 4 px per module,
+// leaving a white quiet zone of 9 px.
+constexpr uint8_t QR_VERSION = 3;
+
+static void drawSetupLine(int i, const status_screen::Line &l)
+{
+  int y = MARGIN_Y + i * LINE_HEIGHT;
+  lcd.fillRect(0, y, lcd.width() - QR_SIZE, LINE_HEIGHT, TFT_BLACK);
+  lcd.setTextColor(colour(l.tone), TFT_BLACK);
+  lcd.drawString(l.text, MARGIN_X, y);
+}
+
+void setupStart(const char *joinCode)
+{
+  initPanel();
+  lcd.fillScreen(TFT_BLACK);
+  lcd.qrcode(joinCode, lcd.width() - QR_SIZE, (lcd.height() - QR_SIZE) / 2, QR_SIZE, QR_VERSION, false);
+  phase = Phase::Status;
+  firstDraw = true;
+}
+
+void setupUpdate(uint32_t nowMs, const char *ssid, const char *password, bool portalConnected,
+                 const robot_link::Status &linkStatus)
+{
+  if (!firstDraw && nowMs - lastDrawMs < REFRESH_MS)
+    return;
+  lastDrawMs = nowMs;
+
+  status_screen::SetupInputs in = {};
+  in.ssid = ssid;
+  in.password = password;
+  in.address = "192.168.4.1";
+  in.portalConnected = portalConnected;
+  in.emergencyStop = linkStatus.emergencyStop;
+  in.telemetryFresh = linkStatus.telemetryFresh;
+  in.telemetry = linkStatus.telemetry;
+  status_screen::Line lines[status_screen::LINE_COUNT];
+  status_screen::composeSetup(in, lines);
+
+  for (int i = 0; i < status_screen::LINE_COUNT; i++)
+  {
+    if (firstDraw || strcmp(lines[i].text, shown[i].text) != 0 || lines[i].tone != shown[i].tone)
+    {
+      drawSetupLine(i, lines[i]);
+      shown[i] = lines[i];
+    }
+  }
   firstDraw = false;
 }
 

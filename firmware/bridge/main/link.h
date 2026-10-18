@@ -4,9 +4,16 @@
 // Bridge side of the robot link on UART1: GPIO27 TX, GPIO26 RX, 115200 8N1.
 // A dedicated task sends a command frame every 20 ms and decodes telemetry,
 // so screen redraws in loop() cannot delay command frames.
+//
+// In setup mode (startPortal) the task takes its desired state from the
+// portal controller, evaluated at each period so a lapsed portal heartbeat
+// counts at once, and sends at most one calibration set per period after the
+// command frame. The HTTP handlers reach both only through the portal
+// functions below.
 #include <stdint.h>
 #include "gamepad_mapping/gamepad_mapping.h"
 #include "protocol/protocol.h"
+#include "setup/calibration_sync.h"
 
 namespace robot_link
 {
@@ -35,9 +42,51 @@ struct Status
 void start();
 
 /**
- * @brief Hands the newest desired state to the link task.
+ * @brief Starts UART1 and the link task in setup mode: commands come from
+ * the portal controller, and calibration edits go out as calibration sets.
+ */
+void startPortal();
+
+/**
+ * @brief Hands the newest desired state to the link task (normal operation).
  */
 void setDesired(const gamepad_mapping::Desired &d);
+
+// --- setup mode: the portal's side ------------------------------------------
+
+/**
+ * @brief A page poll (the portal heartbeat).
+ */
+void portalPoll();
+
+/**
+ * @brief A press of Stand, Calibrate or Sleep on the portal.
+ * @return false for any other mode
+ */
+bool portalRequestMode(RequestedMode mode);
+
+/**
+ * @brief A press of Clear faults on the portal.
+ */
+void portalRequestClear();
+
+/**
+ * @brief A joint edit (see calibration_sync::change).
+ * @return false without a report yet or for a bad joint
+ */
+bool portalChange(int joint, calibration_sync::Field field, int32_t value, bool relative);
+
+struct PortalView
+{
+  bool connected;                   // a poll within the last second
+  gamepad_mapping::Desired desired; // what the command frames request
+  calibration_sync::Sync sync;      // the reported table and pending edits
+};
+
+/**
+ * @brief Copies the portal state, for the HTTP handlers and the screen.
+ */
+void portalView(PortalView &out);
 
 /**
  * @brief The link state now. Freshness is judged inside the lock, against a
