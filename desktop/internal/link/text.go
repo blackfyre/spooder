@@ -56,7 +56,7 @@ func (t *textAccumulator) add(c byte) {
 
 // flush emits the current line, even without a newline.
 func (t *textAccumulator) flush() {
-	l :=Line{Text: t.b.String(), Stray: t.stray, Binary: t.binary}
+	l := Line{Text: t.b.String(), Stray: t.stray, Binary: t.binary}
 	t.b.Reset()
 	t.stray, t.binary, t.n = 0, 0, 0
 	t.emit(l)

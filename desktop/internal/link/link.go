@@ -239,7 +239,13 @@ func (l *Link) run(port Port, stop chan struct{}) error {
 	ticker := time.NewTicker(l.opts.CommandPeriod)
 	defer ticker.Stop()
 	var seq uint8
-	write := func(frame []byte) error { return writeFrame(port, frame, l.opts.CommandPeriod) }
+	write := func(frame []byte) error {
+		// A write that blocks (Windows serial writes have no timeout) closes
+		// the port, so the loss is noticed and the device reopened.
+		timer := time.AfterFunc(WriteTimeout, func() { port.Close() })
+		defer timer.Stop()
+		return writeFrame(port, frame, l.opts.CommandPeriod)
+	}
 	var err error
 loop:
 	for {
@@ -276,8 +282,13 @@ loop:
 	return nil
 }
 
-// CloseGrace is how long a disconnect waits for a pending write.
-const CloseGrace = 200 * time.Millisecond
+// CloseGrace is how long a disconnect waits for a pending write;
+// WriteTimeout is the longest any write may block before the connection
+// is treated as lost.
+const (
+	CloseGrace   = 200 * time.Millisecond
+	WriteTimeout = 500 * time.Millisecond
+)
 
 // errWriteStalled means a frame could not be written completely in time.
 var errWriteStalled = errors.New("write stalled")

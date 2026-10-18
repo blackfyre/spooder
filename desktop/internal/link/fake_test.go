@@ -23,7 +23,7 @@ type fakePort struct {
 	// makes writes wait until the port is closed.
 	maxWrite    int
 	blockWrites bool
-	writes  int
+	writes      int
 }
 
 var errUnplugged = errors.New("unplugged")

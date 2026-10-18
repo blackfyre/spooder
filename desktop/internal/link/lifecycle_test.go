@@ -108,3 +108,33 @@ func TestEndOfStreamFlushesNestedFalseStarts(t *testing.T) {
 		t.Fatalf("stray %d", stray)
 	}
 }
+
+// A write that blocks during normal operation is treated as a loss after
+// WriteTimeout, and the device is reopened.
+func TestStalledWriteIsALoss(t *testing.T) {
+	sys := newFakeSystem(servo)
+	first := true
+	sys.configure = func(p *fakePort) {
+		p.blockWrites = first
+		first = false
+	}
+	rec := newRecorder()
+	l := New(sys, rec, &staticSource{}, fast)
+	l.Connect(servo)
+	defer l.Close()
+	<-sys.opened
+	select {
+	case <-sys.opened:
+	case <-time.After(WriteTimeout + time.Second):
+		t.Fatal("not reopened after a stalled write")
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	var waiting bool
+	for _, s := range rec.states {
+		waiting = waiting || s.Status == Waiting
+	}
+	if !waiting {
+		t.Fatal("loss not reported")
+	}
+}
