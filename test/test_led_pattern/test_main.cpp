@@ -182,6 +182,24 @@ void test_input_indicator_states()
   s.nowMs = 130;
   compute(s, out);
   TEST_ASSERT_FALSE(lit(out[INPUT_LED])); // fast blink
+
+  s.input = Input::UsbConnected;
+  compute(s, out);
+  TEST_ASSERT_TRUE(out[INPUT_LED].b > 0 && out[INPUT_LED].r == 0);
+  Rgb usb = out[INPUT_LED];
+  s.input = Input::LinkConnected;
+  compute(s, out);
+  TEST_ASSERT_FALSE(usb == out[INPUT_LED]);
+
+  // A conflict alternates between two lit colours, never off.
+  s.input = Input::SourceConflict;
+  s.nowMs = 0;
+  compute(s, out);
+  Rgb first = out[INPUT_LED];
+  s.nowMs = 130;
+  compute(s, out);
+  TEST_ASSERT_TRUE(lit(first) && lit(out[INPUT_LED]));
+  TEST_ASSERT_FALSE(first == out[INPUT_LED]);
 }
 
 void test_normal_brightness_is_dim()

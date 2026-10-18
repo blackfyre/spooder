@@ -14,7 +14,7 @@
 ## 2. Robot (Servo 2040)
 
 - [x] 2.1 Requested and applied tables in `main`, `joint_calibration::step` each tick, applied values to the IK and `servo_output`. Verify `mise run build` (both variants) with no warnings.
-- [ ] 2.2 Calibration sets from either link through the guards; reports after each set and at 1 Hz in Calibrate (capped at 5 Hz per link); a 256-byte whole-frame TX queue on UART1. Verify the build.
+- [x] 2.2 Calibration sets from either link through the guards; reports after each set and at 1 Hz in Calibrate (capped at 5 Hz per link); a 256-byte whole-frame TX queue on UART1. Verify the build.
 - [ ] 2.3 `usb_link` (design D4) in default builds, with arbitration in `main` and telemetry and reports on both links. Verify the build, and on the board that `mise run monitor` still shows readable debug text (requires the Servo 2040 on USB).
 
 ## 3. Bridge

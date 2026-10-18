@@ -25,9 +25,11 @@ constexpr int INPUT_LED = 5;    // LED 5
 enum class Input : uint8_t
 {
   Serial,          // USB serial hook
-  LinkConnected,   // bridge link up, gamepad connected
+  LinkConnected,   // bridge link up, gamepad connected: the bridge in control
   LinkNoGamepad,   // bridge link up, no gamepad
   LinkStale,       // no valid frames from the bridge
+  UsbConnected,    // a USB host with a connected controller in control
+  SourceConflict,  // the bridge and a USB host both claim control: asleep
 };
 
 enum class BodyMode : uint8_t // mirrors body::Mode order

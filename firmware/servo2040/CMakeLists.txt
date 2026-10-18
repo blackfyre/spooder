@@ -43,9 +43,9 @@ if(NOT EXISTS "${SPOODER_POWER_LIMITS}")
     "servos and supply, or pass -DSPOODER_POWER_LIMITS=<file> / set SPOODER_POWER_LIMITS.")
 endif()
 
-# Command source: the gamepad bridge link (default), or the USB serial console
-# for bring-up and as a rollback.
-option(SPOODER_SERIAL_COMMANDS "Take commands from the USB serial console instead of the bridge link" OFF)
+# Command source: the gamepad bridge and USB links (default), or the USB serial
+# console keys for bring-up and as a rollback.
+option(SPOODER_SERIAL_COMMANDS "Take commands from the USB serial console keys instead of the links" OFF)
 
 add_executable(spooder
   src/main.cpp
@@ -57,7 +57,10 @@ if(SPOODER_SERIAL_COMMANDS)
   target_sources(spooder PRIVATE src/serial_commands.cpp)
   target_compile_definitions(spooder PRIVATE SPOODER_SERIAL_COMMANDS)
 else()
-  target_sources(spooder PRIVATE src/link.cpp)
+  # The bridge link on UART1, and the same frames over USB alongside the
+  # debug text. The USB transmit buffer must hold a whole calibration report.
+  target_sources(spooder PRIVATE src/link.cpp src/usb_link.cpp)
+  target_compile_definitions(spooder PRIVATE CFG_TUD_CDC_TX_BUFSIZE=256)
 endif()
 
 target_compile_options(spooder PRIVATE -Wall)

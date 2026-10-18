@@ -12,6 +12,7 @@
 #include "serial_commands.h"
 #else
 #include "link.h"
+#include "usb_link.h"
 #endif
 
 // Control loop period. Movement advances by elapsed time, so this is a target,
@@ -29,7 +30,10 @@ static protection::Supervisor supervisor;
 static joint_calibration::Table requestedCalibration;
 static joint_calibration::Table appliedCalibration;
 #ifndef SPOODER_SERIAL_COMMANDS
+static link_receiver::Arbiter arbiter;
+static link_receiver::Source lastSource = link_receiver::Source::None;
 static link_receiver::ReportSchedule bridgeReports;
+static link_receiver::ReportSchedule usbReports;
 #endif
 
 // The LED pattern mirrors body::Mode by value.
@@ -37,8 +41,8 @@ static_assert((int)led_pattern::BodyMode::Walk == (int)body::Mode::Walk &&
                   (int)led_pattern::BodyMode::Calibrate == (int)body::Mode::Calibrate,
               "led_pattern::BodyMode must mirror body::Mode");
 
-// One tick's operator input, from the bridge link or (bring-up builds) the
-// USB serial console.
+// One tick's operator input: from the bridge or USB link, whichever is in
+// control, or (bring-up builds) the USB serial console keys.
 struct TickInput
 {
   MovementCommand command;
@@ -47,6 +51,7 @@ struct TickInput
   bool emergencyStop;
   bool printReadings;
   led_pattern::Input source;
+  uint8_t telemetryFlags; // protocol::TELEMETRY_* source bits
 };
 
 static bool isFresh(const MovementCommand &c, uint32_t now)
@@ -65,15 +70,35 @@ static TickInput readInput(uint32_t now)
   in.printReadings = s.printReadings;
   in.source = led_pattern::Input::Serial;
 #else
-  link_receiver::Input l = link::poll(now); // bounded by the receive buffer
-  in.command = l.command;
-  in.requestSeq = l.requestSeq;
-  in.clearFaults = l.clearRequested;
-  in.emergencyStop = l.emergencyStop;
-  if (!isFresh(l.command, now))
-    in.source = led_pattern::Input::LinkStale;
-  else
-    in.source = l.controllerConnected ? led_pattern::Input::LinkConnected : led_pattern::Input::LinkNoGamepad;
+  link_receiver::Input bridge = link::poll(now); // bounded by the receive buffer
+  link_receiver::Input usb = usb_link::poll(now); // bounded by MAX_BYTES_PER_POLL
+  link_receiver::Arbitration a = link_receiver::arbitrate(arbiter, bridge, usb, now);
+  in.command = a.input.command;
+  in.requestSeq = a.input.requestSeq;
+  in.clearFaults = a.input.clearRequested;
+  in.emergencyStop = a.input.emergencyStop; // from either link
+  in.telemetryFlags = a.telemetryFlags;
+  switch (a.source)
+  {
+  case link_receiver::Source::Bridge:
+    in.source = led_pattern::Input::LinkConnected;
+    break;
+  case link_receiver::Source::Usb:
+    in.source = led_pattern::Input::UsbConnected;
+    break;
+  case link_receiver::Source::Conflict:
+    in.source = led_pattern::Input::SourceConflict;
+    break;
+  case link_receiver::Source::None:
+    in.source = link_receiver::isFresh(bridge, now) ? led_pattern::Input::LinkNoGamepad : led_pattern::Input::LinkStale;
+    break;
+  }
+  if (a.source != lastSource)
+  {
+    static const char *const NAMES[] = {"none", "bridge", "USB", "conflict (bridge and USB): sleeping"};
+    printf("operator source: %s\n", NAMES[(int)a.source]);
+    lastSource = a.source;
+  }
 #endif
   return in;
 }
@@ -88,7 +113,8 @@ static uint16_t clampU16(float v)
   return (uint16_t)(v + 0.5f);
 }
 
-static void sendTelemetry(const protection::Reading &r, const protection::Result &p, bool outputsOn)
+static void sendTelemetry(const protection::Reading &r, const protection::Result &p, bool outputsOn,
+                          uint8_t flags)
 {
   protocol::Telemetry t = {};
   t.bodyMode = (uint8_t)bodyState.mode;
@@ -97,10 +123,15 @@ static void sendTelemetry(const protection::Reading &r, const protection::Result
   t.faults = p.faults;
   t.voltageMv = clampU16(r.voltageV * 1000.0f);
   t.currentMa = clampU16(r.currentA * 1000.0f);
+  t.sensorsAvailable = 0; // filled by add-body-sensing
+  t.flags = flags;
+  // Each link reports its own frame counters.
   t.validFrames = (uint16_t)link::validFrames();
   t.discardedFrames = (uint16_t)link::discardedFrames();
-  t.sensorsAvailable = 0; // filled by add-body-sensing
   link::sendTelemetry(t);
+  t.validFrames = (uint16_t)usb_link::validFrames();
+  t.discardedFrames = (uint16_t)usb_link::discardedFrames();
+  usb_link::sendTelemetry(t);
 }
 #endif
 
@@ -247,8 +278,14 @@ int main()
     // body's mode; applied values then move towards them at the rate limit.
 #ifndef SPOODER_SERIAL_COMMANDS
     bool calibrating = run.runBody && bodyState.mode == body::Mode::Calibrate;
-    if (link::processCalibration(requestedCalibration, calibrating, prot.allowOutput) > 0)
+    int processed = link::processCalibration(requestedCalibration, calibrating, prot.allowOutput);
+    processed += usb_link::processCalibration(requestedCalibration, calibrating, prot.allowOutput);
+    if (processed > 0)
+    {
+      // Every link hears about every change.
       link_receiver::requestReport(bridgeReports);
+      link_receiver::requestReport(usbReports);
+    }
 #endif
     joint_calibration::step(appliedCalibration, requestedCalibration, elapsedMs / 1000.0f);
 
@@ -269,12 +306,14 @@ int main()
     if (++telemetryTick >= TELEMETRY_EVERY_TICKS)
     {
       telemetryTick = 0;
-      sendTelemetry(reading, prot, servo_output::outputsOn());
+      sendTelemetry(reading, prot, servo_output::outputsOn(), input.telemetryFlags);
     }
     // In Calibrate, front-ends follow the table through these reports.
     calibrating = run.runBody && bodyState.mode == body::Mode::Calibrate;
     if (link_receiver::reportDue(bridgeReports, calibrating, now) && link::sendCalibrationReport(requestedCalibration))
       link_receiver::reportSent(bridgeReports, now);
+    if (link_receiver::reportDue(usbReports, calibrating, now) && usb_link::sendCalibrationReport(requestedCalibration))
+      link_receiver::reportSent(usbReports, now);
 #endif
 
     if (input.printReadings || now - lastReportMs >= REPORT_PERIOD_MS)

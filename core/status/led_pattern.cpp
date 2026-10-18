@@ -48,6 +48,7 @@ constexpr uint32_t SUPPLY_PULSE_MS = 1500;
 constexpr uint32_t STOPPED_BREATH_MS = 3000;
 constexpr uint32_t NO_GAMEPAD_BLINK_MS = 1000;
 constexpr uint32_t STALE_BLINK_MS = 250;
+constexpr uint32_t CONFLICT_BLINK_MS = 250;
 constexpr float INPUT_SERIAL_LEVEL = 0.4f; // dim white
 
 static Rgb scaled(Rgb c, float level)
@@ -102,6 +103,11 @@ static Rgb inputIndicator(Input input, uint32_t nowMs)
     return blinkOn(nowMs, NO_GAMEPAD_BLINK_MS) ? MAGENTA : OFF;
   case Input::LinkStale:
     return blinkOn(nowMs, STALE_BLINK_MS) ? AMBER : OFF;
+  case Input::UsbConnected:
+    return BLUE;
+  case Input::SourceConflict:
+    // Alternates the bridge's cyan with magenta: release one of the two.
+    return blinkOn(nowMs, CONFLICT_BLINK_MS) ? MAGENTA : CYAN;
   }
   return OFF;
 }

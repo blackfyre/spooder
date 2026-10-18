@@ -65,6 +65,7 @@ firmware/servo2040/src/usb_link.{h,cpp}   frames over USB stdio, sharing the por
 - **TX:** frames are written with `stdio_put_string(frame, len, false, false)` (no newline, no CR translation) from the main loop, the same thread that prints. Text and frames therefore never interleave inside each other.
 - **Debug text** must stay printable ASCII. A review rule and a host-side check, the desktop app flagging any 0xA5 outside a frame, keep it so.
 - **Dropped bytes:** with the 1 ms stdout timeout, a host that isn't reading loses whole writes. The decoder on the host resynchronises; nothing on the robot waits.
+  - A frame is written only when a host is connected and the USB transmit buffer has room for all of it (`tud_cdc_write_available()`); otherwise it is dropped whole. stdio's own write could stop part-way after its timeout. The buffer (`CFG_TUD_CDC_TX_BUFSIZE`, 64 bytes by default) is raised to 256 so a report fits.
 - **`--serial` builds:** `serial_commands` owns USB input, and `usb_link` is not compiled. The two command sources are a build choice, never mixed.
 
 ### D5. Source arbitration (`link_receiver`)
@@ -76,6 +77,7 @@ firmware/servo2040/src/usb_link.{h,cpp}   frames over USB stdio, sharing the por
   - else no source → Sleep.
 - `requestSeq` is per source. A change of source counts as a new request only through that source's own counter, so a source switch never resumes motion after a fault by itself.
 - E-stop: the OR of both links' flags. Fault clear: only from the source in control.
+- LED 5 shows the source: the bridge in control (cyan, as before), USB in control (blue), or a conflict (alternating magenta and cyan). The console prints each change of source.
 - With no source or a conflict, the tick's input is a fresh Sleep request (stamped now), so the robot sleeps through the normal path rather than the stale-command rule.
 
 ### D6. Compiled-defaults format
