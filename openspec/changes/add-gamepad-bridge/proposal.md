@@ -46,5 +46,5 @@ None. `locomotion`'s stale-command rule already covers a silent link, because th
   - The bridge is powered from its own USB or from a 5 V logic supply.
 - **Out of scope:**
   - Sensor fields in telemetry: their slots are reserved here and filled by `add-body-sensing`.
-  - WiFi.
+  - WiFi in normal operation. A separate setup mode with a WiFi portal is `add-bridge-setup-portal`.
   - Controllers other than standard Bluepad32 gamepads.

@@ -6,8 +6,12 @@ context: |
   built with CMake via `mise run build` (requires a power_limits.h, see CLAUDE.md).
   Hardware-free logic lives in core/ and is host-tested with Unity via
   `mise run test` (PlatformIO native env); hardware adapters live in
-  firmware/servo2040/src/. A TTGO T-Display (ESP32) Bluetooth gamepad bridge
-  and I2C sensors are planned. Hardware behaviour is verified on the board.
+  firmware/servo2040/src/. A second firmware, firmware/bridge/ (TTGO T-Display,
+  ESP32, ESP-IDF + Arduino + Bluepad32, built with `mise run build-bridge`),
+  is the Bluetooth gamepad bridge; both share core/protocol over a UART link.
+  Planned: live joint calibration on the robot with a WiFi setup portal on the
+  bridge and a Go (Gio) desktop calibrator over USB in desktop/; I2C sensors
+  (suspended). Hardware behaviour is verified on the boards.
 
 # Project context (optional)
 # This is shown to AI when creating artifacts.
