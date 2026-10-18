@@ -116,4 +116,5 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `spooder-leg-kinematics`: the movement reference.
   - `spooder-hardware-check`: flashing both boards, wiring, power, bring-up, the gamepad controls, setup mode with the portal calibration workflow, and bench calibration with the desktop calibrator.
 - The desktop calibrator never opens a port by itself: it lists ports (the Servo 2040, USB ID 2e8a:000a, preselected; or the `--port` path) and connects on request. Its unit tests use in-memory ports or pseudo-terminals they create; the e2e tests use only the virtual robot's terminal.
+- Record notable changes in `CHANGELOG.md` under **Unreleased** (Keep a Changelog sections), in the same commit as the change.
 - A CodeGraph index lives in `.codegraph/` (git-ignored). Refresh it with `codegraph sync` after large changes.
