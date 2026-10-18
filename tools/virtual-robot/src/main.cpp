@@ -70,6 +70,7 @@ public:
     servos.apply(body, applied);
   }
   bool servosOn() override { return servos.on; }
+  const uint16_t *servoPulses() override { return servos.desiredUs; }
   void showLeds(const led_pattern::State &state) override { leds = state; }
   bool sendFrame(Link link, const uint8_t *frame, int length) override
   {

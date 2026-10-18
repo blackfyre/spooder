@@ -75,6 +75,19 @@ static CalibrationReport sampleReport()
   return r;
 }
 
+static Pose samplePose()
+{
+  Pose p = {};
+  p.flags = POSE_OUTPUTS_ON;
+  for (int i = 0; i < CALIBRATION_JOINTS; i++)
+  {
+    p.joints[i].commandedCentideg = (int16_t)(i * 1500 - 12000); // negative and positive
+    p.joints[i].servoCentideg = (int16_t)(i * 1100 - 900);
+    p.joints[i].pulseUs = (uint16_t)(500 + 100 * i);
+  }
+  return p;
+}
+
 static void feed(const uint8_t *bytes, int n)
 {
   for (int i = 0; i < n; i++)
@@ -111,7 +124,9 @@ void test_frame_sizes()
   TEST_ASSERT_EQUAL(39, encodeTelemetry(sampleTelemetry(), 0, buf));
   TEST_ASSERT_EQUAL(16, encodeCalibrationSet(sampleSet(), 0, buf));
   TEST_ASSERT_EQUAL(135, encodeCalibrationReport(sampleReport(), 0, buf));
+  TEST_ASSERT_EQUAL(117, encodePose(samplePose(), 0, buf));
   TEST_ASSERT_EQUAL(128, CALIBRATION_REPORT_PAYLOAD_SIZE);
+  TEST_ASSERT_EQUAL(110, POSE_PAYLOAD_SIZE);
   TEST_ASSERT_EQUAL(135, MAX_FRAME_SIZE);
 }
 
@@ -201,6 +216,45 @@ void test_calibration_report_round_trip()
     TEST_ASSERT_EQUAL(r.joints[i].pulse180Us, f.calibrationReport.joints[i].pulse180Us);
     TEST_ASSERT_EQUAL(r.joints[i].flags, f.calibrationReport.joints[i].flags);
   }
+}
+
+void test_pose_round_trip()
+{
+  uint8_t buf[MAX_FRAME_SIZE];
+  Pose p = samplePose();
+  int n = encodePose(p, 77, buf);
+  Frame f;
+  TEST_ASSERT_EQUAL(1, feedAndCount(buf, n, f));
+  TEST_ASSERT_TRUE(f.type == FrameType::Pose);
+  TEST_ASSERT_EQUAL(77, f.seq);
+  TEST_ASSERT_EQUAL_HEX8(p.flags, f.pose.flags);
+  for (int i = 0; i < CALIBRATION_JOINTS; i++)
+  {
+    TEST_ASSERT_EQUAL(p.joints[i].commandedCentideg, f.pose.joints[i].commandedCentideg);
+    TEST_ASSERT_EQUAL(p.joints[i].servoCentideg, f.pose.joints[i].servoCentideg);
+    TEST_ASSERT_EQUAL(p.joints[i].pulseUs, f.pose.joints[i].pulseUs);
+  }
+  // Layout: flags, a reserved zero, then six bytes per joint.
+  TEST_ASSERT_EQUAL_HEX8(5, buf[2]);
+  TEST_ASSERT_EQUAL_HEX8(110, buf[4]);
+  TEST_ASSERT_EQUAL_HEX8(p.flags, buf[HEADER_SIZE]);
+  TEST_ASSERT_EQUAL_HEX8(0, buf[HEADER_SIZE + 1]);
+  const uint8_t *j17 = buf + HEADER_SIZE + 2 + 17 * POSE_JOINT_SIZE;
+  TEST_ASSERT_EQUAL_HEX16((uint16_t)p.joints[17].commandedCentideg, (uint16_t)(j17[0] | j17[1] << 8));
+  TEST_ASSERT_EQUAL_HEX16((uint16_t)p.joints[17].servoCentideg, (uint16_t)(j17[2] | j17[3] << 8));
+  TEST_ASSERT_EQUAL_HEX16(p.joints[17].pulseUs, (uint16_t)(j17[4] | j17[5] << 8));
+}
+
+void test_pose_between_telemetry_frames()
+{
+  uint8_t buf[3 * MAX_FRAME_SIZE];
+  int n = encodeTelemetry(sampleTelemetry(), 1, buf);
+  n += encodePose(samplePose(), 2, buf + n);
+  n += encodeTelemetry(sampleTelemetry(), 3, buf + n);
+  Frame f;
+  TEST_ASSERT_EQUAL(3, feedAndCount(buf, n, f));
+  TEST_ASSERT_TRUE(f.type == FrameType::Telemetry);
+  TEST_ASSERT_EQUAL(0, dec.discardedFrames());
 }
 
 void test_report_and_commands_back_to_back()
@@ -370,7 +424,7 @@ void test_unknown_type_is_rejected()
 {
   uint8_t buf[MAX_FRAME_SIZE];
   int n = encodeCommand(sampleCommand(), 1, buf);
-  buf[2] = 5;
+  buf[2] = 6; // the first type after Pose
   uint16_t crc = crc16(buf + 1, HEADER_SIZE - 1 + COMMAND_PAYLOAD_SIZE);
   buf[n - 2] = (uint8_t)(crc & 0xFF);
   buf[n - 1] = (uint8_t)(crc >> 8);
@@ -459,6 +513,8 @@ int main()
   RUN_TEST(test_telemetry_round_trip);
   RUN_TEST(test_calibration_set_round_trip);
   RUN_TEST(test_calibration_report_round_trip);
+  RUN_TEST(test_pose_round_trip);
+  RUN_TEST(test_pose_between_telemetry_frames);
   RUN_TEST(test_report_and_commands_back_to_back);
   RUN_TEST(test_every_single_byte_corruption_is_rejected);
   RUN_TEST(test_corrupted_frame_is_counted);

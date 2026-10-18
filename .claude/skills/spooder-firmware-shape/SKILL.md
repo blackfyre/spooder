@@ -36,6 +36,7 @@ if run.runBody:   body::setOffsets(applied offsets); body::step(bodyState, cmd w
                   servo_output::apply(bodyState, applied)
 status_leds::show(...)
 every fifth tick: telemetry on both links      // non-blocking, whole frames or nothing
+two ticks later:  pose on USB only             // link_receiver::makePose, 10 Hz
 reports due (after a set, 1 Hz in Calibrate, ≤ 5 Hz): calibration report on each link
 ```
 
@@ -77,7 +78,7 @@ The board has no pull-ups on GPIO19–21 or 26–28. Check for clashes before cl
 ## The links
 
 - **Boundary:** `core/protocol` owns framing (versioned, CRC-16/CCITT-FALSE, fixed little-endian payloads, incremental decoder). `core/protocol/link_receiver` owns what a decoded frame means to the robot. The adapters (`link` on both boards, `usb_link` on the robot) only move bytes. Both firmwares compile the same protocol code; change it in one place, bump `protocol::VERSION` when the layout changes, regenerate `test/golden/protocol_v2.txt` (`SPOODER_WRITE_GOLDEN=1 mise run test`) and flash both boards together.
-- **Frames (version 2):** command (front-end to robot, 20 ms), telemetry (robot, 100 ms; byte 21 holds the source flags), calibration set (front-end, one joint) and calibration report (robot, the whole table, 135 bytes).
+- **Frames (version 2):** command (front-end to robot, 20 ms), telemetry (robot, 100 ms; byte 21 holds the source flags), calibration set (front-end, one joint), calibration report (robot, the whole table, 135 bytes) and pose (type 5, robot to the USB host only, 117 bytes: per joint the commanded angle, the servo angle and the pulse). The pose was added without a version bump: it is additive and never sent on UART1, so the bridge is unaffected.
 - **Two links on the robot:** the bridge on UART1 and a computer on USB, each with its own `Decoder` and `link_receiver::Receiver`. `link_receiver::arbitrate` picks the one reporting a fresh, connected controller; both at once is a conflict (Sleep, `TELEMETRY_SOURCE_CONFLICT`). The e-stop is either link's; a fault clear and `requestSeq` come only from the source in control.
 - **USB shares the port with `printf`.** Frames and text are both written from the core 0 loop, so neither lands inside the other. `usb_link` writes a frame only when the CDC buffer has room for all of it. Keep debug text printable ASCII.
 - **Calibration:** sets are queued per link and processed after protection, only in Calibrate with output allowed (`processCalibration`, clamps in `joint_calibration::clampJoint`); a repeated request id is a retransmission. Reports carry the requested table; `ReportSchedule` sends one after each set and at 1 Hz in Calibrate, at most 5 Hz per link.

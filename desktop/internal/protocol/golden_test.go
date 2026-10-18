@@ -103,7 +103,7 @@ func TestGoldenVectors(t *testing.T) {
 		}
 		types[frames[0].Type] = true
 	}
-	for _, ft := range []FrameType{TypeCommand, TypeTelemetry, TypeCalibrationSet, TypeCalibrationReport} {
+	for _, ft := range []FrameType{TypeCommand, TypeTelemetry, TypeCalibrationSet, TypeCalibrationReport, TypePose} {
 		if !types[ft] {
 			t.Errorf("no golden vector of type %s", ft.Name())
 		}

@@ -151,6 +151,18 @@ static bool sendCalibrationReportOn(RobotState &s, Link link, Hardware &hw)
   return true;
 }
 
+// USB only: the bridge link has no pose.
+static bool sendPose(RobotState &s, Hardware &hw)
+{
+  LinkEndpoint &e = s.links[(int)Link::Usb];
+  uint8_t frame[protocol::MAX_FRAME_SIZE];
+  int n = protocol::encodePose(link_receiver::makePose(s.body, hw.servoPulses(), hw.servosOn()), e.txSeq, frame);
+  if (!hw.sendFrame(Link::Usb, frame, n))
+    return false;
+  e.txSeq++;
+  return true;
+}
+
 static void sendTelemetry(RobotState &s, const protection::Reading &r, const protection::Result &p, bool outputsOn,
                           uint8_t flags, Hardware &hw)
 {
@@ -324,10 +336,8 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
       s.telemetryTick = 0;
       sendTelemetry(s, reading, prot, hw.servosOn(), input.telemetryFlags, hw);
     }
-    // HOOK(pose-frame): the USB-only pose frame (joint angles, from
-    // s.body.angles and s.applied) is sent here, after the servos and next
-    // to telemetry, through hw.sendFrame(Link::Usb, ...), so the firmware
-    // and the virtual robot send it alike. Integrated after add-pose-frame.
+    if (s.telemetryTick == POSE_TICK)
+      sendPose(s, hw);
 
     // In Calibrate, front-ends follow the table through these reports.
     bool calibrating = run.runBody && s.body.mode == body::Mode::Calibrate;

@@ -30,6 +30,7 @@ public:
     servo_output::apply(body, applied);
   }
   bool servosOn() override { return servo_output::outputsOn(); }
+  const uint16_t *servoPulses() override { return servo_output::pulses(); }
   void showLeds(const led_pattern::State &state) override { status_leds::show(state); }
   bool sendFrame(robot_tick::Link link, const uint8_t *frame, int length) override
   {

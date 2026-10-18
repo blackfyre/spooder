@@ -2,7 +2,7 @@
 
 ## 1. Shared tick
 
-- [x] 1.1 Add `core/robot/robot_tick.{h,cpp}` (design D1) with the loop body moved from `main.cpp`, the link endpoints and the `Hardware` interface, plus the pose-frame hook (D2). Verify it builds in `spooder_core` with `-Wall -Wextra` and in the native test env.
+- [x] 1.1 Add `core/robot/robot_tick.{h,cpp}` (design D1) with the loop body moved from `main.cpp`, the link endpoints and the `Hardware` interface, plus the pose frame (D2). Verify it builds in `spooder_core` with `-Wall -Wextra` and in the native test env.
 - [x] 1.2 Reduce `main.cpp`, `link` and `usb_link` to adapters calling the tick. Verify `mise run build` and `mise run build --serial` without warnings, and an independent review comparing old and new loops call by call.
 - [x] 1.3 Host tests in `test/test_robot_tick/`: e-stop latency, a stale command never starting the body, conflict → Sleep, calibration only in Calibrate, telemetry every fifth tick, report scheduling, frame sequence numbers only on sent frames, status text. Verify `mise run test`.
 

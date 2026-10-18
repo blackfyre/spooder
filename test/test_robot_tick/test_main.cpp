@@ -48,6 +48,8 @@ public:
     events.push_back("apply");
   }
   bool servosOn() override { return on; }
+  uint16_t pulses[joint_calibration::JOINT_COUNT] = {};
+  const uint16_t *servoPulses() override { return pulses; }
   void showLeds(const led_pattern::State &s) override
   {
     leds = s;
@@ -65,8 +67,10 @@ public:
       while (d.next(f))
         frames[(int)link].push_back({tickNo, f});
     }
-    events.push_back(std::string(link == Link::Usb ? "usb " : "bridge ") +
-                     (frame[2] == (uint8_t)protocol::FrameType::Telemetry ? "telemetry" : "report"));
+    const char *kind = frame[2] == (uint8_t)protocol::FrameType::Telemetry ? "telemetry"
+                       : frame[2] == (uint8_t)protocol::FrameType::Pose    ? "pose"
+                                                                           : "report";
+    events.push_back(std::string(link == Link::Usb ? "usb " : "bridge ") + kind);
     return true;
   }
   void log(const char *line) override
@@ -378,8 +382,33 @@ void test_telemetry_every_fifth_tick_on_both_links()
   TEST_ASSERT_EQUAL(10, countOf(Link::Usb, protocol::FrameType::Telemetry));
   TEST_ASSERT_EQUAL(10, countOf(Link::Bridge, protocol::FrameType::Telemetry));
   for (int l = 0; l < LINK_COUNT; l++)
-    for (size_t i = 0; i < board.frames[l].size(); i++)
-      TEST_ASSERT_EQUAL(5 * (int)(i + 1), board.frames[l][i].tick);
+  {
+    int i = 0;
+    for (const SentFrame &f : board.frames[l])
+      if (f.frame.type == protocol::FrameType::Telemetry)
+        TEST_ASSERT_EQUAL(5 * ++i, f.tick);
+  }
+}
+
+void test_pose_on_usb_two_ticks_after_telemetry()
+{
+  standOnUsb();
+  board.pulses[0] = 1500;
+  int before = countOf(Link::Usb, protocol::FrameType::Pose);
+  ticks(50);
+  TEST_ASSERT_EQUAL(10, countOf(Link::Usb, protocol::FrameType::Pose) - before);
+  TEST_ASSERT_EQUAL(0, countOf(Link::Bridge, protocol::FrameType::Pose));
+  int lastTelemetry = -1;
+  for (const SentFrame &f : board.frames[(int)Link::Usb])
+  {
+    if (f.frame.type == protocol::FrameType::Telemetry)
+      lastTelemetry = f.tick;
+    else if (f.frame.type == protocol::FrameType::Pose && lastTelemetry >= 0)
+      TEST_ASSERT_EQUAL(lastTelemetry + POSE_TICK, f.tick);
+  }
+  const protocol::Frame *p = lastOf(Link::Usb, protocol::FrameType::Pose);
+  TEST_ASSERT_EQUAL(1500, p->pose.joints[0].pulseUs);
+  TEST_ASSERT_EQUAL_HEX8(protocol::POSE_OUTPUTS_ON, p->pose.flags & protocol::POSE_OUTPUTS_ON);
 }
 
 void test_telemetry_reports_each_links_own_frame_counts()
@@ -423,13 +452,14 @@ void test_reports_after_sets_no_more_than_five_per_second()
 void test_sequence_numbers_advance_only_for_sent_frames()
 {
   board.refuse[(int)Link::Usb] = true;
-  ticks(10); // two telemetry frames refused
+  ticks(10); // two telemetry and two pose frames refused
   board.refuse[(int)Link::Usb] = false;
-  ticks(5);
+  ticks(5); // a pose (tick 12), then telemetry (tick 15)
+  TEST_ASSERT_EQUAL(2, (int)board.frames[(int)Link::Usb].size());
+  TEST_ASSERT_EQUAL(0, board.frames[(int)Link::Usb][0].frame.seq);
   const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
   TEST_ASSERT_NOT_NULL(t);
-  TEST_ASSERT_EQUAL(0, t->seq);
-  TEST_ASSERT_EQUAL(1, countOf(Link::Usb, protocol::FrameType::Telemetry));
+  TEST_ASSERT_EQUAL(1, t->seq);
   TEST_ASSERT_EQUAL(3, lastOf(Link::Bridge, protocol::FrameType::Telemetry)->seq + 1);
 }
 
@@ -511,6 +541,7 @@ int main()
   RUN_TEST(test_calibration_set_rejected_outside_calibrate);
   RUN_TEST(test_calibration_set_accepted_in_calibrate_and_applied_at_the_rate_limit);
   RUN_TEST(test_telemetry_every_fifth_tick_on_both_links);
+  RUN_TEST(test_pose_on_usb_two_ticks_after_telemetry);
   RUN_TEST(test_telemetry_reports_each_links_own_frame_counts);
   RUN_TEST(test_reports_in_calibrate_at_one_hertz_and_none_otherwise);
   RUN_TEST(test_reports_after_sets_no_more_than_five_per_second);

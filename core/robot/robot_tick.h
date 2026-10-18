@@ -13,7 +13,8 @@
 //   applied calibration follows the requested table at the rate limit
 //   body step with the applied offsets; servo output
 //   status LEDs
-//   every fifth tick: telemetry on both links; calibration reports when due
+//   every fifth tick: telemetry on both links; two ticks later the pose on
+//   USB; calibration reports when due
 //   once a second (or on request in --serial builds): the status line
 //
 // The adapter (firmware main.cpp, the virtual robot) reads the link bytes and
@@ -38,6 +39,9 @@ constexpr uint32_t LOOP_PERIOD_MS = 20;
 // The status line, at most this often (unless asked for).
 constexpr uint32_t STATUS_PERIOD_MS = 1000;
 constexpr int TELEMETRY_EVERY_TICKS = 5; // 100 ms
+// Pose frames (USB only) at the telemetry rate, two ticks after it, so the
+// two never share one tick's USB transmit buffer.
+constexpr int POSE_TICK = 2;
 // Longest debug text line, including the newline.
 constexpr int MAX_LOG_LINE = 160;
 
@@ -87,6 +91,8 @@ public:
   // One movement step: every joint the body has set, through the applied table.
   virtual void applyServos(const body::BodyState &body, const joint_calibration::Table &applied) = 0;
   virtual bool servosOn() = 0;
+  // The last pulse set per output, in µs (servo output order; 0 = never set).
+  virtual const uint16_t *servoPulses() = 0;
   virtual void showLeds(const led_pattern::State &state) = 0;
   // Sends a frame whole or not at all, without waiting.
   // @return whether it was sent (the sequence number and report schedule

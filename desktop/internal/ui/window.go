@@ -69,10 +69,11 @@ const (
 	tabLog = iota
 	tabFrames
 	tabExport
+	tabLegs
 	tabCount
 )
 
-var tabNames = [tabCount]string{"debug log", "frames", "export"}
+var tabNames = [tabCount]string{"debug log", "frames", "export", "legs"}
 
 // Mode buttons, in display order.
 var modeButtons = [3]session.RequestedMode{session.RequestStand, session.RequestCalibrate, session.RequestSleep}

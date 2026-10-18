@@ -48,8 +48,12 @@ The robot SHALL report the complete table in effect after every accepted or reje
 - **THEN** the front-end shows the clamped value, the default plus 30°
 
 ### Requirement: Compiled defaults and export
-The compiled defaults SHALL live in one source file with a fixed, documented format. A front-end's export SHALL produce the current reported table as the complete text of that file, so that replacing the file with it and rebuilding gives a robot that starts with exactly that table. A golden copy of the defaults file SHALL be checked by every exporter's tests.
+The compiled defaults SHALL live in one source file with a fixed, documented format. A front-end's export SHALL produce the current reported table as the complete text of that file, so that replacing the file with it and rebuilding gives a robot that starts with exactly that table. Every exporter's tests SHALL check, byte for byte, the export of a fixed fixture table against a golden fixture file that does not change with calibration. The committed defaults file SHALL be free to hold any calibration; host tests SHALL check that it parses as 18 joints in output order, within the guards' hard limits, and that exporting what it holds reproduces it exactly.
 
 #### Scenario: Round trip
 - **WHEN** the exported text replaces the compiled defaults and the firmware is rebuilt and flashed
 - **THEN** after start-up the robot reports the same table as before the export
+
+#### Scenario: Calibration export keeps the tests passing
+- **WHEN** a changed table is exported over a copy of the compiled defaults
+- **THEN** the copy passes the defaults checks, and the format checks against the golden fixture still pass unchanged

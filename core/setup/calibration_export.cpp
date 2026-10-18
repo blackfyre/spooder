@@ -12,7 +12,7 @@ static const char HEADER[] = "// Spooder joint calibration defaults, in a fixed 
                              "// leg 2 ...):\n"
                              "//   {offset in degrees (two decimals), pulse at 0 degrees in us,\n"
                              "//    pulse at 180 degrees in us, reversed},\n"
-                             "// test/golden/calibration_defaults.cpp must equal this file.\n"
+                             "// Its format is pinned by a fixture, test/golden/calibration_defaults.cpp.\n"
                              "#include \"joint_calibration.h\"\n"
                              "\n"
                              "namespace joint_calibration\n"

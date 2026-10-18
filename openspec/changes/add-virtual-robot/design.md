@@ -41,9 +41,9 @@ tick(state, inputs, nowMs, Hardware &hw)
 - *Constants:* `LOOP_PERIOD_MS`, `STATUS_PERIOD_MS` (was `REPORT_PERIOD_MS`) and `TELEMETRY_EVERY_TICKS` move into the tick header; the power limits are passed to `init`.
 - *Alternative considered:* keeping decoders in the adapters and passing decoded `Input`s. Calibration processing and reports then need the receivers inside the tick anyway, so the adapters would have to hand out their internals; moving the endpoint whole is simpler.
 
-### D2. The pose frame hook
+### D2. The pose frame
 
-The pose frame (USB only, joint angles) is being added in parallel. The tick marks the place where it belongs, after the servos are applied and next to telemetry, with a `HOOK(pose-frame)` comment; it is sent through `hw.sendFrame(Link::Usb, ...)` so the firmware and the virtual robot get it together. Integration happens after both changes merge.
+The pose frame (USB only, from `add-desktop-leg-view`) is sent by the tick two ticks after each telemetry frame (`POSE_TICK`), as that change's `main.cpp` did, built with `link_receiver::makePose` from the body and `Hardware::servoPulses()`, through `hw.sendFrame(Link::Usb, ...)`: the firmware and the virtual robot send it alike.
 
 ### D3. Virtual robot program
 
@@ -81,7 +81,7 @@ A test in `internal/ui` behind `SPOODER_SCREENSHOTS` and the virtual robot binar
 - [The extraction changes firmware behaviour subtly] → The tick is a line-by-line move of `main.cpp`'s body; tests pin the loop's rules; an independent review compares old and new loops call by call; the hardware check repeats the bring-up items for e-stop, faults and calibration.
 - [Virtual-time ticks hide real overruns] → The virtual robot is for logic and protocol, not timing; the board's timing stays a hardware check.
 - [A pseudo-terminal is not a CDC device: no DTR, a larger buffer] → Host presence comes from the slave being open; whole-frame writes are kept by the backlog rule.
-- [The parallel pose-frame change also edits `main.cpp` and `usb_link`] → The hook marks the place; the coordinator moves its sending into the tick when merging.
+- [The parallel pose-frame change also edited `main.cpp` and `usb_link`] → Merged: its sending moved into the tick (D2), checked by a tick test and the differential run against that change's `main.cpp`.
 
 ## Migration Plan
 

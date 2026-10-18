@@ -170,4 +170,9 @@ bool outputsOn()
   return on;
 }
 
+const uint16_t *pulses()
+{
+  return desiredUs;
+}
+
 } // namespace servo_output

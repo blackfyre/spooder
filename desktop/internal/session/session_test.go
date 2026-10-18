@@ -326,3 +326,33 @@ func TestOnChangeIsCalledWithoutTheLock(t *testing.T) {
 		t.Fatalf("calls %d", calls)
 	}
 }
+
+// Spec "Pose frames stop": the pose is fresh for a second after it
+// arrives, and a new connection forgets it.
+func TestPoseAndItsAge(t *testing.T) {
+	s, c := connected(t)
+	if snap := s.Snapshot(); snap.HavePose || snap.PoseFresh {
+		t.Fatal("pose before any frame")
+	}
+	var p protocol.Pose
+	p.Flags = protocol.PoseOutputsOn
+	p.Joints[4] = protocol.PoseJoint{CommandedCentideg: 9000, ServoCentideg: 16500, PulseUs: 2333}
+	s.Frame(protocol.Frame{Type: protocol.TypePose, Pose: p}, link.Stats{})
+	if snap := s.Snapshot(); !snap.HavePose || !snap.PoseFresh || snap.Pose != p || snap.PoseAge != 0 {
+		t.Fatalf("snapshot %+v", snap)
+	}
+	c.advance(StaleAfter)
+	if !s.Snapshot().PoseFresh {
+		t.Fatal("stale at exactly a second")
+	}
+	c.advance(time.Millisecond)
+	if snap := s.Snapshot(); !snap.HavePose || snap.PoseFresh || snap.PoseAge != StaleAfter+time.Millisecond {
+		t.Fatalf("not stale: %v", snap.PoseAge)
+	}
+	s.Frame(protocol.Frame{Type: protocol.TypePose, Pose: p}, link.Stats{})
+	s.LinkState(link.State{Status: link.Waiting, Port: device})
+	s.LinkState(link.State{Status: link.Connected, Port: device})
+	if s.Snapshot().HavePose {
+		t.Fatal("pose kept across connections")
+	}
+}

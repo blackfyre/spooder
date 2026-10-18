@@ -1,0 +1,27 @@
+12:00:00.100  -- connected /dev/ttyACM0 (2e8a:000a Servo 2040)
+12:00:00.200  spooder: Servo 2040, link build
+12:00:00.300  supply 0.00 A (avg 0.00 A), 0.00 V; output off; mode 0; faults 0x00
+12:00:00.400  > command seq=0 mode=2 translateX=0 translateY=50 rotate=0 height=50 speed=44 gait=0 stride=0 flags=1 clearCounter=0 modeRequestCounter=0
+12:00:00.500  > command seq=255 mode=4 translateX=-128 translateY=127 rotate=-100 height=255 speed=100 gait=5 stride=1 flags=255 clearCounter=255 modeRequestCounter=255
+12:00:00.600  > command seq=0 mode=3 translateX=0 translateY=0 rotate=0 height=0 speed=0 gait=0 stride=0 flags=2 clearCounter=1 modeRequestCounter=0
+12:00:00.700  operator source: USB
+12:00:00.800  > telemetry #7  Calibrate  gait Tri  output on  6.01 V  1.35 A  faults none  link 1000 ok 2 bad  source USB
+12:00:00.900  > telemetry #128  Sleep  gait Tri  output off  0.00 V  0.00 A  faults emergency stop  link 0 ok 0 bad  source conflict (bridge and USB)
+12:00:01.000  > telemetry #255  mode 255  gait 255  output on  65.53 V  65.53 A  faults overcurrent, sustained current, undervoltage, brown-out, overvoltage, emergency stop, fault bit 6, fault bit 7, fault bit 8, fault bit 9, fault bit 10, fault bit 11, fault bit 12, fault bit 13, fault bit 14, fault bit 15  link 65535 ok 65535 bad  source conflict (bridge and USB)  tof 65535 mm (status 255)  pitch -327.68 deg roll 327.67 deg
+12:00:01.100  supply 1.35 A (avg 1.30 A), 6.01 V; output on; mode 4; faults 0x00
+12:00:01.200  > calibration_set seq=1 requestId=1 joint=0 offsetCentideg=9000 pulse0Us=500 pulse180Us=2500 flags=0
+12:00:01.300  > calibration_set seq=42 requestId=200 joint=17 offsetCentideg=-2450 pulse0Us=2400 pulse180Us=600 flags=1
+12:00:01.400  > calibration_set seq=255 requestId=255 joint=255 offsetCentideg=-32768 pulse0Us=0 pulse180Us=65535 flags=255
+12:00:01.500  ! frame candidate rejected (1 in total)
+12:00:01.600  fault latched: undervo\xA5ltage (0.00 A, 0.00 V)   [1 stray 0xA5]
+12:00:01.700  > calibration report #0  request 0  none yet  reversed 0
+12:00:01.800  > calibration report #9  request 17  clamped  reversed 1
+12:00:01.900  > calibration report #0  request 18  rejected  reversed 1
+12:00:02.000  > calibration report #255  request 255  result 255  reversed 18
+12:00:02.100  ! frame candidate rejected (2 in total)
+12:00:02.200  \xA5\x01\x01\x03\x0C\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00G\x9A   [1 stray 0xA5]
+12:00:02.300  ! frame candidate rejected (3 in total)
+12:00:02.400  \xA5\x02\x03\x04	\x05\x03d\x00\xF4\x01\xC4	\x002\x9F   [1 stray 0xA5]
+12:00:02.500  movement stopped: waiting for the fault to clear and a new request
+12:00:02.600  -- disconnected
+12:00:02.700  -- totals: 3 telemetry, 4 calibration reports, 6 other; 3 rejected; 3 stray 0xA5

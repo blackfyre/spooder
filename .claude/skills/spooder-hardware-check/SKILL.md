@@ -44,10 +44,14 @@ J6 (unpopulated 17-pin header), pin → signal: 1 GND, 2 USER_SW, 3 GND, 4 RESET
 mise run build            # commands from the bridge link (default)
 # put the board in BOOTSEL: hold BOOT/USER, tap RESET; the RPI-RP2 drive must be mounted
 mise run upload           # rebuilds, then copies the .uf2
-mise run monitor          # USB serial; Ctrl+C to exit
+mise run monitor          # USB console, timestamped text; Ctrl+C to exit
+mise run monitor --frames # plus one line per link frame (--telemetry-every 10 to thin telemetry)
 
 mise run upload --serial  # the USB serial keys instead of the link
+mise run monitor --keys   # the console for that build: typed keys go to the robot
 ```
+
+- `mise run monitor` only observes: it never sends a frame (no controller, no e-stop), so it can watch the robot while the bridge drives. Without `--keys` it writes nothing at all. `--port PATH` picks another port or a pseudo-terminal. `mise run monitor-raw` is the old raw console, in which frames show as junk.
 
 - The default build ignores serial keys and drives the robot from the bridge or a USB host speaking the link protocol. For movement bring-up without either, use `mise run upload --serial`. `upload` rebuilds first and passes the flag on, so give it to `upload` itself, not only to an earlier `build`.
 - In the default build, with no bridge and no USB host in control, the robot never leaves Sleep: LED 6 blinks amber fast (link stale).
@@ -78,7 +82,7 @@ mise run monitor-bridge                       # Bluepad32 console; type `help`
 - `point impossible to reach: (...) leg n` once per rejection;
 - `operator source: none|bridge|USB|conflict (bridge and USB): sleeping` on each change (default build).
 
-In the default build, a connected USB host also receives binary link frames (telemetry every 100 ms, calibration reports in Calibrate) between the text lines; a plain terminal shows them as stray characters. The text itself stays readable.
+In the default build, a connected USB host also receives binary link frames (telemetry every 100 ms, calibration reports in Calibrate) between the text lines. `mise run monitor` keeps them out of the text (and decodes them with `--frames`); a plain terminal (`monitor-raw`) shows them as stray characters. A text line marked `[n stray 0xA5]` held a byte 0xA5 outside a frame: debug text must stay ASCII.
 
 **LEDs** (`core/status/led_pattern`; LEDs 1–5 = main indication, LED 6 = command source):
 
@@ -95,7 +99,7 @@ In the default build, a connected USB host also receives binary link frames (tel
 | LED 6 blue | A USB host with a connected controller is in control |
 | LED 6 alternating magenta and cyan | Source conflict: the bridge and a USB host both claim control; the robot sleeps until one lets go |
 
-**Serial keys** (only in a `--serial` build):
+**Serial keys** (only in a `--serial` build; type them in `mise run monitor --keys`):
 
 | Key | Action |
 |---|---|
@@ -175,7 +179,7 @@ Setup mode turns the bridge into a WiFi access point with a captive portal; Blue
 2. Pick a leg and joint. Nudge the offset (±0.5°, ±1°, ±5°), the 0° and 180° pulses (±10, ±50 µs) or the direction. `Waiting for the robot...` shows until a report confirms the change; the shown values are always the robot's, and `Last change: clamped` or `rejected` says the robot changed or refused it. The joint follows at 60°/s at most.
 3. **E-stop:** the bridge's right button stops output as in normal operation, and the portal shows `EMERGENCY STOP`. The button toggles: press it again to release the stop, then press **Clear faults** and a mode button to move again.
 4. **Phone away:** close or lock the phone, or walk out of range. Within about 1 s the portal stops counting as a controller, and the robot sleeps. The portal's mode stays Sleep when it comes back, until a mode button is pressed.
-5. **Export:** press Export, then Copy (or select the text by hand). Paste it over `core/movement/calibration_defaults.cpp` whole, then copy it to `test/golden/calibration_defaults.cpp` too, as the host tests require both to be equal. Rebuild and flash the robot, then check in Calibrate that the robot reports the same table.
+5. **Export:** press Export, then Copy (or select the text by hand). Paste it over `core/movement/calibration_defaults.cpp` whole (leave `test/golden/` alone: its files are format fixtures), and run `mise run test`. Rebuild and flash the robot, then check in Calibrate that the robot reports the same table.
 
 Record results in `openspec/changes/add-bridge-setup-portal/tasks.md` (task 3.2).
 
@@ -196,10 +200,10 @@ The desktop app in `desktop/` speaks the link protocol on the robot's USB port. 
 2. **Observe.** The app reports no controller: with the gamepad driving, nothing changes on the robot (LED 6 stays cyan). Space (or E-stop) still stops it: all six LEDs steady red, output off. Press Space again to release the app's e-stop; the fault stays latched.
 3. **Take control** with the bridge's gamepad off and the app's e-stop released. Clear fault (the fault cannot clear while any e-stop is still signalled), then Calibrate. LED 6 shows blue (USB in control) once the fault is cleared, and the source shows `USB (this app)`.
 4. **Calibrate.** Select a joint with the arrow keys or the pointer; `=`/`-` nudge fine, Shift coarse, `R` flips the direction. A change shows `pending` until the robot's report confirms it; clamped or rejected changes are marked and show the robot's value. The joint moves at 60°/s at most.
+   - The **legs** pane draws the selected leg as the robot commands it (calibration pose: coxa straight out, femur straight up, tibia horizontal outward), each joint's pulse, and all six legs from above. Compare the real leg with the drawing: a joint that differs needs its offset changed. Rings mark joints near or at the 0°/180° servo limits. The top view's leg placement (legs 1–3 left, leg 1 at the front) is derived from the gait code; confirm it on the robot.
 5. **Release control.** The robot sleeps (LED 6 fast amber without a bridge). Closing the window or pulling the cable does the same within about 1 s.
 6. **Conflict.** Take control while the gamepad is connected: the app and the bridge screen show the conflict, LED 6 alternates magenta and cyan, and the robot sleeps until one side lets go.
-7. **Export.** Show difference, check it, Write file: only `core/movement/calibration_defaults.cpp` changes. Or Copy text. Rebuild and flash, then confirm the robot reports the same table in Calibrate.
-   - The host tests pin the seed defaults: after an export, `test/golden/calibration_defaults.cpp` and `test_defaults_are_the_former_leg_offsets` no longer match the file, so `mise run test` fails until they are brought in line.
+7. **Export.** Show difference, check it, Write file: only `core/movement/calibration_defaults.cpp` changes. Or Copy text. Run `mise run test` (it checks the file's format and round trip, not its values), rebuild and flash, then confirm the robot reports the same table in Calibrate. Leave `test/golden/` alone: its files are format fixtures.
 
 Record results in `openspec/changes/add-desktop-calibrator/tasks.md` (task 4.2).
 
