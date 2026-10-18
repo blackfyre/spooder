@@ -8,8 +8,8 @@
 
 ## 2. Robot
 
-- [ ] 2.1 Add `link_receiver::makePose` with a host test of commanded and servo angles, pulses, rounding and saturation; verify `mise run test` passes
-- [ ] 2.2 Add `servo_output::pulses()`, `usb_link::sendPose` and the 10 Hz call in `main.cpp` (two ticks after telemetry); verify `mise run build` and `mise run build --serial` build without warnings and `mise run build-bridge` builds
+- [x] 2.1 Add `link_receiver::makePose` with a host test of commanded and servo angles, pulses, rounding and saturation; verify `mise run test` passes
+- [x] 2.2 Add `servo_output::pulses()`, `usb_link::sendPose` and the 10 Hz call in `main.cpp` (two ticks after telemetry); verify `mise run build` and `mise run build --serial` build without warnings and `mise run build-bridge` builds
 
 ## 3. Leg model
 

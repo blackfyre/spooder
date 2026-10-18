@@ -36,6 +36,12 @@ void stop();
 
 bool outputsOn();
 
+/**
+ * @brief The last pulse set per output, in µs (servo output order; 0 = never
+ * set since power-up). Produced while outputsOn().
+ */
+const uint16_t *pulses();
+
 } // namespace servo_output
 
 #endif // SERVO_OUTPUT_H

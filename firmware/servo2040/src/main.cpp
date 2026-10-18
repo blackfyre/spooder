@@ -20,6 +20,9 @@
 constexpr uint32_t LOOP_PERIOD_MS = 20;
 constexpr uint32_t REPORT_PERIOD_MS = 1000;
 constexpr int TELEMETRY_EVERY_TICKS = 5; // 100 ms
+// Pose frames (USB only) at the telemetry rate, two ticks after it, so the
+// two never share one tick's USB transmit buffer.
+constexpr int POSE_TICK = 2;
 
 static body::BodyState bodyState;
 static protection::State protectionState;
@@ -308,6 +311,8 @@ int main()
       telemetryTick = 0;
       sendTelemetry(reading, prot, servo_output::outputsOn(), input.telemetryFlags);
     }
+    if (telemetryTick == POSE_TICK)
+      usb_link::sendPose(link_receiver::makePose(bodyState, servo_output::pulses(), servo_output::outputsOn()));
     // In Calibrate, front-ends follow the table through these reports.
     calibrating = run.runBody && bodyState.mode == body::Mode::Calibrate;
     if (link_receiver::reportDue(bridgeReports, calibrating, now) && link::sendCalibrationReport(requestedCalibration))

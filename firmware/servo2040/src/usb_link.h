@@ -37,6 +37,8 @@ int processCalibration(joint_calibration::Table &requested, bool calibrating, bo
  */
 bool sendTelemetry(const protocol::Telemetry &t);
 bool sendCalibrationReport(const joint_calibration::Table &table);
+// USB only: the bridge link (link.h) has no pose sender.
+bool sendPose(const protocol::Pose &p);
 
 uint32_t validFrames();
 uint32_t discardedFrames();
