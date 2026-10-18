@@ -27,7 +27,7 @@ func TestScreenshots(t *testing.T) {
 	if dir == "" {
 		t.Skip("set SPOODER_SCREENSHOTS to a directory")
 	}
-	const width, height = 1360, 900
+	width, height := 1360, 900
 	for _, dark := range []bool{false, true} {
 		w, router, _ := testWindow(t, dark)
 		shoot := func(name string) {
@@ -96,6 +96,9 @@ func TestScreenshots(t *testing.T) {
 		s.Frame(protocol.Frame{Type: protocol.TypePose, Pose: testPose(limitAngles, false)}, link.Stats{})
 		frame(w, router)
 		shoot("legs-limit-output-off")
+		width, height = 1000, 640 // the minimum window size
+		shoot("legs-limit-min-window")
+		width, height = 1360, 900
 		clock = clock.Add(2 * time.Second)
 		frame(w, router)
 		shoot("legs-no-pose")

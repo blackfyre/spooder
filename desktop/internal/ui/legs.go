@@ -122,7 +122,9 @@ func (w *window) legsPane(gtx layout.Context) layout.Dimensions {
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return w.sideView(gtx, st) }),
 		layout.Rigid(layout.Spacer{Height: 8}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			side := min(gtx.Constraints.Max.X*48/100, gtx.Dp(260))
+			// The joint list keeps the width its columns need (jointTableWidth);
+			// the top view takes the rest, up to 260 dp.
+			side := max(min(gtx.Constraints.Max.X-gtx.Dp(jointTableWidth+8), gtx.Dp(260)), gtx.Dp(120))
 			return layout.Flex{}.Layout(gtx,
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return w.jointTable(gtx, st) }),
 				layout.Rigid(layout.Spacer{Width: 8}.Layout),
@@ -379,11 +381,16 @@ func (w *window) coxaInset(gtx layout.Context, size image.Point, st legsState) {
 	t.Pop()
 }
 
+// The joint list's columns (joint, command, servo, pulse) and their sum.
+var jointColumns = []unit.Dp{42, 60, 60, 58}
+
+const jointTableWidth unit.Dp = 42 + 60 + 60 + 58
+
 // jointTable: the selected leg's joints with their commanded and servo
 // angles and pulses, and any limit.
 func (w *window) jointTable(gtx layout.Context, st legsState) layout.Dimensions {
 	l := st.Pose.Legs[st.Leg]
-	cols := []unit.Dp{46, 66, 66, 62}
+	cols := jointColumns
 	row := func(ws ...layout.Widget) layout.Widget {
 		return func(gtx layout.Context) layout.Dimensions {
 			children := make([]layout.FlexChild, 0, len(ws))
@@ -409,21 +416,37 @@ func (w *window) jointTable(gtx layout.Context, st legsState) layout.Dimensions 
 		if j == st.Joint {
 			name = w.pal.AccentText
 		}
+		servo := valueLabel(w.th, 11, w.pal.Fg, angleText(jt.Servo)).Layout
+		if jt.Limit != legview.LimitNone {
+			servo = w.limitValue(angleText(jt.Servo), jt.Limit)
+		}
 		rows = append(rows, row(
 			tracked(w.th, 10, name, legview.JointNames[j]),
-			valueLabel(w.th, 12, w.pal.Fg, angleText(jt.Commanded)).Layout,
-			valueLabel(w.th, 12, w.pal.Fg, angleText(jt.Servo)).Layout,
-			valueLabel(w.th, 12, w.pal.Fg, jointPulseText(jt.PulseUs)).Layout,
+			valueLabel(w.th, 11, w.pal.Fg, angleText(jt.Commanded)).Layout,
+			servo,
+			valueLabel(w.th, 11, w.pal.Fg, jointPulseText(jt.PulseUs)).Layout,
 		))
-		if jt.Limit != legview.LimitNone {
-			rows = append(rows, func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Left: cols[0]}.Layout(gtx, w.chip(jt.Limit.String(), w.pal.Yellow))
-			})
-		}
 	}
-	rows = append(rows, wrapped(textLabel(w.th, 12, w.pal.Muted,
-		"Command is the IK angle; servo adds the offset in use. The drawing shows the commanded pose.")))
 	return stacked(gtx, 5, rows...)
+}
+
+// limitValue is a servo angle near (yellow) or at (yellow, outlined in the
+// accent) its limit.
+func (w *window) limitValue(s string, l legview.Limit) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		m := op.Record(gtx.Ops)
+		g := gtx
+		g.Constraints.Min = image.Point{}
+		d := layout.Inset{Left: 3, Right: 3}.Layout(g, valueLabel(w.th, 11, w.pal.OnStatus, s).Layout)
+		call := m.Stop()
+		r := image.Rectangle{Max: d.Size}
+		fill(gtx, r, gtx.Dp(3), w.pal.Yellow)
+		if l == legview.LimitAt {
+			outline(gtx, r, gtx.Dp(3), gtx.Dp(2), w.pal.AccentText)
+		}
+		call.Add(gtx.Ops)
+		return d
+	}
 }
 
 // topView: all six legs from above on the schematic body, front up, the
