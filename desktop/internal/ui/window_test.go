@@ -176,6 +176,53 @@ func TestSpaceIsTheEmergencyStop(t *testing.T) {
 	}
 }
 
+// Review finding: holding Space (key repeat) must not toggle the e-stop
+// back; a new press after a lost release still counts.
+func TestHeldSpaceTogglesOnce(t *testing.T) {
+	w, router, _ := testWindow(t, false)
+	s := w.env.Session
+	router.Queue(key.Event{Name: key.NameSpace, State: key.Press})
+	frame(w, router)
+	for i := 0; i < 10; i++ { // repeats while held
+		router.Queue(key.Event{Name: key.NameSpace, State: key.Press})
+		frame(w, router)
+	}
+	if s.Command().Flags&protocol.FlagEmergencyStop == 0 {
+		t.Fatal("key repeat released the e-stop")
+	}
+	router.Queue(key.Event{Name: key.NameSpace, State: key.Release})
+	frame(w, router)
+	press(w, router, key.NameSpace, 0)
+	if s.Command().Flags&protocol.FlagEmergencyStop != 0 {
+		t.Fatal("second press did not release")
+	}
+	// A press whose release was lost, then a new press much later.
+	router.Queue(key.Event{Name: key.NameSpace, State: key.Press})
+	frame(w, router)
+	clock = clock.Add(2 * repeatGap)
+	router.Queue(key.Event{Name: key.NameSpace, State: key.Press})
+	frame(w, router)
+	if s.Command().Flags&protocol.FlagEmergencyStop != 0 {
+		t.Fatal("press after a lost release ignored")
+	}
+}
+
+// Review finding: refreshing an unchanged port list keeps the buttons, so a
+// press in progress is not lost.
+func TestPortRefreshKeepsButtons(t *testing.T) {
+	w, _, _ := testWindow(t, false)
+	before := &w.portClicks[0]
+	ports, _ := w.env.Ports()
+	w.setPorts(ports)
+	if &w.portClicks[0] != before {
+		t.Fatal("buttons recreated for an unchanged list")
+	}
+	w.setPorts(ports[1:])
+	if len(w.portClicks) != 1 || w.portSel != 0 {
+		t.Fatalf("changed list: %d buttons, selected %d", len(w.portClicks), w.portSel)
+	}
+}
+
 // Spec "Observe only": the mode buttons do nothing until control is taken.
 func TestModeButtonsNeedControl(t *testing.T) {
 	w, router, _ := testWindow(t, false)

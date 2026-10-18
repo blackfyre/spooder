@@ -35,6 +35,29 @@ func (s selection) move(name key.Name) selection {
 	return s
 }
 
+// keyLatch turns a key's presses into one action per physical press: the
+// system's key repeat sends further presses while the key is held, which
+// must not toggle the e-stop back. A press more than repeatGap after the
+// last one counts as new even without a release, in case the release was
+// lost (the window lost focus while the key was down).
+type keyLatch struct {
+	down bool
+	last time.Time
+}
+
+const repeatGap = time.Second
+
+// press records a key event and reports whether it is a new press.
+func (k *keyLatch) press(state key.State, now time.Time) bool {
+	if state == key.Release {
+		k.down = false
+		return false
+	}
+	repeat := k.down && now.Sub(k.last) < repeatGap
+	k.down, k.last = true, now
+	return !repeat
+}
+
 // nudgeKey maps a key to a nudge (design D5): + and - nudge fine, with
 // Shift coarse; R toggles the direction. The + key is matched by its
 // unshifted name "=" (US layouts) or "+" (layouts where + is unshifted),

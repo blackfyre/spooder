@@ -140,28 +140,31 @@ func (w *window) fieldRow(j int, f calib.Field, v jointView, editable, selected 
 		m := op.Record(gtx.Ops)
 		dims := layout.Inset{Top: 3, Bottom: 3, Left: 6, Right: 4}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.X = gtx.Constraints.Max.X
-			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return stacked(gtx, 1,
-						tracked(w.th, 10, w.pal.Muted, fieldLabels[f]),
-						func(gtx layout.Context) layout.Dimensions {
+			// The value with its label, then the nudges on their own line,
+			// so a card stays legible at any window width.
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.X = gtx.Constraints.Max.X
+					return layout.Flex{Alignment: layout.Baseline}.Layout(gtx,
+						layout.Rigid(tracked(w.th, 10, w.pal.Muted, fieldLabels[f])),
+						layout.Flexed(1, layout.Spacer{}.Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							ws := []layout.Widget{valueLabel(w.th, sizeValue, w.pal.Fg, fieldText(v.Reported, f)).Layout}
 							if v.Pending && fieldDiffers(v.Wanted, v.Reported, f) {
 								ws = append(ws, valueLabel(w.th, sizeLabel, w.pal.AccentText, "→ "+fieldText(v.Wanted, f)).Layout)
 							}
 							return sideBySide(gtx, 6, ws...)
-						},
+						}),
 					)
 				}),
+				layout.Rigid(layout.Spacer{Height: 3}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					if f == calib.FieldDirection {
-						return w.button(&w.flips[j], kindQuiet, "flip", editable).width(64).Layout(gtx)
+						return w.button(&w.flips[j], kindQuiet, "flip", editable).small().width(60).Layout(gtx)
 					}
 					var ws []layout.Widget
 					for b := range nudgeLabels[f] {
-						btn := w.button(&w.nudges[j][f][b], kindQuiet, nudgeLabels[f][b], editable)
-						btn.size = 10
-						ws = append(ws, btn.width(30).Layout)
+						ws = append(ws, w.button(&w.nudges[j][f][b], kindQuiet, nudgeLabels[f][b], editable).small().width(34).Layout)
 					}
 					return sideBySide(gtx, 3, ws...)
 				}),

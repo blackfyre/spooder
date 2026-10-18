@@ -149,15 +149,23 @@ type tactileButton struct {
 	size    unit.Sp
 	enabled bool
 	minW    unit.Dp
+	padX    unit.Dp
+	padY    unit.Dp
 	pal     *Palette
 	th      *material.Theme
 }
 
 func (w *window) button(c *widget.Clickable, kind buttonKind, label string, enabled bool) tactileButton {
-	return tactileButton{click: c, kind: kind, label: label, size: sizeLabel, enabled: enabled, pal: &w.pal, th: w.th}
+	return tactileButton{click: c, kind: kind, label: label, size: sizeLabel, enabled: enabled, padX: 12, padY: 7, pal: &w.pal, th: w.th}
 }
 
 func (b tactileButton) width(dp unit.Dp) tactileButton { b.minW = dp; return b }
+
+// small makes a compact button, for the nudges.
+func (b tactileButton) small() tactileButton {
+	b.size, b.padX, b.padY = 10, 5, 5
+	return b
+}
 
 func (b tactileButton) Layout(gtx layout.Context) layout.Dimensions {
 	face, fg, shadow := b.pal.buttonColours(b.kind)
@@ -171,7 +179,7 @@ func (b tactileButton) Layout(gtx layout.Context) layout.Dimensions {
 		m := op.Record(gtx.Ops)
 		inner := gtx
 		inner.Constraints.Min = image.Pt(gtx.Dp(b.minW), 0)
-		dims := layout.Inset{Top: 7, Bottom: 7, Left: 12, Right: 12}.Layout(inner, func(gtx layout.Context) layout.Dimensions {
+		dims := layout.Inset{Top: b.padY, Bottom: b.padY, Left: b.padX, Right: b.padX}.Layout(inner, func(gtx layout.Context) layout.Dimensions {
 			return layout.Center.Layout(gtx, tracked(b.th, b.size, fg, b.label))
 		})
 		call := m.Stop()
@@ -215,7 +223,13 @@ func stacked(gtx layout.Context, gap unit.Dp, ws ...layout.Widget) layout.Dimens
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
-// alignedText keeps a label to one line, truncating.
+// wrapped lets a label take as many lines as it needs.
+func wrapped(l material.LabelStyle) layout.Widget {
+	l.MaxLines = 0
+	return l.Layout
+}
+
+// oneLine keeps a label to one line, truncating.
 func oneLine(l material.LabelStyle) material.LabelStyle {
 	l.MaxLines = 1
 	l.Truncator = "…"

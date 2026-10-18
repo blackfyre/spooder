@@ -117,7 +117,7 @@ func (w *window) banners(gtx layout.Context) layout.Dimensions {
 	}
 	if snap.StrayLines > 0 {
 		ws = append(ws, banner(w.pal.Yellow, w.pal.OnStatus, "Stray 0xA5",
-			fmt.Sprintf("%d debug lines held a byte 0xA5 outside a frame; the robot's text must be ASCII (see the log).", snap.StrayLines)))
+			fmt.Sprintf("Debug lines with a byte 0xA5 outside a frame: %d. The robot's text must be ASCII (see the log).", snap.StrayLines)))
 	}
 	if w.notice != "" && gtx.Now.Sub(w.noticeAt) < noticeFor {
 		ws = append(ws, banner(w.pal.SurfaceAlt, w.pal.Fg, "Not done", w.notice))
@@ -130,9 +130,13 @@ func (w *window) banners(gtx layout.Context) layout.Dimensions {
 	})
 }
 
-// cell is one labelled telemetry value.
+// cell is one labelled telemetry value, weight wide.
 func (w *window) cell(label, value string, c color.NRGBA) layout.FlexChild {
-	return layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+	return w.wideCell(1, label, value, c)
+}
+
+func (w *window) wideCell(weight float32, label, value string, c color.NRGBA) layout.FlexChild {
+	return layout.Flexed(weight, func(gtx layout.Context) layout.Dimensions {
 		return stacked(gtx, 4,
 			tracked(w.th, sizeLabel, w.pal.Muted, label),
 			oneLine(valueLabel(w.th, sizeValue, c, value)).Layout,
@@ -166,15 +170,15 @@ func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 					w.cell("Output", onOffText(t.OutputsOn), c),
 					w.cell("Supply", voltsText(t.VoltageMv), c),
 					w.cell("Current", ampsText(t.CurrentMa), c),
-					w.cell("Source", sourceText(snap), c),
+					w.wideCell(1.6, "Source", sourceText(snap), c),
 					layout.Flexed(2, func(gtx layout.Context) layout.Dimensions {
 						return stacked(gtx, 4,
 							tracked(w.th, sizeLabel, w.pal.Muted, "Faults"),
-							oneLine(valueLabel(w.th, sizeValue, faultColour, faultsText(snap.Faults))).Layout,
+							wrapped(valueLabel(w.th, sizeValue, faultColour, faultsText(snap.Faults))),
 						)
 					}),
-					w.cell("Robot link", fmt.Sprintf("%d ok · %d bad", t.ValidFrames, t.DiscardedFrames), c),
-					w.cell("Host link", fmt.Sprintf("%d ok · %d bad", snap.Stats.Valid, snap.Stats.Discarded), w.pal.Fg),
+					w.wideCell(1.3, "Robot link", fmt.Sprintf("%d ok · %d bad", t.ValidFrames, t.DiscardedFrames), c),
+					w.wideCell(1.3, "Host link", fmt.Sprintf("%d ok · %d bad", snap.Stats.Valid, snap.Stats.Discarded), w.pal.Fg),
 				)
 			},
 			func(gtx layout.Context) layout.Dimensions {

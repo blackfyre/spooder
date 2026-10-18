@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -120,6 +121,8 @@ type window struct {
 
 	notice   string
 	noticeAt time.Time
+
+	space keyLatch // the e-stop key
 }
 
 // Run shows the calibrator window and exits the process when it closes,
@@ -203,6 +206,9 @@ func (w *window) setPorts(ports []link.PortInfo) {
 	if w.portSel >= 0 && w.portSel < len(w.ports) {
 		p := w.ports[w.portSel]
 		selected = &p
+	}
+	if slices.Equal(ports, w.ports) {
+		return // keep the buttons, and any press in progress on them
 	}
 	w.ports = ports
 	w.portClicks = make([]widget.Clickable, len(ports))
@@ -316,12 +322,19 @@ func (w *window) handle(gtx layout.Context) {
 			break
 		}
 		ke, ok := ev.(key.Event)
-		if !ok || ke.State != key.Press {
+		if !ok {
+			continue
+		}
+		if ke.Name == key.NameSpace {
+			if w.space.press(ke.State, gtx.Now) {
+				s.ToggleEmergencyStop()
+			}
+			continue
+		}
+		if ke.State != key.Press {
 			continue
 		}
 		switch ke.Name {
-		case key.NameSpace:
-			s.ToggleEmergencyStop()
 		case key.NameTab:
 		case key.NameLeftArrow, key.NameRightArrow, key.NameUpArrow, key.NameDownArrow:
 			w.sel = w.sel.move(ke.Name)
