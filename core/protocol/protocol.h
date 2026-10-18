@@ -156,8 +156,10 @@ struct Frame
   CalibrationReport calibrationReport; // valid when type == CalibrationReport
 };
 
-// Incremental decoder. Feed every received byte with push(), then call next()
-// until it returns false. A rejected candidate (bad version, type, length or
+// Incremental decoder. Feed every received byte with push(), and after each
+// one call next() until it returns false: the buffer holds a single frame of
+// at most MAX_FRAME_SIZE bytes, so bytes pushed beyond that without next()
+// give up the oldest candidate. A rejected candidate (bad version, type, length or
 // CRC) is counted, and decoding resumes at the next start marker after its
 // first byte, so a valid frame following garbage is never lost. An incomplete
 // candidate is kept until its CRC can be checked, unless the line goes quiet:

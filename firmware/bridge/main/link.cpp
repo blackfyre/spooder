@@ -66,25 +66,9 @@ static void sendCommand(uint8_t seq)
   Serial1.write(frame, n);
 }
 
-static void receive()
+// Hands every complete frame in the decoder to loop()'s side of the lock.
+static void takeFrames(uint32_t now)
 {
-  static uint32_t lastByteMs = 0;
-  static bool idleHandled = true;
-  uint32_t now = millis();
-  int avail = Serial1.available();
-  if (avail > 0)
-  {
-    lastByteMs = now;
-    idleHandled = false;
-  }
-  while (avail-- > 0)
-    decoder.push((uint8_t)Serial1.read());
-  if (!idleHandled && now - lastByteMs >= RX_IDLE_MS)
-  {
-    decoder.idle();
-    idleHandled = true;
-  }
-
   protocol::Frame f;
   while (decoder.next(f))
   {
@@ -105,6 +89,33 @@ static void receive()
       portEXIT_CRITICAL(&lock);
     }
   }
+}
+
+static void receive()
+{
+  static uint32_t lastByteMs = 0;
+  static bool idleHandled = true;
+  uint32_t now = millis();
+  int avail = Serial1.available();
+  if (avail > 0)
+  {
+    lastByteMs = now;
+    idleHandled = false;
+  }
+  // Decode after every byte: the decoder holds one frame at most, and a poll
+  // can bring a telemetry frame and a calibration report together.
+  while (avail-- > 0)
+  {
+    decoder.push((uint8_t)Serial1.read());
+    takeFrames(now);
+  }
+  if (!idleHandled && now - lastByteMs >= RX_IDLE_MS)
+  {
+    decoder.idle();
+    idleHandled = true;
+    takeFrames(now);
+  }
+
   portENTER_CRITICAL(&lock);
   validFrames = decoder.validFrames();
   discardedFrames = decoder.discardedFrames();

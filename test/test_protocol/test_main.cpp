@@ -413,6 +413,32 @@ void test_frame_split_across_pushes_without_next()
   TEST_ASSERT_FALSE(dec.next(f));
 }
 
+void test_telemetry_and_report_in_one_burst()
+{
+  // 174 bytes in one burst, more than the decoder holds: decoding after each
+  // byte keeps both frames.
+  uint8_t buf[TELEMETRY_FRAME_SIZE + CALIBRATION_REPORT_FRAME_SIZE];
+  int n = encodeTelemetry(sampleTelemetry(), 1, buf);
+  n += encodeCalibrationReport(sampleReport(), 2, buf + n);
+  TEST_ASSERT_TRUE(n > MAX_FRAME_SIZE);
+  Frame first = {}, f;
+  int frames = 0;
+  for (int i = 0; i < n; i++)
+  {
+    dec.push(buf[i]);
+    while (dec.next(f))
+    {
+      if (frames == 0)
+        first = f;
+      frames++;
+    }
+  }
+  TEST_ASSERT_EQUAL(2, frames);
+  TEST_ASSERT_TRUE(first.type == FrameType::Telemetry);
+  TEST_ASSERT_TRUE(f.type == FrameType::CalibrationReport);
+  TEST_ASSERT_EQUAL(0, dec.discardedFrames());
+}
+
 void test_back_to_back_frames()
 {
   uint8_t buf[2 * MAX_FRAME_SIZE];
@@ -447,6 +473,7 @@ int main()
   RUN_TEST(test_inconsistent_length_is_rejected);
   RUN_TEST(test_sequence_wraps);
   RUN_TEST(test_frame_split_across_pushes_without_next);
+  RUN_TEST(test_telemetry_and_report_in_one_burst);
   RUN_TEST(test_back_to_back_frames);
   return UNITY_END();
 }
