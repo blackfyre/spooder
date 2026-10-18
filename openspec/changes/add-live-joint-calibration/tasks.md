@@ -8,8 +8,8 @@
   - the rate limit (a 20° offset change takes at least 1/3 s) and convergence;
   - `test/golden/calibration_defaults.cpp` equal to the committed defaults file.
 - [x] 1.2 Protocol version 2 (design D3): calibration set and report frames, telemetry flags, `MAX_FRAME_SIZE` 135, and `test/golden/protocol_v2.txt`. Verify host tests for round trips, rejection of version-1 frames, the golden vectors, and the existing tests updated.
-- [ ] 1.3 Calibration guards in `link_receiver` (design D2). Verify host tests for rejection outside Calibrate or without output, the clamps and minimum span, a repeated request id, and the report contents and result codes.
-- [ ] 1.4 Source arbitration (design D5). Verify host tests for every row of the arbitration rule, the conflict flag, per-source request counters across a source switch, the e-stop from the idle source, and a clear accepted only from the source in control.
+- [x] 1.3 Calibration guards in `link_receiver` (design D2). Verify host tests for rejection outside Calibrate or without output, the clamps and minimum span, a repeated request id, and the report contents and result codes.
+- [x] 1.4 Source arbitration (design D5). Verify host tests for every row of the arbitration rule, the conflict flag, per-source request counters across a source switch, the e-stop from the idle source, and a clear accepted only from the source in control.
 
 ## 2. Robot (Servo 2040)
 

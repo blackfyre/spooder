@@ -44,6 +44,8 @@ firmware/servo2040/src/usb_link.{h,cpp}   frames over USB stdio, sharing the por
   - clamp the offset to its default ±30° and each pulse to 400–2600 µs;
   - keep the end points at least 1000 µs apart, moving the requested 180° pulse away from the 0° pulse if needed, on its own side (equal pulses count as rising). If that would leave 400–2600 µs, the 180° pulse stops at the limit and the 0° pulse moves to keep the span, so the direction of travel is kept;
   - treat a repeated request id on the same link as a retransmission: report again, change nothing.
+  - Sets are queued per link on arrival (up to 4 per tick; more are dropped and resent by the front-end) and processed after the protection step, with the tick's `allowOutput` and the body's mode.
+- **Reports** carry the requested table: the accepted values after clamping, which the applied table then follows at the rate limit. That is the table that confirms a change and that an export writes. The request id and result in a report are those of the last set processed from the link the report is sent on.
 
 ### D3. Protocol version 2
 
@@ -74,6 +76,7 @@ firmware/servo2040/src/usb_link.{h,cpp}   frames over USB stdio, sharing the por
   - else no source → Sleep.
 - `requestSeq` is per source. A change of source counts as a new request only through that source's own counter, so a source switch never resumes motion after a fault by itself.
 - E-stop: the OR of both links' flags. Fault clear: only from the source in control.
+- With no source or a conflict, the tick's input is a fresh Sleep request (stamped now), so the robot sleeps through the normal path rather than the stale-command rule.
 
 ### D6. Compiled-defaults format
 
