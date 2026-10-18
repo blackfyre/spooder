@@ -26,7 +26,8 @@ mise run setup        # fetch the pinned submodules (only the sub-submodules the
 ```sh
 mise run build        # CMake build of firmware/servo2040 -> build/servo2040/spooder.uf2
 mise run upload       # copy the .uf2 to a Servo 2040 in BOOTSEL mode (RPI-RP2 drive)
-mise run monitor      # robot USB serial console (115200)
+mise run monitor      # robot USB console: timestamped text; --frames decodes frames, --keys for a --serial build
+mise run monitor-raw  # the raw console (pio device monitor, 115200): frames show as junk
 mise run build-bridge    # PlatformIO build of firmware/bridge (TTGO T-Display)
 mise run upload-bridge   # flash the bridge (BRIDGE_PORT, default /dev/ttyUSB0)
 mise run monitor-bridge  # the bridge's Bluepad32 console
@@ -83,8 +84,9 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `main/setup_mode`: the setup-mode boot path (RTC magic), the WiFi access point, the DNS and HTTP servers and the setup task. `main/portal_page.h` is the portal page, one hand-written HTML file.
 - `desktop/`: the desktop calibrator, a Go module (`github.com/blackfyre/spooder/desktop`) kept apart so Gio and cgo never reach the firmware builds.
   - `cmd/spooder-calibrator`: `main`, the wiring.
+  - `cmd/spooder-monitor` + `internal/console`: the text console behind `mise run monitor`. It uses the link read-only (no source, so no writer) and never sends a frame; only `--keys` writes, printable ASCII only. No Gio, and cgo only on macOS.
   - `internal/protocol`: the link protocol in Go, byte for byte the C++ one, tested against `test/golden/protocol_v2.txt`.
-  - `internal/link`: the serial port (`go.bug.st/serial`), the split of the stream into frames and debug text lines, the 20 ms writer and reconnecting by USB serial number.
+  - `internal/link`: the serial port (`go.bug.st/serial`), the split of the stream into frames and debug text lines, the 20 ms writer (none for a nil source) and reconnecting by USB serial number.
   - `internal/session`: the single state owner: observe or control, the e-stop, mode and clear counters, telemetry.
   - `internal/calib`: the joint table shown from reports, pending edits, one change in flight, resend and confirmation by request id.
   - `internal/export`: `calibration_defaults.cpp` in the fixed format (tested against `test/golden/calibration_defaults.cpp`), the checkout check, the diff and the atomic write.
