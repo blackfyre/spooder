@@ -15,14 +15,14 @@ Spooder is the firmware and tooling for a six-legged, eighteen-servo walking rob
 
 ## How it fits together
 
-```text
- gamepad ))) Bluetooth ))) TTGO T-Display ── UART, 115200 ── Servo 2040 ── 18 servos
-                           (the bridge)                      (the robot)
-                                │                                 │
-                     setup mode: WiFi portal              USB: debug text + link frames
-                     on a phone                                   │
-                                                          desktop calibrator
-                                                          (or the virtual robot)
+```mermaid
+flowchart LR
+  pad["Gamepad"] -- "Bluetooth" --> bridge["TTGO T-Display<br/>(the bridge)"]
+  phone["Phone"] -. "WiFi portal<br/>(setup mode only)" .-> bridge
+  bridge <-- "UART link, 115200<br/>commands · telemetry, reports" --> robot["Servo 2040<br/>(the robot)"]
+  robot -- "pulses" --> servos["18 servos"]
+  desktop["Desktop calibrator"] <-- "USB: link frames<br/>+ debug text" --> robot
+  desktop <-. "same frames,<br/>pseudo-terminal" .-> virtual["Virtual robot<br/>(no hardware)"]
 ```
 
 - **The robot**: a Pimoroni Servo 2040 (RP2040), C++ on the pico-sdk with pimoroni-pico. It runs a 20 ms control tick: link input → power protection → supervisor → calibration → body state machine → servo output → status LEDs → telemetry.

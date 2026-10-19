@@ -92,19 +92,19 @@ All are named `constexpr` values in `body.cpp`, and they are expected to be tune
 
 ### D6. Body state machine
 
-```
-            boot
-             |
-             v
-       +------------+   done   +-------+  cmd=Walk & transition done  +------+
-       | Initialise |--------->| Stand |----------------------------->| Walk |
-       +------------+          +-------+<-----------------------------+------+
-                                |  ^  ^           cmd=Stand
-                       cmd=Calib|  |  |cmd!=Sleep (enable outputs)
-                                v  |  |
-                         +-----------+  +-------+
-                         | Calibrate |  | Sleep |<--- cmd=Sleep or stale (from any mode)
-                         +-----------+  +-------+
+```mermaid
+stateDiagram-v2
+  [*] --> Initialise: boot
+  Initialise --> Stand: done
+  Stand --> Walk: cmd = Walk and transition done
+  Walk --> Stand: cmd = Stand
+  Stand --> Calibrate: cmd = Calibrate
+  Calibrate --> Stand
+  Initialise --> Sleep: cmd = Sleep or stale
+  Stand --> Sleep: cmd = Sleep or stale
+  Walk --> Sleep: cmd = Sleep or stale
+  Calibrate --> Sleep: cmd = Sleep or stale
+  Sleep --> Stand: cmd != Sleep (enable outputs)
 ```
 
 - **Single transition function.** `bodyStep` resolves the requested mode against the current mode and whether any transition is still in progress.

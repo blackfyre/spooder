@@ -36,12 +36,19 @@ Until the gamepad bridge exists, commands come from the USB serial hook (`firmwa
 
 ## Body modes
 
-```
-Initialise --> Stand <--> Walk
-                 ^ \
-                 |  +--> Calibrate --> (Stand)
-     Sleep <-- any mode on Sleep request or stale command
-     Sleep --> Stand on any other request (outputs re-enabled)
+```mermaid
+stateDiagram-v2
+  [*] --> Initialise
+  Initialise --> Stand
+  Stand --> Walk
+  Walk --> Stand
+  Stand --> Calibrate
+  Calibrate --> Stand: leaving Calibrate
+  Initialise --> Sleep: Sleep request or stale command
+  Stand --> Sleep: Sleep request or stale command
+  Walk --> Sleep: Sleep request or stale command
+  Calibrate --> Sleep: Sleep request or stale command
+  Sleep --> Stand: any other request (outputs re-enabled)
 ```
 
 - **Pre-emption:** Sleep and stale commands pre-empt everything. Other requests, including waking, wait until `transitionActive()` is false (Initialise, an active Stand transition, a Sleep fold). A command stamped up to `MAX_COMMAND_LEAD_MS` (100 ms) after `nowMs` is fresh. Once a command is stale, that `issuedAtMs` stays stale (latched), so `millis()` wrap can never revive it; only a new stamp wakes the body.
