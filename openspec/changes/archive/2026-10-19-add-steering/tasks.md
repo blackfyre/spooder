@@ -11,7 +11,7 @@
 
 - [x] 2.1 Add the steer and crab stick modes to `core/gamepad_mapping`, with `b` as the toggle, steer as the default, the reverse convention and right stick X added in both modes (D3); host tests for each scenario
 - [x] 2.2 Show the stick mode on the status screen within its line length (D4); host test
-- [ ] 2.3 Verify `mise run build`, `mise run build --serial` and `mise run build-bridge` pass
+- [x] 2.3 Verify `mise run build`, `mise run build --serial` and `mise run build-bridge` pass
 
 ## 3. Documentation and hardware
 
