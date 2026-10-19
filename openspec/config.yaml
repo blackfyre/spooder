@@ -9,9 +9,11 @@ context: |
   firmware/servo2040/src/. A second firmware, firmware/bridge/ (TTGO T-Display,
   ESP32, ESP-IDF + Arduino + Bluepad32, built with `mise run build-bridge`),
   is the Bluetooth gamepad bridge; both share core/protocol over a UART link.
-  Planned: live joint calibration on the robot with a WiFi setup portal on the
-  bridge and a Go (Gio) desktop calibrator over USB in desktop/; I2C sensors
-  (suspended). Hardware behaviour is verified on the boards.
+  Live joint calibration runs on the robot, edited through the bridge's WiFi
+  setup portal or the Go (Gio) desktop calibrator over USB (desktop/); a
+  virtual robot (tools/virtual-robot) runs the shared control tick for tests.
+  I2C sensors are suspended. Hardware behaviour is verified on the boards.
+  Diagrams in artifacts are Mermaid code blocks, never ASCII art.
 
 # Project context (optional)
 # This is shown to AI when creating artifacts.
