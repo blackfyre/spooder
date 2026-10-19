@@ -13,10 +13,11 @@ import (
 	"github.com/blackfyre/spooder/desktop/internal/session"
 )
 
-// header: title, port picker, connection, control toggle and e-stop.
+// header: the title, then one row of controls (the ports, refresh,
+// connect, the control toggle and the e-stop, all the same height and
+// centred on one line) with the link state beneath it.
 func (w *window) header(gtx layout.Context) layout.Dimensions {
-	snap := w.snap
-	return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+	return layout.Flex{Alignment: layout.Start}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return stacked(gtx, 2,
 				tracked(w.th, sizeTitle, w.pal.Fg, "Spooder"),
@@ -24,81 +25,80 @@ func (w *window) header(gtx layout.Context) layout.Dimensions {
 			)
 		}),
 		layout.Rigid(layout.Spacer{Width: 20}.Layout),
-		layout.Flexed(1, w.connectionBlock),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return stacked(gtx, 6, w.controlRow, w.linkState)
+		}),
+	)
+}
+
+// controlRow: the ports (scrolling sideways, so the buttons always fit),
+// refresh and connect, then the control toggle and the e-stop.
+func (w *window) controlRow(gtx layout.Context) layout.Dimensions {
+	snap := w.snap
+	label := "Connect"
+	enabled := w.portSel >= 0
+	if w.device != nil {
+		label, enabled = "Disconnect", true
+	}
+	return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+		layout.Rigid(tracked(w.th, sizeLabel, w.pal.Muted, "Port")),
+		layout.Rigid(layout.Spacer{Width: 8}.Layout),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			if len(w.ports) == 0 {
+				return valueLabel(w.th, sizeLabel, w.pal.Muted, "no serial ports").Layout(gtx)
+			}
+			return w.portList.Layout(gtx, len(w.ports), func(gtx layout.Context, i int) layout.Dimensions {
+				p := w.ports[i]
+				kind := kindQuiet
+				if i == w.portSel {
+					kind = kindActive
+				}
+				label := p.Name
+				if p.IsServo2040() {
+					label += " servo 2040"
+				}
+				return layout.Inset{Right: 6}.Layout(gtx, w.button(&w.portClicks[i], kind, label, w.device == nil).Layout)
+			})
+		}),
 		layout.Rigid(layout.Spacer{Width: 12}.Layout),
+		layout.Rigid(w.button(&w.refresh, kindQuiet, "Refresh", w.device == nil).width(100).Layout),
+		layout.Rigid(layout.Spacer{Width: 8}.Layout),
+		layout.Rigid(w.button(&w.connect, kindNeutral, label, enabled).width(120).Layout),
+		layout.Rigid(layout.Spacer{Width: 24}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			kind, label := kindNeutral, "Take control"
 			if snap.Control {
 				kind, label = kindActive, "Release control"
 			}
-			return w.button(&w.control, kind, label, snap.Control || snap.CanControl).width(150).Layout(gtx)
+			return w.button(&w.control, kind, label, snap.Control || snap.CanControl).width(160).Layout(gtx)
 		}),
-		layout.Rigid(layout.Spacer{Width: 12}.Layout),
+		layout.Rigid(layout.Spacer{Width: 8}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			label := "E-stop · space"
 			if snap.EmergencyStop {
 				label = "Release e-stop · space"
 			}
-			b := w.button(&w.estop, kindPrimary, label, true).width(190)
-			b.size = 13
-			return b.Layout(gtx)
+			return w.button(&w.estop, kindPrimary, label, true).width(200).Layout(gtx)
 		}),
 	)
 }
 
-// connectionBlock: the ports, refresh, connect and the link state.
-func (w *window) connectionBlock(gtx layout.Context) layout.Dimensions {
+// linkState: the connection's state; the message wraps, so the permission
+// hint is readable at any window width.
+func (w *window) linkState(gtx layout.Context) layout.Dimensions {
 	snap := w.snap
-	return stacked(gtx, 6,
-		func(gtx layout.Context) layout.Dimensions {
-			label := "Connect"
-			enabled := w.portSel >= 0
-			if w.device != nil {
-				label, enabled = "Disconnect", true
-			}
-			// The ports scroll sideways, so Refresh and Connect always fit.
-			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-				layout.Rigid(tracked(w.th, sizeLabel, w.pal.Muted, "Port")),
-				layout.Rigid(layout.Spacer{Width: 6}.Layout),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					if len(w.ports) == 0 {
-						return valueLabel(w.th, sizeLabel, w.pal.Muted, "no serial ports").Layout(gtx)
-					}
-					return w.portList.Layout(gtx, len(w.ports), func(gtx layout.Context, i int) layout.Dimensions {
-						p := w.ports[i]
-						kind := kindQuiet
-						if i == w.portSel {
-							kind = kindActive
-						}
-						label := p.Name
-						if p.IsServo2040() {
-							label += " servo 2040"
-						}
-						return layout.Inset{Right: 6}.Layout(gtx, w.button(&w.portClicks[i], kind, label, w.device == nil).Layout)
-					})
-				}),
-				layout.Rigid(w.button(&w.refresh, kindQuiet, "Refresh", w.device == nil).Layout),
-				layout.Rigid(layout.Spacer{Width: 6}.Layout),
-				layout.Rigid(w.button(&w.connect, kindNeutral, label, enabled).width(110).Layout),
-			)
-		},
-		func(gtx layout.Context) layout.Dimensions {
-			c := w.pal.Muted
-			switch snap.Link.Status {
-			case link.Connected:
-				c = w.pal.Green
-			case link.Waiting:
-				c = w.pal.Yellow
-			}
-			// The message wraps: the permission hint must be readable at
-			// any window width.
-			return layout.Flex{}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layout.Inset{Top: 3, Right: 8}.Layout(gtx, dot(c, 9))
-				}),
-				layout.Flexed(1, wrapped(valueLabel(w.th, sizeLabel, w.pal.Fg, connectionText(snap.Link)))),
-			)
-		},
+	c := w.pal.Muted
+	switch snap.Link.Status {
+	case link.Connected:
+		c = w.pal.Green
+	case link.Waiting:
+		c = w.pal.Yellow
+	}
+	return layout.Flex{}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: 3, Right: 8}.Layout(gtx, dot(c, 9))
+		}),
+		layout.Flexed(1, wrapped(valueLabel(w.th, sizeLabel, w.pal.Fg, connectionText(snap.Link)))),
 	)
 }
 
@@ -198,12 +198,12 @@ func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 					if snap.Control && snap.Mode == m {
 						kind = kindActive
 					}
-					ws = append(ws, w.button(&w.modes[i], kind, m.String(), snap.ModesEnabled).width(110).Layout)
+					ws = append(ws, w.button(&w.modes[i], kind, m.String()+" · "+string(modeKeys[i]), snap.ModesEnabled).width(130).Layout)
 				}
-				ws = append(ws, w.button(&w.clearFault, kindNeutral, "Clear fault", snap.ModesEnabled).width(120).Layout)
-				state := "Observing: the app reports no controller."
+				ws = append(ws, w.button(&w.clearFault, kindNeutral, "Clear fault · "+string(clearFaultKey), snap.ModesEnabled).width(150).Layout)
+				state := "Observing: the app reports no controller. Take control to use these."
 				if snap.Control {
-					state = "In control: requesting " + snap.Mode.String() + ". Translate and rotate stay zero."
+					state = "In control: requesting " + snap.Mode.String() + ". Walking is the gamepad's."
 				}
 				if snap.HaveTelemetry && !snap.Fresh {
 					ws = append(ws, w.staleMarker(snap))
@@ -211,8 +211,61 @@ func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 				ws = append(ws, textLabel(w.th, sizeText, w.pal.Muted, state).Layout)
 				return sideBySide(gtx, 8, ws...)
 			},
+			func(gtx layout.Context) layout.Dimensions {
+				if !snap.Control {
+					return layout.Dimensions{}
+				}
+				return w.keyHints(gtx)
+			},
 		)
 	})
+}
+
+// keyHint is one shortcut: its keys and what they do.
+type keyHint struct {
+	keys   []string
+	action string
+}
+
+// keyHints are the shortcuts while in control. Space works in any state;
+// the editing keys act only in Calibrate.
+var keyHints = []keyHint{
+	{[]string{"Space"}, "e-stop on / off"},
+	{[]string{"1", "2", "3"}, "Stand, Calibrate, Sleep"},
+	{[]string{"F"}, "clear fault"},
+	{[]string{"←", "→", "↑", "↓"}, "select joint and value"},
+	{[]string{"=", "−"}, "nudge, with Shift coarse"},
+	{[]string{"R"}, "flip direction"},
+}
+
+// keyHints: the keyboard controls, as key caps and their actions, flowing
+// onto further lines in a narrow window.
+func (w *window) keyHints(gtx layout.Context) layout.Dimensions {
+	ws := []layout.Widget{tracked(w.th, sizeLabel, w.pal.Muted, "Keys")}
+	for _, h := range keyHints {
+		parts := make([]layout.Widget, 0, len(h.keys)+1)
+		for _, k := range h.keys {
+			parts = append(parts, w.keyCap(k))
+		}
+		parts = append(parts, oneLine(textLabel(w.th, sizeText, w.pal.Fg, h.action)).Layout)
+		ws = append(ws, sideBySideWidget(4, parts...))
+	}
+	ws = append(ws, oneLine(textLabel(w.th, sizeText, w.pal.Muted, "Editing keys act in Calibrate.")).Layout)
+	return flow(gtx, 18, 6, ws...)
+}
+
+// keyCap is a key's name in an outlined cap.
+func (w *window) keyCap(name string) layout.Widget {
+	return func(gtx layout.Context) layout.Dimensions {
+		m := op.Record(gtx.Ops)
+		dims := layout.Inset{Top: 2, Bottom: 2, Left: 6, Right: 6}.Layout(gtx, valueLabel(w.th, sizeLabel, w.pal.Fg, name).Layout)
+		call := m.Stop()
+		r := image.Rectangle{Max: dims.Size}
+		fill(gtx, r, gtx.Dp(4), w.pal.SurfaceAlt)
+		outline(gtx, r, gtx.Dp(4), gtx.Dp(1), w.pal.Border)
+		call.Add(gtx.Ops)
+		return dims
+	}
 }
 
 // staleMarker flags values that are not current.

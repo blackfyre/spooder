@@ -39,6 +39,17 @@ The app SHALL offer an emergency-stop control, also on the Space key, that toggl
 - **WHEN** the gamepad drives the robot and the operator presses Space in the app
 - **THEN** the robot's servo output switches off and the app shows the emergency stop
 
+### Requirement: Keyboard controls shown
+The mode controls SHALL also be on keys, 1 for Stand, 2 for Calibrate, 3 for Sleep and F for Clear fault, acting like the controls themselves: only while the app is in control. Each control SHALL name its key. While the app is in control, it SHALL show its keyboard controls beside the mode controls: Space for the emergency stop, the mode keys, the arrow keys to select a joint and value, the nudge keys with their coarse modifier, and the direction key, noting that the editing keys act only in Calibrate. The list SHALL stay readable at the minimum window size.
+
+#### Scenario: Taking control
+- **WHEN** the operator takes control
+- **THEN** the app shows the keyboard controls, and hides them again on release
+
+#### Scenario: Mode key while observing
+- **WHEN** the operator presses 2 while the app only observes
+- **THEN** no mode request is sent; once in control, 2 requests Calibrate as the button does
+
 ### Requirement: Telemetry view
 The app SHALL show, from the latest telemetry: body mode and gait, whether servo output is on, supply voltage and current, every latched fault by name, the link's valid and discarded frame counts, and which source controls the robot (bridge, USB, none or conflict). Values SHALL be marked as not current when no telemetry has arrived for 1 second.
 

@@ -28,7 +28,7 @@ func (w *window) editor(gtx layout.Context) layout.Dimensions {
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			hint := editHint(snap)
 			if hint == "" {
-				hint = "Arrows select a joint and value; = and - nudge fine, with Shift coarse; R flips the direction."
+				hint = "The keys are listed above."
 			}
 			if snap.PendingCount > 0 {
 				hint = fmt.Sprintf("%d change(s) awaiting the robot's confirmation. ", snap.PendingCount) + hint

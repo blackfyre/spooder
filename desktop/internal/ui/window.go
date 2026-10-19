@@ -334,7 +334,16 @@ var keyFilters = []event.Filter{
 	key.Filter{Name: "=", Optional: key.ModShift}, key.Filter{Name: "+", Optional: key.ModShift},
 	key.Filter{Name: "-", Optional: key.ModShift}, key.Filter{Name: "_", Optional: key.ModShift},
 	key.Filter{Name: "*", Optional: key.ModShift}, key.Filter{Name: "R", Optional: key.ModShift},
+	// The mode buttons, in their order, and Clear fault.
+	key.Filter{Name: modeKeys[0]}, key.Filter{Name: modeKeys[1]}, key.Filter{Name: modeKeys[2]},
+	key.Filter{Name: clearFaultKey},
 }
+
+// modeKeys are the mode buttons' shortcuts, in modeButtons order;
+// clearFaultKey is Clear fault's. Like the buttons, they act only in control.
+var modeKeys = [len(modeButtons)]key.Name{"1", "2", "3"}
+
+const clearFaultKey key.Name = "F"
 
 // handle processes shortcuts and clicks.
 func (w *window) handle(gtx layout.Context) {
@@ -358,6 +367,14 @@ func (w *window) handle(gtx layout.Context) {
 			continue
 		}
 		switch ke.Name {
+		case modeKeys[0], modeKeys[1], modeKeys[2]:
+			for i, k := range modeKeys {
+				if ke.Name == k {
+					w.say(gtx, s.RequestMode(modeButtons[i]))
+				}
+			}
+		case clearFaultKey:
+			w.say(gtx, s.ClearFault())
 		case key.NameTab:
 		case key.NameLeftArrow, key.NameRightArrow, key.NameUpArrow, key.NameDownArrow:
 			w.sel = w.sel.move(ke.Name)

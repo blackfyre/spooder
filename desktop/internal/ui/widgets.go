@@ -236,3 +236,59 @@ func oneLine(l material.LabelStyle) material.LabelStyle {
 	l.Alignment = text.Start
 	return l
 }
+
+// flow lays widgets out left to right, each at its natural size, starting
+// a new line when the next one does not fit; lines are centred vertically.
+func flow(gtx layout.Context, gapX, gapY unit.Dp, ws ...layout.Widget) layout.Dimensions {
+	maxW := gtx.Constraints.Max.X
+	gx, gy := gtx.Dp(gapX), gtx.Dp(gapY)
+	type item struct {
+		call op.CallOp
+		size image.Point
+	}
+	cgtx := gtx
+	cgtx.Constraints.Min = image.Point{}
+	items := make([]item, len(ws))
+	for i, w := range ws {
+		m := op.Record(gtx.Ops)
+		d := w(cgtx)
+		items[i] = item{m.Stop(), d.Size}
+	}
+	width, y := 0, 0
+	for start := 0; start < len(items); {
+		end, x, h := start, 0, 0
+		for end < len(items) {
+			next := x + items[end].size.X
+			if end > start {
+				next += gx
+			}
+			if end > start && next > maxW {
+				break
+			}
+			x = next
+			if items[end].size.Y > h {
+				h = items[end].size.Y
+			}
+			end++
+		}
+		x = 0
+		for i := start; i < end; i++ {
+			if i > start {
+				x += gx
+			}
+			t := op.Offset(image.Pt(x, y+(h-items[i].size.Y)/2)).Push(gtx.Ops)
+			items[i].call.Add(gtx.Ops)
+			t.Pop()
+			x += items[i].size.X
+		}
+		if x > width {
+			width = x
+		}
+		y += h
+		if end < len(items) {
+			y += gy
+		}
+		start = end
+	}
+	return layout.Dimensions{Size: image.Pt(width, y)}
+}

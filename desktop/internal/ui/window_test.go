@@ -304,6 +304,30 @@ func TestModeButtonsNeedControl(t *testing.T) {
 	}
 }
 
+// The mode shortcuts act like the buttons: nothing while observing.
+func TestModeKeys(t *testing.T) {
+	w, router, _ := testWindow(t, false)
+	s := w.env.Session
+	s.LinkState(link.State{Status: link.Connected, Port: servo})
+	frame(w, router)
+	press(w, router, "2", 0)
+	press(w, router, "F", 0)
+	if c := s.Command(); c.ModeRequestCounter != 0 || c.ClearCounter != 0 {
+		t.Fatalf("observing: %+v", c)
+	}
+	click(w, router, &w.control)
+	for i, want := range modeButtons {
+		press(w, router, modeKeys[i], 0)
+		if c := s.Command(); c.ModeRequestCounter != uint8(i+1) || c.Mode != uint8(want) {
+			t.Fatalf("key %s: %+v", modeKeys[i], c)
+		}
+	}
+	press(w, router, clearFaultKey, 0)
+	if c := s.Command(); c.ClearCounter != 1 {
+		t.Fatalf("clear fault: %+v", c)
+	}
+}
+
 func TestKeyboardNudges(t *testing.T) {
 	w, router, _ := testWindow(t, false)
 	// Refused before Calibrate: a notice, no change.
