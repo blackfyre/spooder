@@ -13,10 +13,12 @@
 // - Each change of the fault-clear counter is one clear request; each change
 //   of the mode-request counter advances requestSeq (for protection's resume
 //   gate).
+// - Each change of the gesture-request counter advances gestureSeq and
+//   records the frame's gesture id: one gesture request.
 // - After a gap in the link (including power-up and a bridge restart) the
-//   first frame only sets the baseline for both counters: a restarted bridge,
-//   whose counters start again from zero, cannot clear faults or count as a
-//   new mode request.
+//   first frame only sets the baseline for all three counters: a restarted
+//   bridge, whose counters start again from zero, cannot clear faults, count
+//   as a new mode request or request a gesture.
 //
 // Calibration sets are queued per link and processed once per tick through
 // the guards (Calibrate with output allowed, then joint_calibration's clamps)
@@ -55,6 +57,8 @@ struct Input
   bool emergencyStop;
   bool clearRequested;     // a new clear-counter value since the last tick
   uint32_t requestSeq;     // advances with each new mode-request counter value
+  uint32_t gestureSeq;     // advances with each new gesture-request counter value
+  uint8_t gesture;         // the gesture id of the latest request
 };
 
 struct Receiver
@@ -66,6 +70,9 @@ struct Receiver
   uint8_t modeRequestCounter = 0;
   bool clearPending = false;
   uint32_t requestSeq = 0;
+  uint8_t gestureCounter = 0;
+  uint32_t gestureSeq = 0;
+  uint8_t gesture = 0;
 
   // Calibration sets waiting for processCalibration().
   protocol::CalibrationSet pendingSets[MAX_PENDING_SETS] = {};
@@ -161,6 +168,11 @@ struct Arbiter
   uint32_t bridgeSeq = 0; // each link's requestSeq at the previous tick
   uint32_t usbSeq = 0;
   uint32_t requestSeq = 0;
+  // Gesture requests, counted the same way: only the source in control's.
+  uint32_t bridgeGestureSeq = 0;
+  uint32_t usbGestureSeq = 0;
+  uint32_t gestureSeq = 0;
+  uint8_t gesture = 0;
 };
 
 struct Arbitration
@@ -172,8 +184,9 @@ struct Arbitration
 
 /**
  * @brief Chooses this tick's input from the two links' inputs. The emergency
- * stop is either link's; a fault clear counts only from the source in
- * control.
+ * stop is either link's; a fault clear, a mode request and a gesture request
+ * count only from the source in control. The command carries the arbitrated
+ * gesture request (gesture, gestureSeq).
  */
 Arbitration arbitrate(Arbiter &a, const Input &bridge, const Input &usb, uint32_t nowMs);
 

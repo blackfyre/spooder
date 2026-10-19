@@ -8,7 +8,8 @@ namespace robot_tick
 
 // The LED pattern mirrors body::Mode by value.
 static_assert((int)led_pattern::BodyMode::Walk == (int)body::Mode::Walk &&
-                  (int)led_pattern::BodyMode::Calibrate == (int)body::Mode::Calibrate,
+                  (int)led_pattern::BodyMode::Calibrate == (int)body::Mode::Calibrate &&
+                  (int)led_pattern::BodyMode::Perform == (int)body::Mode::Perform,
               "led_pattern::BodyMode must mirror body::Mode");
 
 // One tick's operator input: from the bridge or USB link, whichever is in
@@ -163,8 +164,9 @@ static bool sendPose(RobotState &s, Hardware &hw)
   return true;
 }
 
+// @p gesture is the gesture being played, 0 when none or the body is stopped.
 static void sendTelemetry(RobotState &s, const protection::Reading &r, const protection::Result &p, bool outputsOn,
-                          uint8_t flags, Hardware &hw)
+                          uint8_t flags, uint8_t gesture, Hardware &hw)
 {
   protocol::Telemetry t = {};
   t.bodyMode = (uint8_t)s.body.mode;
@@ -175,6 +177,7 @@ static void sendTelemetry(RobotState &s, const protection::Reading &r, const pro
   t.currentMa = clampU16(r.currentA * 1000.0f);
   t.sensorsAvailable = 0; // filled by add-body-sensing
   t.flags = flags;
+  t.gesture = gesture;
   // Each link reports its own frame counters.
   for (int i = 0; i < LINK_COUNT; i++) // the bridge, then USB
   {
@@ -275,6 +278,8 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
   // this tick. Both input sources are bounded and never block, so they
   // cannot delay the protection step that follows.
   TickInput input = readInput(s, in, now, hw);
+  // Movement tells a new explicit mode request from a continuing one.
+  input.command.modeRequestSeq = input.requestSeq;
 
   const protection::Reading &reading = in.power;
   protection::Result prot = protection::step(s.protection, reading, now, input.clearFaults, input.emergencyStop);
@@ -334,7 +339,8 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
     if (++s.telemetryTick >= TELEMETRY_EVERY_TICKS)
     {
       s.telemetryTick = 0;
-      sendTelemetry(s, reading, prot, hw.servosOn(), input.telemetryFlags, hw);
+      sendTelemetry(s, reading, prot, hw.servosOn(), input.telemetryFlags,
+                    run.runBody ? body::playingGesture(s.body) : 0, hw);
     }
     if (s.telemetryTick == POSE_TICK)
       sendPose(s, hw);

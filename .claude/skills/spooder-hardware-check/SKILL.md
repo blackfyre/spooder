@@ -198,7 +198,7 @@ The desktop app in `desktop/` speaks the link protocol on the robot's USB port. 
    - The debug log shows the robot's text lines and the telemetry strip its mode, supply and faults. Frames go to the frames pane, never into the log.
    - A `Stray 0xA5` banner means a text line held a byte 0xA5 outside a frame: debug text must stay ASCII.
 2. **Observe.** The app reports no controller: with the gamepad driving, nothing changes on the robot (LED 6 stays cyan). Space (or E-stop) still stops it: all six LEDs steady red, output off. Press Space again to release the app's e-stop; the fault stays latched.
-3. **Take control** with the bridge's gamepad off and the app's e-stop released. Clear fault (`F`; the fault cannot clear while any e-stop is still signalled), then Calibrate (`2`; `1` Stand, `3` Sleep). The keys are listed under the mode buttons while in control. LED 6 shows blue (USB in control) once the fault is cleared, and the source shows `USB (this app)`.
+3. **Take control** with the bridge's gamepad off and the app's e-stop released. Clear fault (`F`; the fault cannot clear while any e-stop is still signalled), then Calibrate (`2`; `1` Stand, `3` Sleep). From Stand, keys `4`–`8` (or the gesture buttons) play say hi, wiggle, dance, attack and ball; rehearse them on the virtual robot first (`mise run desktop-sim`). The keys are listed under the mode buttons while in control. LED 6 shows blue (USB in control) once the fault is cleared, and the source shows `USB (this app)`.
 4. **Calibrate.** Select a joint with the arrow keys or the pointer; `=`/`-` nudge fine, Shift coarse, `R` flips the direction. A change shows `pending` until the robot's report confirms it; clamped or rejected changes are marked and show the robot's value. The joint moves at 60°/s at most.
    - The **legs** pane draws the selected leg as the robot commands it (calibration pose: coxa straight out, femur straight up, tibia horizontal outward), each joint's pulse, and all six legs from above. Compare the real leg with the drawing: a joint that differs needs its offset changed. Rings mark joints near or at the 0°/180° servo limits. The top view's leg placement (legs 1–3 left; legs 1 and 6 the front pair, 3 and 4 the rear) matches the gait code and is confirmed on the robot. The body outline is a simple schematic.
 5. **Release control.** The robot sleeps (LED 6 fast amber without a bridge). Closing the window or pulling the cable does the same within about 1 s.
@@ -227,6 +227,7 @@ Button names are Bluepad32's (Xbox layout: `a` bottom, `b` right, `x` left, `y` 
 | D-pad right / left | Speed ±10 |
 | `x` | Toggle stride: dynamic / fixed |
 | Both stick buttons held 1 s | Clear faults |
+| `l2` held + `a` / `b` / `x` / `y` / `r2` | Gesture: say hi / wiggle / dance / attack / ball, from a settled Stand (the buttons' own functions are off while `l2` is held; dance, attack and ball are not scripted yet and do nothing) |
 | Bridge right button (GPIO35) | Toggle emergency stop |
 
 - One gamepad at a time; a second is refused.

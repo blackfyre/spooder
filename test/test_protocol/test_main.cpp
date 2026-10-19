@@ -25,6 +25,8 @@ static Command sampleCommand()
   c.flags = FLAG_CONTROLLER_CONNECTED | FLAG_EMERGENCY_STOP;
   c.clearCounter = 200;
   c.modeRequestCounter = 255;
+  c.gesture = GESTURE_BALL;
+  c.gestureRequestCounter = 77;
   return c;
 }
 
@@ -45,6 +47,7 @@ static Telemetry sampleTelemetry()
   t.pitchCentideg = -1000;
   t.rollCentideg = 32767;
   t.flags = TELEMETRY_SOURCE_CONFLICT | TELEMETRY_BRIDGE_IN_CONTROL;
+  t.gesture = GESTURE_DANCE;
   return t;
 }
 
@@ -120,7 +123,7 @@ void test_crc_check_value()
 void test_frame_sizes()
 {
   uint8_t buf[MAX_FRAME_SIZE];
-  TEST_ASSERT_EQUAL(19, encodeCommand(sampleCommand(), 0, buf));
+  TEST_ASSERT_EQUAL(21, encodeCommand(sampleCommand(), 0, buf));
   TEST_ASSERT_EQUAL(39, encodeTelemetry(sampleTelemetry(), 0, buf));
   TEST_ASSERT_EQUAL(16, encodeCalibrationSet(sampleSet(), 0, buf));
   TEST_ASSERT_EQUAL(135, encodeCalibrationReport(sampleReport(), 0, buf));
@@ -150,6 +153,8 @@ void test_command_round_trip()
   TEST_ASSERT_EQUAL(c.flags, f.command.flags);
   TEST_ASSERT_EQUAL(c.clearCounter, f.command.clearCounter);
   TEST_ASSERT_EQUAL(c.modeRequestCounter, f.command.modeRequestCounter);
+  TEST_ASSERT_EQUAL(c.gesture, f.command.gesture);
+  TEST_ASSERT_EQUAL(c.gestureRequestCounter, f.command.gestureRequestCounter);
   TEST_ASSERT_EQUAL(1, dec.validFrames());
   TEST_ASSERT_EQUAL(0, dec.discardedFrames());
 }
@@ -177,6 +182,7 @@ void test_telemetry_round_trip()
   TEST_ASSERT_EQUAL(t.pitchCentideg, f.telemetry.pitchCentideg);
   TEST_ASSERT_EQUAL(t.rollCentideg, f.telemetry.rollCentideg);
   TEST_ASSERT_EQUAL_HEX8(t.flags, f.telemetry.flags);
+  TEST_ASSERT_EQUAL(t.gesture, f.telemetry.gesture);
   // The flags are byte 21 of the payload.
   TEST_ASSERT_EQUAL_HEX8(t.flags, buf[HEADER_SIZE + 21]);
 }
@@ -405,16 +411,19 @@ static int commandWithVersion(uint8_t version, uint8_t *buf)
 void test_version_1_frame_is_rejected()
 {
   uint8_t buf[MAX_FRAME_SIZE];
-  int n = commandWithVersion(1, buf);
+  Frame previous;
+  int n = commandWithVersion(2, buf); // the previous version is rejected too
+  TEST_ASSERT_EQUAL(0, feedAndCount(buf, n, previous));
+  n = commandWithVersion(1, buf);
   Frame f;
   TEST_ASSERT_EQUAL(0, feedAndCount(buf, n, f));
-  TEST_ASSERT_EQUAL(1, dec.discardedFrames());
+  TEST_ASSERT_EQUAL(2, dec.discardedFrames());
 }
 
 void test_unknown_version_is_rejected()
 {
   uint8_t buf[MAX_FRAME_SIZE];
-  int n = commandWithVersion(3, buf);
+  int n = commandWithVersion(VERSION + 1, buf);
   Frame f;
   TEST_ASSERT_EQUAL(0, feedAndCount(buf, n, f));
   TEST_ASSERT_EQUAL(1, dec.discardedFrames());

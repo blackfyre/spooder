@@ -68,6 +68,20 @@ void test_stick_mode_shown_and_settings_line_fits()
     TEST_ASSERT_TRUE_MESSAGE(strlen(out[l].text) <= (size_t)LINE_CHARS, out[l].text);
 }
 
+void test_playing_gesture_is_shown()
+{
+  Inputs in = healthy();
+  in.telemetry.bodyMode = 5;
+  in.telemetry.gesture = protocol::GESTURE_SAY_HI;
+  compose(in, out);
+  TEST_ASSERT_TRUE(screenContains("Body Perform: say hi"));
+  for (int l = 0; l < LINE_COUNT; l++)
+    TEST_ASSERT_TRUE_MESSAGE(strlen(out[l].text) <= (size_t)LINE_CHARS, out[l].text);
+  in.telemetry.gesture = 0;
+  compose(in, out);
+  TEST_ASSERT_TRUE(screenContains("Body Perform  Gait"));
+}
+
 void test_no_gamepad_is_shown()
 {
   Inputs in = healthy();
@@ -342,6 +356,7 @@ int main()
 {
   UNITY_BEGIN();
   RUN_TEST(test_stick_mode_shown_and_settings_line_fits);
+  RUN_TEST(test_playing_gesture_is_shown);
   RUN_TEST(test_setup_screen_shows_every_item);
   RUN_TEST(test_setup_screen_states);
   RUN_TEST(test_every_setup_line_fits_at_the_widest);

@@ -8,13 +8,15 @@ import (
 
 func sampleCommand() Command {
 	return Command{Mode: 1, TranslateX: -100, TranslateY: 73, Rotate: -5, Height: 40, Speed: 100, Gait: 5, Stride: 1,
-		Flags: FlagControllerConnected | FlagEmergencyStop, ClearCounter: 200, ModeRequestCounter: 255}
+		Flags: FlagControllerConnected | FlagEmergencyStop, ClearCounter: 200, ModeRequestCounter: 255,
+		Gesture: GestureBall, GestureRequestCounter: 77}
 }
 
 func sampleTelemetry() Telemetry {
 	return Telemetry{BodyMode: 2, Gait: 3, OutputsOn: true, Faults: 0x8011, VoltageMv: 6020, CurrentMa: 65535,
 		ValidFrames: 1234, DiscardedFrames: 7, SensorsAvailable: SensorToF | SensorAttitude, ToFMm: 150, ToFStatus: 11,
-		PitchCentideg: -1000, RollCentideg: 32767, Flags: TelemetrySourceConflict | TelemetryBridgeInControl}
+		PitchCentideg: -1000, RollCentideg: 32767, Flags: TelemetrySourceConflict | TelemetryBridgeInControl,
+		Gesture: GestureDance}
 }
 
 func sampleSet() CalibrationSet {
@@ -58,7 +60,7 @@ func TestFrameSizes(t *testing.T) {
 	for _, tc := range []struct {
 		got, want int
 	}{
-		{len(EncodeCommand(sampleCommand(), 0)), 19},
+		{len(EncodeCommand(sampleCommand(), 0)), 21},
 		{len(EncodeTelemetry(sampleTelemetry(), 0)), 39},
 		{len(EncodeCalibrationSet(sampleSet(), 0)), 16},
 		{len(EncodeCalibrationReport(sampleReport(), 0)), 135},
@@ -203,7 +205,8 @@ func TestBadHeadersAreRejected(t *testing.T) {
 	inconsistent[4] = CommandPayloadSize - 1
 	for name, b := range map[string][]byte{
 		"version 1":           withHeaderByte(1, 1),
-		"version 3":           withHeaderByte(1, 3),
+		"version 2":           withHeaderByte(1, 2),
+		"next version":        withHeaderByte(1, Version+1),
 		"unknown type":        withHeaderByte(2, 6), // the first type after pose
 		"inconsistent length": inconsistent,
 	} {

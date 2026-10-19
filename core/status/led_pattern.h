@@ -39,6 +39,7 @@ enum class BodyMode : uint8_t // mirrors body::Mode order
   Walk,
   Sleep,
   Calibrate,
+  Perform,
 };
 
 struct State

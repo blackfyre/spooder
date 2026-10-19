@@ -343,6 +343,36 @@ static void stepCalibrate(BodyState &s, float dtS)
   }
 }
 
+// --- Perform ---------------------------------------------------------------
+
+static void enterPerform(BodyState &s, gesture::Gesture g, uint32_t modeRequestSeq)
+{
+  gesture::start(s.perform, g, s.feet, standingPoint(s));
+  s.performRequestSeq = modeRequestSeq;
+  s.mode = Mode::Perform;
+}
+
+static void stepPerform(BodyState &s, uint32_t dtMs)
+{
+  Vector3 targets[LEG_COUNT];
+  gesture::advance(s.perform, dtMs, standingPoint(s), targets);
+  for (int i = 0; i < LEG_COUNT; i++)
+    setFoot(s, i, targets[i]);
+  if (s.perform.done)
+  {
+    // The last keyframe (or the return) ends at the standing point.
+    s.mode = Mode::Stand;
+    s.stand.active = false;
+    for (int i = 0; i < LEG_COUNT; i++)
+      s.legCycles[i].phase = LegPhase::Standing;
+  }
+}
+
+uint8_t playingGesture(const BodyState &s)
+{
+  return s.mode == Mode::Perform ? (uint8_t)s.perform.gesture : 0;
+}
+
 // --- Initialise ------------------------------------------------------------
 
 static void stepInitialise(BodyState &s, uint32_t dtMs)
@@ -408,6 +438,8 @@ bool transitionActive(const BodyState &s)
     return s.stand.active;
   case Mode::Sleep:
     return !s.sleepFolded;
+  case Mode::Perform:
+    return true;
   default:
     return false;
   }
@@ -417,12 +449,17 @@ static void smoothCommand(BodyState &s, const MovementCommand &cmd, float dtS)
 {
   s.translate = interpolate(s.translate, cmd.translate, smoothing(dtS, TRANSLATE_TAU_S));
   s.rotate = interpolate(s.rotate, cmd.rotate, smoothing(dtS, ROTATE_TAU_S));
-  s.height = interpolate(s.height, cmd.height, smoothing(dtS, HEIGHT_TAU_S));
+  // A gesture plays at the height it started at; a change applies, smoothed
+  // as usual, once the body is back in Stand.
+  if (s.mode != Mode::Perform)
+    s.height = interpolate(s.height, cmd.height, smoothing(dtS, HEIGHT_TAU_S));
 }
 
 // Resolves the requested mode against the current mode. Sleep (requested or
 // stale) pre-empts everything; other requests wait for transitions to finish.
-static void resolveMode(BodyState &s, RequestedMode req, const MovementCommand &cmd)
+// A gesture request (@p newGesture, 0 for none) is acted on only from a
+// settled Stand that stays requested; otherwise it is dropped.
+static void resolveMode(BodyState &s, RequestedMode req, const MovementCommand &cmd, uint8_t newGesture)
 {
   if (req == RequestedMode::Sleep)
   {
@@ -442,13 +479,24 @@ static void resolveMode(BodyState &s, RequestedMode req, const MovementCommand &
     return;
   }
 
+  if (s.mode == Mode::Perform)
+  {
+    // Any other mode, or a new explicit request (Stand again included), ends
+    // the gesture after its current keyframe.
+    if (req != RequestedMode::Stand || cmd.modeRequestSeq != s.performRequestSeq)
+      s.perform.stopRequested = true;
+    return;
+  }
+
   if (transitionActive(s))
     return;
 
   switch (s.mode)
   {
   case Mode::Stand:
-    if (req == RequestedMode::Walk)
+    if (req == RequestedMode::Stand && gesture::available(newGesture))
+      enterPerform(s, (gesture::Gesture)newGesture, cmd.modeRequestSeq);
+    else if (req == RequestedMode::Walk)
       enterWalk(s);
     else if (req == RequestedMode::Calibrate)
       s.mode = Mode::Calibrate;
@@ -497,11 +545,11 @@ static bool isStale(BodyState &s, uint32_t issuedAtMs, uint32_t nowMs)
 }
 
 // One fixed sub-step of the whole state machine.
-static void subStep(BodyState &s, const MovementCommand &cmd, RequestedMode req, uint32_t dtMs)
+static void subStep(BodyState &s, const MovementCommand &cmd, RequestedMode req, uint8_t newGesture, uint32_t dtMs)
 {
   float dtS = dtMs / 1000.0f;
 
-  resolveMode(s, req, cmd);
+  resolveMode(s, req, cmd, newGesture);
   selectGait(s, cmd.gait);
   if (s.mode != Mode::Sleep)
     smoothCommand(s, cmd, dtS);
@@ -522,6 +570,9 @@ static void subStep(BodyState &s, const MovementCommand &cmd, RequestedMode req,
     break;
   case Mode::Calibrate:
     stepCalibrate(s, dtS);
+    break;
+  case Mode::Perform:
+    stepPerform(s, dtMs);
     break;
   }
 }
@@ -560,12 +611,21 @@ void step(BodyState &s, const MovementCommand &rawCmd, uint32_t nowMs)
   bool stale = isStale(s, cmd.issuedAtMs, nowMs);
   RequestedMode req = stale ? RequestedMode::Sleep : cmd.mode;
 
+  // A new gesture request is offered to the first sub-step only: acted on
+  // there or dropped. The first sequence value seen is only a baseline.
+  uint8_t newGesture = 0;
+  if (s.gestureSeqKnown && cmd.gestureSeq != s.lastGestureSeq)
+    newGesture = cmd.gesture;
+  s.gestureSeqKnown = true;
+  s.lastGestureSeq = cmd.gestureSeq;
+
   // At least one (possibly zero-length) sub-step, so the first call acts.
   uint32_t done = 0;
   do
   {
     uint32_t h = dtMs - done < INTEGRATION_STEP_MS ? dtMs - done : INTEGRATION_STEP_MS;
-    subStep(s, cmd, req, h);
+    subStep(s, cmd, req, newGesture, h);
+    newGesture = 0;
     done += h;
   } while (done < dtMs);
 

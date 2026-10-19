@@ -328,6 +328,45 @@ func TestModeKeys(t *testing.T) {
 	}
 }
 
+// Spec "Gesture controls": keys 4-8 and the buttons request gestures, only
+// in control.
+func TestGestureKeysAndButtons(t *testing.T) {
+	w, router, _ := testWindow(t, false)
+	s := w.env.Session
+	s.LinkState(link.State{Status: link.Connected, Port: servo})
+	frame(w, router)
+	press(w, router, "5", 0)
+	if c := s.Command(); c.GestureRequestCounter != 0 {
+		t.Fatalf("observing: %+v", c)
+	}
+	click(w, router, &w.control)
+	for i, g := range gestureButtons {
+		press(w, router, gestureKeys[i], 0)
+		if c := s.Command(); c.Gesture != g.id || c.GestureRequestCounter != uint8(i+1) {
+			t.Fatalf("key %s: %+v", gestureKeys[i], c)
+		}
+	}
+	// A held key repeats presses: still one request until it is released.
+	before := s.Command().GestureRequestCounter
+	for i := 0; i < 5; i++ {
+		router.Queue(key.Event{Name: gestureKeys[0], State: key.Press})
+		frame(w, router)
+	}
+	if c := s.Command(); c.GestureRequestCounter != before+1 {
+		t.Fatalf("key repeat: %d requests", c.GestureRequestCounter-before)
+	}
+	router.Queue(key.Event{Name: gestureKeys[0], State: key.Release})
+	frame(w, router)
+	press(w, router, gestureKeys[0], 0)
+	if c := s.Command(); c.GestureRequestCounter != before+2 {
+		t.Fatalf("after release: %d requests", c.GestureRequestCounter-before)
+	}
+	click(w, router, &w.gestures[1])
+	if c := s.Command(); c.Gesture != protocol.GestureWiggle || c.GestureRequestCounter != uint8(len(gestureButtons)+3) {
+		t.Fatalf("wiggle button: %+v", c)
+	}
+}
+
 func TestKeyboardNudges(t *testing.T) {
 	w, router, _ := testWindow(t, false)
 	// Refused before Calibrate: a notice, no change.

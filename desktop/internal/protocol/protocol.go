@@ -1,7 +1,7 @@
 // Package protocol is the Go implementation of the Spooder link protocol,
 // version 2: frame layout, CRC, encoders and an incremental decoder. It
 // mirrors core/protocol/protocol.{h,cpp} byte for byte; both are pinned by
-// test/golden/protocol_v2.txt.
+// test/golden/protocol_v3.txt.
 //
 // Frame:
 //
@@ -17,7 +17,7 @@ package protocol
 
 const (
 	Start   = 0xA5
-	Version = 2
+	Version = 3
 )
 
 // FrameType is the frame's type byte.
@@ -34,7 +34,7 @@ const (
 const (
 	HeaderSize                   = 5
 	CRCSize                      = 2
-	CommandPayloadSize           = 12
+	CommandPayloadSize           = 14
 	TelemetryPayloadSize         = 32
 	CalibrationJoints            = 18
 	CalibrationJointSize         = 7
@@ -59,18 +59,32 @@ const (
 // Command is sent to the robot every 20 ms: the complete desired state,
 // never events.
 type Command struct {
-	Mode               uint8 // RequestedMode value
-	TranslateX         int8  // -100..100
-	TranslateY         int8  // -100..100, + = forward
-	Rotate             int8  // -100..100
-	Height             uint8 // 0..100
-	Speed              uint8 // 0..100
-	Gait               uint8 // gait index
-	Stride             uint8 // StrideMode value
-	Flags              uint8 // Flag*
-	ClearCounter       uint8 // incremented once per fault-clear request
-	ModeRequestCounter uint8 // incremented on every explicit mode request
+	Mode                  uint8 // RequestedMode value
+	TranslateX            int8  // -100..100
+	TranslateY            int8  // -100..100, + = forward
+	Rotate                int8  // -100..100
+	Height                uint8 // 0..100
+	Speed                 uint8 // 0..100
+	Gait                  uint8 // gait index
+	Stride                uint8 // StrideMode value
+	Flags                 uint8 // Flag*
+	ClearCounter          uint8 // incremented once per fault-clear request
+	ModeRequestCounter    uint8 // incremented on every explicit mode request
+	Gesture               uint8 // Gesture* id of the latest gesture request
+	GestureRequestCounter uint8 // incremented on every gesture request
 }
+
+// Gesture ids: the command's latest request and the gesture telemetry
+// reports playing.
+const (
+	GestureNone   uint8 = 0
+	GestureSayHi  uint8 = 1
+	GestureWiggle uint8 = 2
+	GestureDance  uint8 = 3
+	GestureAttack uint8 = 4
+	GestureBall   uint8 = 5
+	GestureCount        = 6 // ids 1..GestureCount-1
+)
 
 // Sensor availability bits.
 const (
@@ -101,6 +115,7 @@ type Telemetry struct {
 	PitchCentideg    int16
 	RollCentideg     int16
 	Flags            uint8 // Telemetry* bits
+	Gesture          uint8 // Gesture* id being played, 0 when none
 }
 
 // CalibrationReversed is the calibration set flag and report joint flag for
@@ -238,7 +253,9 @@ func EncodeCommand(c Command, seq uint8) []byte {
 	p[8] = c.Flags
 	p[9] = c.ClearCounter
 	p[10] = c.ModeRequestCounter
-	// p[11] reserved, zero
+	p[11] = c.Gesture
+	p[12] = c.GestureRequestCounter
+	// p[13] reserved, zero
 	return finish(f)
 }
 
@@ -261,6 +278,7 @@ func EncodeTelemetry(t Telemetry, seq uint8) []byte {
 	put16(p[17:], uint16(t.PitchCentideg))
 	put16(p[19:], uint16(t.RollCentideg))
 	p[21] = t.Flags
+	p[22] = t.Gesture
 	return finish(f)
 }
 
@@ -310,6 +328,7 @@ func parseCommand(p []byte) Command {
 		Mode: p[0], TranslateX: int8(p[1]), TranslateY: int8(p[2]), Rotate: int8(p[3]),
 		Height: p[4], Speed: p[5], Gait: p[6], Stride: p[7], Flags: p[8],
 		ClearCounter: p[9], ModeRequestCounter: p[10],
+		Gesture: p[11], GestureRequestCounter: p[12],
 	}
 }
 
@@ -320,7 +339,7 @@ func parseTelemetry(p []byte) Telemetry {
 		ValidFrames: get16(p[9:]), DiscardedFrames: get16(p[11:]),
 		SensorsAvailable: p[13], ToFMm: get16(p[14:]), ToFStatus: p[16],
 		PitchCentideg: int16(get16(p[17:])), RollCentideg: int16(get16(p[19:])),
-		Flags: p[21],
+		Flags: p[21], Gesture: p[22],
 	}
 }
 

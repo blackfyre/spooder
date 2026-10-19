@@ -30,6 +30,7 @@ import (
 	"github.com/blackfyre/spooder/desktop/internal/calib"
 	"github.com/blackfyre/spooder/desktop/internal/export"
 	"github.com/blackfyre/spooder/desktop/internal/link"
+	"github.com/blackfyre/spooder/desktop/internal/protocol"
 	"github.com/blackfyre/spooder/desktop/internal/session"
 	"github.com/blackfyre/spooder/desktop/internal/ui/fonts"
 )
@@ -105,6 +106,7 @@ type window struct {
 
 	refresh, connect, control, estop, clearFault widget.Clickable
 	modes                                        [len(modeButtons)]widget.Clickable
+	gestures                                     [len(gestureButtons)]widget.Clickable
 	tabs                                         [tabCount]widget.Clickable
 	tab                                          int
 
@@ -127,6 +129,9 @@ type window struct {
 	noticeAt time.Time
 
 	space keyLatch // the e-stop key
+	// The mode, clear-fault and gesture keys: one action per physical
+	// press, as for Space (the nudge keys repeat on purpose).
+	actionKeys map[key.Name]*keyLatch
 }
 
 // Run shows the calibrator window and exits the process when it closes,
@@ -274,6 +279,9 @@ func (w *window) loop(win *app.Window) error {
 func (w *window) focusChanged(focused bool) {
 	if !focused {
 		w.space.reset()
+		for _, l := range w.actionKeys {
+			l.reset()
+		}
 		return
 	}
 	select {
@@ -322,6 +330,43 @@ func (w *window) say(gtx layout.Context, err error) {
 	}
 }
 
+// actionKey handles the mode, clear-fault and gesture keys, once per
+// physical press; it reports whether ke was one of them.
+func (w *window) actionKey(gtx layout.Context, ke key.Event) bool {
+	s := w.env.Session
+	var act func() error
+	for i, k := range modeKeys {
+		if ke.Name == k {
+			m := modeButtons[i]
+			act = func() error { return s.RequestMode(m) }
+		}
+	}
+	if ke.Name == clearFaultKey {
+		act = s.ClearFault
+	}
+	for i, k := range gestureKeys {
+		if ke.Name == k {
+			g := gestureButtons[i].id
+			act = func() error { return s.RequestGesture(g) }
+		}
+	}
+	if act == nil {
+		return false
+	}
+	if w.actionKeys == nil {
+		w.actionKeys = map[key.Name]*keyLatch{}
+	}
+	l := w.actionKeys[ke.Name]
+	if l == nil {
+		l = &keyLatch{}
+		w.actionKeys[ke.Name] = l
+	}
+	if l.press(ke.State) {
+		w.say(gtx, act())
+	}
+	return true
+}
+
 // keyFilters are the window's shortcuts. Tab is taken so that keyboard
 // focus never moves onto a button, which would take Space for itself:
 // Space is always the e-stop.
@@ -337,7 +382,24 @@ var keyFilters = []event.Filter{
 	// The mode buttons, in their order, and Clear fault.
 	key.Filter{Name: modeKeys[0]}, key.Filter{Name: modeKeys[1]}, key.Filter{Name: modeKeys[2]},
 	key.Filter{Name: clearFaultKey},
+	key.Filter{Name: gestureKeys[0]}, key.Filter{Name: gestureKeys[1]}, key.Filter{Name: gestureKeys[2]},
+	key.Filter{Name: gestureKeys[3]}, key.Filter{Name: gestureKeys[4]},
 }
+
+// gestureButtons are the gestures, in protocol id order, with their labels;
+// gestureKeys their shortcuts. They act only in control.
+var gestureButtons = [...]struct {
+	id    uint8
+	label string
+}{
+	{protocol.GestureSayHi, "Say hi"},
+	{protocol.GestureWiggle, "Wiggle"},
+	{protocol.GestureDance, "Dance"},
+	{protocol.GestureAttack, "Attack"},
+	{protocol.GestureBall, "Ball"},
+}
+
+var gestureKeys = [len(gestureButtons)]key.Name{"4", "5", "6", "7", "8"}
 
 // modeKeys are the mode buttons' shortcuts, in modeButtons order;
 // clearFaultKey is Clear fault's. Like the buttons, they act only in control.
@@ -363,18 +425,13 @@ func (w *window) handle(gtx layout.Context) {
 			}
 			continue
 		}
+		if w.actionKey(gtx, ke) {
+			continue
+		}
 		if ke.State != key.Press {
 			continue
 		}
 		switch ke.Name {
-		case modeKeys[0], modeKeys[1], modeKeys[2]:
-			for i, k := range modeKeys {
-				if ke.Name == k {
-					w.say(gtx, s.RequestMode(modeButtons[i]))
-				}
-			}
-		case clearFaultKey:
-			w.say(gtx, s.ClearFault())
 		case key.NameTab:
 		case key.NameLeftArrow, key.NameRightArrow, key.NameUpArrow, key.NameDownArrow:
 			w.sel = w.sel.move(ke.Name)
@@ -433,6 +490,11 @@ func (w *window) handle(gtx layout.Context) {
 	}
 	if w.clearFault.Clicked(gtx) {
 		w.say(gtx, s.ClearFault())
+	}
+	for i := range w.gestures {
+		if w.gestures[i].Clicked(gtx) {
+			w.say(gtx, s.RequestGesture(gestureButtons[i].id))
+		}
 	}
 	for i := range w.tabs {
 		if w.tabs[i].Clicked(gtx) {

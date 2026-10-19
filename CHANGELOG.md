@@ -36,6 +36,7 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 - **Bridge image-size check.** Every build and upload checks the app against the factory partition of the custom partition table, and reports the headroom.
 - **Toolchain.** mise provides every toolchain, and the SDKs are pinned git submodules. OpenSpec holds the specifications.
 - **Calibrator icon.** A hexapod from above in the Blackfyre colours (`desktop/assets`), and `mise run desktop-install`, which installs a launcher and the icon for the current user on Linux.
+- **Gestures.** A Perform body mode plays say hi and wiggle from Stand: keyframes of body shifts over planted feet and lifted legs, eased and rate-limited to 300 mm/s per foot, interrupted at once by Sleep, a stale command, the e-stop or a fault, and ended after the current keyframe by any other request. Triggered by L2 + a face button on the gamepad and by buttons or keys 4–8 in the desktop calibrator; the bridge screen, the calibrator and the console show the gesture playing.
 - **Project files.** An MIT licence, this changelog and an expanded readme.
 
 ### Changed
@@ -50,6 +51,8 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 
 - Walking and turning are superposed instead of shared: turning while walking keeps the full forward stride and follows an arc, with one common scale when a stroke would get too long or unreachable.
 - The bridge steers like a car by default: left stick Y walks, left stick X steers, mirrored when reversing; `b` switches to the crab layout. The right stick turns the body the way it points (it was inverted). The screen shows the stick mode.
+
+- The link protocol is version 3: the command frame carries a gesture request and its counter (14-byte payload), telemetry the gesture playing. Flash both boards together.
 
 ### Removed
 

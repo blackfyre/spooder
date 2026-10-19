@@ -60,6 +60,13 @@ func formatTelemetry(seq uint8, t protocol.Telemetry) string {
 		fmt.Sprintf("link %d ok %d bad", t.ValidFrames, t.DiscardedFrames),
 		"source " + source,
 	}
+	if t.Gesture != protocol.GestureNone {
+		gesture := session.GestureName(t.Gesture)
+		if !strings.HasPrefix(gesture, "gesture ") { // an unknown id is named "gesture N"
+			gesture = "gesture " + gesture
+		}
+		parts = append(parts, gesture)
+	}
 	if t.SensorsAvailable&protocol.SensorToF != 0 {
 		parts = append(parts, fmt.Sprintf("tof %d mm (status %d)", t.ToFMm, t.ToFStatus))
 	}

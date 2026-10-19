@@ -1,6 +1,6 @@
-// Golden frame vectors for protocol version 2: a fixed set of frames of every
+// Golden frame vectors for protocol version 3: a fixed set of frames of every
 // type, encoded by the C++ encoder and compared with
-// test/golden/protocol_v2.txt, which other implementations (the desktop
+// test/golden/protocol_v3.txt, which other implementations (the desktop
 // calibrator) test against. After a deliberate protocol change, regenerate
 // the file with `SPOODER_WRITE_GOLDEN=1 mise run test` and review the diff.
 #include <unity.h>
@@ -16,7 +16,7 @@ void setUp() {}
 void tearDown() {}
 
 static const char *const HEADER =
-    "# Spooder link protocol version 2: golden frames.\n"
+    "# Spooder link protocol version 3: golden frames.\n"
     "# Generated from the C++ encoder by test/test_protocol_golden; regenerate with\n"
     "# SPOODER_WRITE_GOLDEN=1 mise run test after a deliberate protocol change.\n"
     "#\n"
@@ -71,9 +71,9 @@ static void describe(Text &t, const Frame &f)
     const Command &c = f.command;
     add(t,
         " mode=%u translateX=%d translateY=%d rotate=%d height=%u speed=%u gait=%u stride=%u flags=%u "
-        "clearCounter=%u modeRequestCounter=%u",
+        "clearCounter=%u modeRequestCounter=%u gesture=%u gestureRequestCounter=%u",
         c.mode, c.translateX, c.translateY, c.rotate, c.height, c.speed, c.gait, c.stride, c.flags,
-        c.clearCounter, c.modeRequestCounter);
+        c.clearCounter, c.modeRequestCounter, c.gesture, c.gestureRequestCounter);
     break;
   }
   case FrameType::Telemetry:
@@ -81,9 +81,10 @@ static void describe(Text &t, const Frame &f)
     const Telemetry &m = f.telemetry;
     add(t,
         " bodyMode=%u gait=%u outputsOn=%d faults=%u voltageMv=%u currentMa=%u validFrames=%u "
-        "discardedFrames=%u sensorsAvailable=%u tofMm=%u tofStatus=%u pitchCentideg=%d rollCentideg=%d flags=%u",
+        "discardedFrames=%u sensorsAvailable=%u tofMm=%u tofStatus=%u pitchCentideg=%d rollCentideg=%d flags=%u gesture=%u",
         m.bodyMode, m.gait, m.outputsOn ? 1 : 0, m.faults, m.voltageMv, m.currentMa, m.validFrames,
-        m.discardedFrames, m.sensorsAvailable, m.tofMm, m.tofStatus, m.pitchCentideg, m.rollCentideg, m.flags);
+        m.discardedFrames, m.sensorsAvailable, m.tofMm, m.tofStatus, m.pitchCentideg, m.rollCentideg, m.flags,
+        m.gesture);
     break;
   }
   case FrameType::CalibrationSet:
@@ -202,8 +203,18 @@ static void buildGolden(Text &t)
   addFrame(t, "command_walk", f);
 
   f = frame(FrameType::Command, 255);
-  f.command = {4, -128, 127, -100, 255, 100, 5, 1, 0xFF, 255, 255};
+  f.command = {4, -128, 127, -100, 255, 100, 5, 1, 0xFF, 255, 255, 255, 255};
   addFrame(t, "command_extremes_seq_wrap", f);
+
+  f = frame(FrameType::Command, 17);
+  f.command.mode = 0;
+  f.command.height = 30;
+  f.command.speed = 44;
+  f.command.flags = FLAG_CONTROLLER_CONNECTED;
+  f.command.modeRequestCounter = 4;
+  f.command.gesture = GESTURE_WIGGLE;
+  f.command.gestureRequestCounter = 9;
+  addFrame(t, "command_stand_gesture_wiggle", f);
 
   f = frame(FrameType::Command, 0);
   f.command.mode = 3;
@@ -229,8 +240,17 @@ static void buildGolden(Text &t)
   addFrame(t, "telemetry_conflict", f);
 
   f = frame(FrameType::Telemetry, 255);
-  f.telemetry = {255, 255, true, 0xFFFF, 65535, 65535, 65535, 65535, 0xFF, 65535, 255, -32768, 32767, 0xFF};
+  f.telemetry = {255, 255, true, 0xFFFF, 65535, 65535, 65535, 65535, 0xFF, 65535, 255, -32768, 32767, 0xFF, 0xFF};
   addFrame(t, "telemetry_extremes", f);
+
+  f = frame(FrameType::Telemetry, 30);
+  f.telemetry.bodyMode = 5; // Perform
+  f.telemetry.outputsOn = true;
+  f.telemetry.voltageMv = 6050;
+  f.telemetry.currentMa = 2100;
+  f.telemetry.flags = TELEMETRY_BRIDGE_IN_CONTROL;
+  f.telemetry.gesture = GESTURE_SAY_HI;
+  addFrame(t, "telemetry_perform_say_hi", f);
 
   f = frame(FrameType::CalibrationSet, 1);
   f.calibrationSet = {1, 0, 9000, 500, 2500, 0};
@@ -276,17 +296,21 @@ static void buildGolden(Text &t)
     f.calibrationReport.joints[i] = {(int16_t)(i % 2 ? -32768 : 32767), 0, 65535, 0xFF};
   addFrame(t, "calibration_report_extremes", f);
 
-  // Frames a decoder must discard: version 1 (with a valid CRC) and a bad CRC.
+  // Frames a decoder must discard: version 2 (with a valid CRC and the
+  // version 2 command length) and a bad CRC.
   uint8_t bytes[MAX_FRAME_SIZE];
-  Frame v1 = frame(FrameType::Command, 3);
-  v1.command.mode = 1;
-  v1.command.flags = FLAG_CONTROLLER_CONNECTED;
-  int n = encode(v1, bytes);
-  bytes[1] = 1;
+  Frame v2 = frame(FrameType::Command, 3);
+  v2.command.mode = 1;
+  v2.command.flags = FLAG_CONTROLLER_CONNECTED;
+  int n = encode(v2, bytes);
+  const int V2_COMMAND_PAYLOAD_SIZE = 12;
+  bytes[1] = 2;
+  bytes[4] = V2_COMMAND_PAYLOAD_SIZE;
+  n = HEADER_SIZE + V2_COMMAND_PAYLOAD_SIZE + CRC_SIZE;
   uint16_t crc = crc16(bytes + 1, n - 3);
   bytes[n - 2] = (uint8_t)(crc & 0xFF);
   bytes[n - 1] = (uint8_t)(crc >> 8);
-  addRejected(t, "reject_version_1_command", bytes, n);
+  addRejected(t, "reject_version_2_command", bytes, n);
 
   Frame bad = frame(FrameType::CalibrationSet, 4);
   bad.calibrationSet = {5, 3, 100, 500, 2500, 0};
@@ -333,7 +357,7 @@ static void goldenPath(char *out, int size)
   const char *file = __FILE__;
   const char *cut = strstr(file, "test/test_protocol_golden/");
   int prefix = cut ? (int)(cut - file) : 0;
-  snprintf(out, size, "%.*stest/golden/protocol_v2.txt", prefix, file);
+  snprintf(out, size, "%.*stest/golden/protocol_v3.txt", prefix, file);
 }
 
 void test_golden_vectors()
@@ -348,14 +372,14 @@ void test_golden_vectors()
   if (write && write[0] == '1')
   {
     FILE *f = fopen(path, "wb");
-    TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot write test/golden/protocol_v2.txt");
+    TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot write test/golden/protocol_v3.txt");
     fwrite(t.buf, 1, t.len, f);
     fclose(f);
   }
 
   static char golden[sizeof(t.buf)];
   FILE *f = fopen(path, "rb");
-  TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot read test/golden/protocol_v2.txt");
+  TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot read test/golden/protocol_v3.txt");
   int n = (int)fread(golden, 1, sizeof(golden) - 1, f);
   fclose(f);
   golden[n] = 0;

@@ -673,6 +673,170 @@ void test_boot_and_walk_is_tick_rate_independent()
     TEST_ASSERT_FLOAT_WITHIN(5, 0, at20[i].distanceTo(at50[i]));
 }
 
+// --- Gestures --------------------------------------------------------------
+
+static MovementCommand gestureCommand(RequestedMode mode, gesture::Gesture g, uint32_t seq)
+{
+  MovementCommand c = command(mode);
+  c.gesture = (uint8_t)g;
+  c.gestureSeq = seq;
+  return c;
+}
+
+static uint32_t scriptMs(gesture::Gesture g)
+{
+  gesture::Script sc = gesture::script(g);
+  uint32_t total = 0;
+  for (int k = 0; k < sc.count; k++)
+    total += sc.frames[k].durationMs;
+  return total;
+}
+
+void test_gesture_plays_from_stand_and_returns_to_stand()
+{
+  bootToStand();
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::Wiggle, 1), 20);
+  TEST_ASSERT_TRUE(s.mode == Mode::Perform);
+  TEST_ASSERT_EQUAL((uint8_t)gesture::Gesture::Wiggle, playingGesture(s));
+  TEST_ASSERT_TRUE(transitionActive(s));
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::Wiggle, 1), scriptMs(gesture::Gesture::Wiggle));
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+  TEST_ASSERT_EQUAL(0, playingGesture(s));
+  TEST_ASSERT_TRUE(allFinite());
+  // The same request is not replayed.
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::Wiggle, 1), 500);
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+}
+
+void test_first_gesture_sequence_is_only_a_baseline()
+{
+  init(s);
+  now = 1000;
+  // A restarted body sees an old request value: it must not play it.
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::SayHi, 7), 2000);
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+  TEST_ASSERT_EQUAL(0, playingGesture(s));
+}
+
+void test_gesture_request_while_walking_is_dropped()
+{
+  bootToStand();
+  MovementCommand walk = gestureCommand(RequestedMode::Walk, gesture::Gesture::None, 0);
+  walk.translate = Vector2(0, 50);
+  run(walk, 500);
+  TEST_ASSERT_TRUE(s.mode == Mode::Walk);
+  walk.gesture = (uint8_t)gesture::Gesture::SayHi;
+  walk.gestureSeq = 1;
+  run(walk, 200);
+  TEST_ASSERT_TRUE(s.mode == Mode::Walk);
+  // Back in Stand later, the old request does not play.
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::SayHi, 1), 3000);
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+}
+
+void test_gesture_request_during_a_stand_transition_is_dropped()
+{
+  init(s);
+  now = 1000;
+  step(s, gestureCommand(RequestedMode::Stand, gesture::Gesture::None, 0), now);
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::None, 0), 600); // into the stand transition
+  TEST_ASSERT_TRUE(transitionActive(s));
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::SayHi, 1), 20);
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::SayHi, 1), 3000);
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+  TEST_ASSERT_EQUAL(0, playingGesture(s));
+}
+
+void test_unavailable_gesture_is_ignored()
+{
+  bootToStand();
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::Dance, 1), 100);
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+}
+
+void test_sleep_interrupts_a_gesture_at_once()
+{
+  bootToStand();
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::SayHi, 1), 800);
+  TEST_ASSERT_TRUE(s.mode == Mode::Perform);
+  run(gestureCommand(RequestedMode::Sleep, gesture::Gesture::SayHi, 1), 20);
+  TEST_ASSERT_TRUE(s.mode == Mode::Sleep);
+}
+
+void test_stale_command_interrupts_a_gesture()
+{
+  bootToStand();
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::SayHi, 1), 800);
+  TEST_ASSERT_TRUE(s.mode == Mode::Perform);
+  MovementCommand old = gestureCommand(RequestedMode::Stand, gesture::Gesture::SayHi, 1);
+  old.issuedAtMs = now;
+  for (int i = 0; i < 60; i++) // 1.2 s without a fresh command
+  {
+    now += 20;
+    step(s, old, now);
+  }
+  TEST_ASSERT_TRUE(s.mode == Mode::Sleep);
+}
+
+void test_walk_request_ends_a_gesture_through_stand()
+{
+  bootToStand();
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::SayHi, 1), 100);
+  TEST_ASSERT_TRUE(s.mode == Mode::Perform);
+  MovementCommand walk = gestureCommand(RequestedMode::Walk, gesture::Gesture::SayHi, 1);
+  walk.translate = Vector2(0, 50);
+  // Within the first keyframe (600 ms) plus the return (400 ms), and a
+  // little for Stand to hand over, the body walks.
+  uint32_t t = 0;
+  while (s.mode == Mode::Perform && t < 5000)
+  {
+    run(walk, 20);
+    t += 20;
+  }
+  TEST_ASSERT_TRUE(t <= 600 + gesture::RETURN_MS + 40);
+  run(walk, 100);
+  TEST_ASSERT_TRUE(s.mode == Mode::Walk);
+  TEST_ASSERT_TRUE(allFinite());
+}
+
+void test_height_change_during_a_gesture_waits_for_stand()
+{
+  bootToStand();
+  MovementCommand c = gestureCommand(RequestedMode::Stand, gesture::Gesture::Wiggle, 1);
+  run(c, 100);
+  TEST_ASSERT_TRUE(s.mode == Mode::Perform);
+  c.height = 100; // the dial moves mid-gesture
+  Vector3 prev[LEG_COUNT];
+  for (int i = 0; i < LEG_COUNT; i++)
+    prev[i] = s.feet[i];
+  // Through the gesture: no foot faster than the gesture limit, and the
+  // height is held. Then Stand eases to the new height as it always does:
+  // its first step is its largest, so it is the one to bound.
+  float heldZ = s.feet[1].z;
+  bool first = true;
+  for (int n = 0; n < 400; n++)
+  {
+    bool performing = s.mode == Mode::Perform;
+    run(c, 20);
+    float limit = performing && s.mode == Mode::Perform ? gesture::MAX_FOOT_SPEED_MM_S * 0.02f * 1.1f : 1e9f;
+    if (performing && s.mode == Mode::Stand && first)
+    {
+      // The hand-over step: Stand starts from the held height.
+      first = false;
+      TEST_ASSERT_FLOAT_WITHIN(12, heldZ, s.feet[1].z);
+    }
+    for (int i = 0; i < LEG_COUNT; i++)
+    {
+      TEST_ASSERT_TRUE_MESSAGE(s.feet[i].distanceTo(prev[i]) <= limit, "foot jumped");
+      prev[i] = s.feet[i];
+    }
+  }
+  TEST_ASSERT_FALSE(first);
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+  TEST_ASSERT_FLOAT_WITHIN(1, groundForHeight(100), s.feet[0].z);
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -710,5 +874,14 @@ int main()
   RUN_TEST(test_wake_waits_for_sleep_fold);
   RUN_TEST(test_command_stamped_after_now_is_not_stale);
   RUN_TEST(test_stale_command_never_becomes_fresh_again);
+  RUN_TEST(test_gesture_plays_from_stand_and_returns_to_stand);
+  RUN_TEST(test_first_gesture_sequence_is_only_a_baseline);
+  RUN_TEST(test_gesture_request_while_walking_is_dropped);
+  RUN_TEST(test_gesture_request_during_a_stand_transition_is_dropped);
+  RUN_TEST(test_unavailable_gesture_is_ignored);
+  RUN_TEST(test_sleep_interrupts_a_gesture_at_once);
+  RUN_TEST(test_stale_command_interrupts_a_gesture);
+  RUN_TEST(test_walk_request_ends_a_gesture_through_stand);
+  RUN_TEST(test_height_change_during_a_gesture_waits_for_stand);
   return UNITY_END();
 }

@@ -70,7 +70,9 @@ int encodeCommand(const Command &c, uint8_t seq, uint8_t *out)
   p[8] = c.flags;
   p[9] = c.clearCounter;
   p[10] = c.modeRequestCounter;
-  p[11] = 0; // reserved
+  p[11] = c.gesture;
+  p[12] = c.gestureRequestCounter;
+  p[13] = 0; // reserved
   return finishFrame(FrameType::Command, seq, out);
 }
 
@@ -93,6 +95,7 @@ int encodeTelemetry(const Telemetry &t, uint8_t seq, uint8_t *out)
   put16(p + 17, (uint16_t)t.pitchCentideg);
   put16(p + 19, (uint16_t)t.rollCentideg);
   p[21] = t.flags;
+  p[22] = t.gesture;
   return finishFrame(FrameType::Telemetry, seq, out);
 }
 
@@ -152,6 +155,8 @@ static void parseCommand(const uint8_t *p, Command &c)
   c.flags = p[8];
   c.clearCounter = p[9];
   c.modeRequestCounter = p[10];
+  c.gesture = p[11];
+  c.gestureRequestCounter = p[12];
 }
 
 static void parseTelemetry(const uint8_t *p, Telemetry &t)
@@ -170,6 +175,7 @@ static void parseTelemetry(const uint8_t *p, Telemetry &t)
   t.pitchCentideg = (int16_t)get16(p + 17);
   t.rollCentideg = (int16_t)get16(p + 19);
   t.flags = p[21];
+  t.gesture = p[22];
 }
 
 static void parseCalibrationSet(const uint8_t *p, CalibrationSet &c)

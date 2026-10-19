@@ -140,6 +140,27 @@ Desired update(Mapper &m, const PadState &pad, uint32_t nowMs)
       m.modeRequestCounter++;
     }
 
+    // The gesture layer: while L2 is held, a, b, x, y and R2 request
+    // gestures instead of their own functions.
+    bool layer = (pad.buttons & BUTTON_L2) != 0;
+    if (layer)
+    {
+      static const struct
+      {
+        uint16_t button;
+        uint8_t gesture;
+      } GESTURE_BUTTONS[] = {{BUTTON_A, protocol::GESTURE_SAY_HI}, {BUTTON_B, protocol::GESTURE_WIGGLE},
+                             {BUTTON_X, protocol::GESTURE_DANCE},  {BUTTON_Y, protocol::GESTURE_ATTACK},
+                             {BUTTON_R2, protocol::GESTURE_BALL}};
+      for (const auto &g : GESTURE_BUTTONS)
+        if (pressed & g.button)
+        {
+          m.gesture = g.gesture;
+          m.gestureRequestCounter++;
+        }
+      pressed &= (uint16_t)~(BUTTON_A | BUTTON_B | BUTTON_X | BUTTON_Y | BUTTON_R2);
+    }
+
     if (pressed & BUTTON_Y)
     {
       if (m.calibrating)
@@ -209,6 +230,8 @@ Desired update(Mapper &m, const PadState &pad, uint32_t nowMs)
   d.stickMode = m.stickMode;
   d.clearCounter = m.clearCounter;
   d.modeRequestCounter = m.modeRequestCounter;
+  d.gesture = m.gesture;
+  d.gestureRequestCounter = m.gestureRequestCounter;
   return d;
 }
 
@@ -227,6 +250,8 @@ protocol::Command toCommand(const Desired &d, bool emergencyStop)
             (emergencyStop ? protocol::FLAG_EMERGENCY_STOP : 0);
   c.clearCounter = d.clearCounter;
   c.modeRequestCounter = d.modeRequestCounter;
+  c.gesture = d.gesture;
+  c.gestureRequestCounter = d.gestureRequestCounter;
   return c;
 }
 

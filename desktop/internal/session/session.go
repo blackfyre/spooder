@@ -9,8 +9,9 @@
 //     Sleep with zero input, so the robot ignores the app for movement but
 //     accepts its e-stop.
 //   - Control: frames report a connected controller; Stand, Calibrate and
-//     Sleep advance the mode-request counter, and Clear fault the clear
-//     counter. Translate and rotate are always zero.
+//     Sleep advance the mode-request counter, Clear fault the clear counter
+//     and a gesture the gesture-request counter. Translate and rotate are
+//     always zero.
 //   - Releasing control, losing the connection or shutting down stops
 //     reporting a controller and abandons unconfirmed joint edits.
 package session
@@ -68,25 +69,28 @@ type Session struct {
 	now      func() time.Time
 	onChange func()
 
-	mu            sync.Mutex
-	link          link.State
-	control       bool
-	estop         bool
-	mode          RequestedMode
-	modeCounter   uint8
-	clearCounter  uint8
-	telemetry     protocol.Telemetry
-	telemetryAt   time.Time
-	haveTelemetry bool
-	stats         link.Stats
-	calib         calib.Model
-	reportAt      time.Time
-	pose          protocol.Pose
-	poseAt        time.Time
-	havePose      bool
-	log           []LogLine
-	frames        []FrameLine
-	strayLines    int
+	mu           sync.Mutex
+	link         link.State
+	control      bool
+	estop        bool
+	mode         RequestedMode
+	modeCounter  uint8
+	clearCounter uint8
+	// The latest gesture request and its counter (protocol.Gesture* ids).
+	gesture        uint8
+	gestureCounter uint8
+	telemetry      protocol.Telemetry
+	telemetryAt    time.Time
+	haveTelemetry  bool
+	stats          link.Stats
+	calib          calib.Model
+	reportAt       time.Time
+	pose           protocol.Pose
+	poseAt         time.Time
+	havePose       bool
+	log            []LogLine
+	frames         []FrameLine
+	strayLines     int
 }
 
 // New returns a session in observe mode. now defaults to time.Now; onChange,
@@ -190,6 +194,10 @@ func (s *Session) Command() protocol.Command {
 		Speed:              commandSpeed,
 		ClearCounter:       s.clearCounter,
 		ModeRequestCounter: s.modeCounter,
+		// The robot counts a gesture request only from the source in
+		// control, so the counter can travel in every frame.
+		Gesture:               s.gesture,
+		GestureRequestCounter: s.gestureCounter,
 	}
 	if s.control && s.connected() {
 		c.Flags |= protocol.FlagControllerConnected
@@ -253,6 +261,23 @@ func (s *Session) RequestMode(m RequestedMode) error {
 		}
 		s.mode = m
 		s.modeCounter++
+		return nil
+	})
+}
+
+// RequestGesture asks the robot to play gesture g (a protocol.Gesture* id,
+// not GestureNone) once. Only in control; the robot plays it from a settled
+// Stand and ignores it otherwise.
+func (s *Session) RequestGesture(g uint8) error {
+	return s.update(func() error {
+		if !s.control || !s.connected() {
+			return ErrNotInControl
+		}
+		if g == protocol.GestureNone || g >= protocol.GestureCount {
+			return errors.New("no such gesture")
+		}
+		s.gesture = g
+		s.gestureCounter++
 		return nil
 	})
 }
@@ -324,6 +349,7 @@ type Snapshot struct {
 	TelemetryAge  time.Duration
 	Telemetry     protocol.Telemetry
 	Body          BodyMode
+	Gesture       uint8 // the gesture being played (protocol.Gesture*), 0 when none
 	Source        Source
 	Faults        []string
 
@@ -365,6 +391,7 @@ func (s *Session) Snapshot() Snapshot {
 		Fresh:         s.fresh(),
 		Telemetry:     s.telemetry,
 		Body:          BodyMode(s.telemetry.BodyMode),
+		Gesture:       s.telemetry.Gesture,
 		Source:        SourceFrom(s.telemetry.Flags),
 		Faults:        FaultNames(s.telemetry.Faults),
 		Stats:         s.stats,

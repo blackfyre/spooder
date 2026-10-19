@@ -235,3 +235,46 @@ func TestUnplugAndReplug(t *testing.T) {
 		return s.Link.Status == link.Connected && s.Fresh && s.TelemetryAge < 200*time.Millisecond
 	})
 }
+
+// Spec "Rehearsal on the virtual robot": in control and standing, a gesture
+// plays, telemetry reports it, and the body returns to Stand.
+func TestGestureRehearsal(t *testing.T) {
+	t.Parallel()
+	r := StartRobot(t)
+	c := Connect(t, r)
+	if err := c.S.TakeControl(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.S.RequestMode(session.RequestStand); err != nil {
+		t.Fatal(err)
+	}
+	c.WaitFor(t, 5*time.Second, "Stand", func(s session.Snapshot) bool {
+		return s.Body == session.BodyStand && s.Telemetry.OutputsOn
+	})
+	time.Sleep(1500 * time.Millisecond) // the stand transition settles
+	standing := c.S.Snapshot().Pose
+	// The largest commanded joint change from the standing pose, in degrees.
+	moved := func(p protocol.Pose) float64 {
+		most := 0.0
+		for i, j := range p.Joints {
+			most = math.Max(most, math.Abs(float64(j.CommandedCentideg-standing.Joints[i].CommandedCentideg))/100)
+		}
+		return most
+	}
+	for _, g := range []uint8{protocol.GestureSayHi, protocol.GestureWiggle} {
+		if err := c.S.RequestGesture(g); err != nil {
+			t.Fatal(err)
+		}
+		// Playing, and the legs really move.
+		c.WaitFor(t, 4*time.Second, session.GestureName(g)+" moving the legs", func(s session.Snapshot) bool {
+			return s.Body == session.BodyPerform && s.Gesture == g && s.PoseFresh && moved(s.Pose) > 5
+		})
+		end := c.WaitFor(t, 10*time.Second, "back in Stand after "+session.GestureName(g), func(s session.Snapshot) bool {
+			return s.Body == session.BodyStand && s.Gesture == protocol.GestureNone
+		})
+		time.Sleep(300 * time.Millisecond) // a pose frame from Stand
+		if d := moved(c.S.Snapshot().Pose); d > 1 {
+			t.Fatalf("%s did not return to the standing pose: %.1f° off (%v)", session.GestureName(g), d, end.Body)
+		}
+	}
+}

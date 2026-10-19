@@ -21,6 +21,7 @@ add_library(spooder_core STATIC
   ${SPOODER_CORE}/movement/body.cpp
   ${SPOODER_CORE}/movement/calibration_defaults.cpp
   ${SPOODER_CORE}/movement/gait.cpp
+  ${SPOODER_CORE}/movement/gesture.cpp
   ${SPOODER_CORE}/movement/joint_calibration.cpp
   ${SPOODER_CORE}/movement/kinematics.cpp
   ${SPOODER_CORE}/protocol/link_receiver.cpp

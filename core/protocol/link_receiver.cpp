@@ -35,9 +35,15 @@ void accept(Receiver &r, const protocol::Command &c, uint32_t nowMs)
       r.clearPending = true;
     if (c.modeRequestCounter != r.modeRequestCounter)
       r.requestSeq++;
+    if (c.gestureRequestCounter != r.gestureCounter)
+    {
+      r.gestureSeq++;
+      r.gesture = c.gesture;
+    }
   }
   r.clearCounter = c.clearCounter;
   r.modeRequestCounter = c.modeRequestCounter;
+  r.gestureCounter = c.gestureRequestCounter;
   r.last = c;
   r.lastArrivalMs = nowMs;
   r.haveFrame = true;
@@ -48,6 +54,8 @@ Input take(Receiver &r)
   Input in;
   in.linkSeen = r.haveFrame;
   in.requestSeq = r.requestSeq;
+  in.gestureSeq = r.gestureSeq;
+  in.gesture = r.gesture;
   in.clearRequested = r.clearPending;
   r.clearPending = false;
   if (!r.haveFrame)
@@ -195,8 +203,22 @@ Arbitration arbitrate(Arbiter &a, const Input &bridge, const Input &usb, uint32_
   bool usbAdvanced = a.started && usb.requestSeq != a.usbSeq;
   if ((out.source == Source::Bridge && bridgeAdvanced) || (out.source == Source::Usb && usbAdvanced))
     a.requestSeq++;
+  bool bridgeGesture = a.started && bridge.gestureSeq != a.bridgeGestureSeq;
+  bool usbGesture = a.started && usb.gestureSeq != a.usbGestureSeq;
+  if (out.source == Source::Bridge && bridgeGesture)
+  {
+    a.gestureSeq++;
+    a.gesture = bridge.gesture;
+  }
+  else if (out.source == Source::Usb && usbGesture)
+  {
+    a.gestureSeq++;
+    a.gesture = usb.gesture;
+  }
   a.bridgeSeq = bridge.requestSeq;
   a.usbSeq = usb.requestSeq;
+  a.bridgeGestureSeq = bridge.gestureSeq;
+  a.usbGestureSeq = usb.gestureSeq;
   a.started = true;
 
   switch (out.source)
@@ -222,6 +244,10 @@ Arbitration arbitrate(Arbiter &a, const Input &bridge, const Input &usb, uint32_
   out.input.linkSeen = bridge.linkSeen || usb.linkSeen;
   out.input.emergencyStop = bridge.emergencyStop || usb.emergencyStop;
   out.input.requestSeq = a.requestSeq;
+  out.input.gestureSeq = a.gestureSeq;
+  out.input.gesture = a.gesture;
+  out.input.command.gestureSeq = a.gestureSeq;
+  out.input.command.gesture = a.gesture;
   return out;
 }
 

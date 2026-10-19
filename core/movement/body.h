@@ -9,6 +9,7 @@
 #include "kinematics.h"
 #include "joint_calibration.h"
 #include "gait.h"
+#include "gesture.h"
 #include "movement_command.h"
 
 namespace body
@@ -24,6 +25,7 @@ enum class Mode : uint8_t
   Walk,
   Sleep,
   Calibrate,
+  Perform, // playing a gesture; entered from a settled Stand, returns to Stand
 };
 
 // A command older than this is stale and puts the body to sleep.
@@ -94,6 +96,13 @@ struct BodyState
   uint32_t initialiseElapsedMs; // time spent in the current Initialise pose
   StandTransition stand;
   bool sleepFolded;
+
+  // Gestures: the player, the mode-request sequence it started under, and
+  // the last gesture request sequence seen.
+  gesture::Player perform;
+  uint32_t performRequestSeq;
+  bool gestureSeqKnown;
+  uint32_t lastGestureSeq;
 };
 
 /**
@@ -127,6 +136,11 @@ MovementCommand clampCommand(const MovementCommand &cmd);
  * @brief True while a transition (Initialise, Stand, Sleep fold) is running.
  */
 bool transitionActive(const BodyState &s);
+
+/**
+ * @brief The gesture::Gesture id being played, 0 when not in Perform.
+ */
+uint8_t playingGesture(const BodyState &s);
 
 /**
  * @brief Foot height relative to the coxa pivot for a height dial value.

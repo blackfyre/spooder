@@ -20,6 +20,8 @@ constexpr uint16_t BUTTON_X = 1u << 2;
 constexpr uint16_t BUTTON_Y = 1u << 3;
 constexpr uint16_t BUTTON_L1 = 1u << 4;
 constexpr uint16_t BUTTON_R1 = 1u << 5;
+constexpr uint16_t BUTTON_L2 = 1u << 6; // Bluepad32 BUTTON_TRIGGER_L
+constexpr uint16_t BUTTON_R2 = 1u << 7; // Bluepad32 BUTTON_TRIGGER_R
 constexpr uint16_t BUTTON_THUMB_L = 1u << 8;
 constexpr uint16_t BUTTON_THUMB_R = 1u << 9;
 // PadState::dpad bits.
@@ -71,6 +73,8 @@ struct Desired
   bool controllerConnected;
   uint8_t clearCounter;
   uint8_t modeRequestCounter;
+  uint8_t gesture;               // protocol::GESTURE_* of the latest gesture request
+  uint8_t gestureRequestCounter; // incremented on every gesture request
 };
 
 struct Mapper
@@ -83,6 +87,8 @@ struct Mapper
   StickMode stickMode = StickMode::Steer;
   uint8_t clearCounter = 0;
   uint8_t modeRequestCounter = 0;
+  uint8_t gesture = 0;
+  uint8_t gestureRequestCounter = 0;
 
   // Mode request: base mode plus the Sleep and Calibrate toggles.
   RequestedMode baseMode = RequestedMode::Stand;

@@ -3,7 +3,7 @@
 
 // The link between the robot and its front-ends (the gamepad bridge on UART1,
 // a computer on USB): frame layout, CRC, encoders and an incremental decoder,
-// shared by both firmwares. test/golden/protocol_v2.txt pins the encoding.
+// shared by both firmwares. test/golden/protocol_v3.txt pins the encoding.
 // Hardware-free: compiled for both boards and for host tests.
 //
 // Frame:
@@ -21,7 +21,7 @@ namespace protocol
 {
 
 constexpr uint8_t START = 0xA5;
-constexpr uint8_t VERSION = 2;
+constexpr uint8_t VERSION = 3;
 
 enum class FrameType : uint8_t
 {
@@ -34,7 +34,7 @@ enum class FrameType : uint8_t
 
 constexpr int HEADER_SIZE = 5;
 constexpr int CRC_SIZE = 2;
-constexpr int COMMAND_PAYLOAD_SIZE = 12;
+constexpr int COMMAND_PAYLOAD_SIZE = 14;
 constexpr int TELEMETRY_PAYLOAD_SIZE = 32;
 constexpr int CALIBRATION_JOINTS = 18;
 constexpr int CALIBRATION_JOINT_SIZE = 7;
@@ -68,7 +68,18 @@ struct Command
   uint8_t flags;              // FLAG_*
   uint8_t clearCounter;       // incremented once per fault-clear request
   uint8_t modeRequestCounter; // incremented on every explicit mode request
+  uint8_t gesture;               // GESTURE_* id of the latest gesture request (0 = none)
+  uint8_t gestureRequestCounter; // incremented on every gesture request
 };
+
+// Gesture ids (command gesture, telemetry gesture being played).
+constexpr uint8_t GESTURE_NONE = 0;
+constexpr uint8_t GESTURE_SAY_HI = 1;
+constexpr uint8_t GESTURE_WIGGLE = 2;
+constexpr uint8_t GESTURE_DANCE = 3;
+constexpr uint8_t GESTURE_ATTACK = 4;
+constexpr uint8_t GESTURE_BALL = 5;
+constexpr uint8_t GESTURE_COUNT = 6; // ids 1..GESTURE_COUNT-1
 
 // Sensor availability bits.
 constexpr uint8_t SENSOR_TOF = 1u << 0;
@@ -96,6 +107,7 @@ struct Telemetry
   int16_t pitchCentideg;
   int16_t rollCentideg;
   uint8_t flags;            // TELEMETRY_* bits
+  uint8_t gesture;          // GESTURE_* id being played, 0 when none
 };
 
 // Calibration set flags and report joint flags.

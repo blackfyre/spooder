@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Name is the frame type's name in test/golden/protocol_v2.txt.
+// Name is the frame type's name in test/golden/protocol_v3.txt.
 func (t FrameType) Name() string {
 	switch t {
 	case TypeCommand:
@@ -24,7 +24,7 @@ func (t FrameType) Name() string {
 }
 
 // Fields lists a decoded frame's fields as name=value, in the order and
-// spelling of test/golden/protocol_v2.txt: the header fields, then the
+// spelling of test/golden/protocol_v3.txt: the header fields, then the
 // payload fields in payload order, values in decimal.
 func Fields(f Frame) []string {
 	out := []string{"version=" + strconv.Itoa(Version), "type=" + f.Type.Name(), "seq=" + strconv.Itoa(int(f.Seq))}
@@ -49,6 +49,8 @@ func Fields(f Frame) []string {
 		add("flags", int(c.Flags))
 		add("clearCounter", int(c.ClearCounter))
 		add("modeRequestCounter", int(c.ModeRequestCounter))
+		add("gesture", int(c.Gesture))
+		add("gestureRequestCounter", int(c.GestureRequestCounter))
 	case TypeTelemetry:
 		t := f.Telemetry
 		add("bodyMode", int(t.BodyMode))
@@ -65,6 +67,7 @@ func Fields(f Frame) []string {
 		add("pitchCentideg", int(t.PitchCentideg))
 		add("rollCentideg", int(t.RollCentideg))
 		add("flags", int(t.Flags))
+		add("gesture", int(t.Gesture))
 	case TypeCalibrationSet:
 		c := f.CalibrationSet
 		add("requestId", int(c.RequestID))

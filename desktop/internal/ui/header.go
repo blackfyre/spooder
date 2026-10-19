@@ -10,6 +10,7 @@ import (
 	"gioui.org/unit"
 
 	"github.com/blackfyre/spooder/desktop/internal/link"
+	"github.com/blackfyre/spooder/desktop/internal/protocol"
 	"github.com/blackfyre/spooder/desktop/internal/session"
 )
 
@@ -175,7 +176,7 @@ func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 					faultColour = w.pal.AccentText
 				}
 				return layout.Flex{}.Layout(gtx,
-					w.cell("Mode", snap.Body.String(), c),
+					w.cell("Mode", bodyText(snap), c),
 					w.cell("Gait", session.GaitName(t.Gait), c),
 					w.cell("Output", onOffText(t.OutputsOn), c),
 					w.cell("Supply", voltsText(t.VoltageMv), c),
@@ -201,6 +202,14 @@ func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 					ws = append(ws, w.button(&w.modes[i], kind, m.String()+" · "+string(modeKeys[i]), snap.ModesEnabled).width(130).Layout)
 				}
 				ws = append(ws, w.button(&w.clearFault, kindNeutral, "Clear fault · "+string(clearFaultKey), snap.ModesEnabled).width(150).Layout)
+				ws = append(ws, layout.Spacer{Width: 8}.Layout)
+				for i, g := range gestureButtons {
+					kind := kindQuiet
+					if snap.Gesture == g.id && snap.Fresh {
+						kind = kindActive
+					}
+					ws = append(ws, w.button(&w.gestures[i], kind, g.label+" · "+string(gestureKeys[i]), snap.ModesEnabled).width(110).Layout)
+				}
 				state := "Observing: the app reports no controller. Take control to use these."
 				if snap.Control {
 					state = "In control: requesting " + snap.Mode.String() + ". Walking is the gamepad's."
@@ -209,7 +218,8 @@ func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 					ws = append(ws, w.staleMarker(snap))
 				}
 				ws = append(ws, textLabel(w.th, sizeText, w.pal.Muted, state).Layout)
-				return sideBySide(gtx, 8, ws...)
+				// The buttons flow onto a second line in a narrow window.
+				return flow(gtx, 8, 8, ws...)
 			},
 			func(gtx layout.Context) layout.Dimensions {
 				if !snap.Control {
@@ -219,6 +229,14 @@ func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 			},
 		)
 	})
+}
+
+// bodyText is the body mode, with the gesture it is playing.
+func bodyText(snap session.Snapshot) string {
+	if snap.Body == session.BodyPerform && snap.Gesture != protocol.GestureNone {
+		return "Perform: " + session.GestureName(snap.Gesture)
+	}
+	return snap.Body.String()
 }
 
 // keyHint is one shortcut: its keys and what they do.
@@ -232,6 +250,7 @@ type keyHint struct {
 var keyHints = []keyHint{
 	{[]string{"Space"}, "e-stop on / off"},
 	{[]string{"1", "2", "3"}, "Stand, Calibrate, Sleep"},
+	{[]string{"4", "…", "8"}, "gestures, from Stand"},
 	{[]string{"F"}, "clear fault"},
 	{[]string{"←", "→", "↑", "↓"}, "select joint and value"},
 	{[]string{"=", "−"}, "nudge, with Shift coarse"},

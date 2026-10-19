@@ -15,6 +15,7 @@ const (
 	BodyWalk
 	BodySleep
 	BodyCalibrate
+	BodyPerform // playing a gesture
 )
 
 func (m BodyMode) String() string {
@@ -29,8 +30,21 @@ func (m BodyMode) String() string {
 		return "Sleep"
 	case BodyCalibrate:
 		return "Calibrate"
+	case BodyPerform:
+		return "Perform"
 	}
 	return "mode " + strconv.Itoa(int(m))
+}
+
+// Gesture names, by protocol.Gesture* id.
+var gestureNames = []string{"none", "say hi", "wiggle", "dance", "attack", "ball"}
+
+// GestureName names a gesture id.
+func GestureName(g uint8) string {
+	if int(g) < len(gestureNames) {
+		return gestureNames[g]
+	}
+	return "gesture " + strconv.Itoa(int(g))
 }
 
 // RequestedMode is the command frame's mode (RequestedMode in

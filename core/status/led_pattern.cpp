@@ -156,8 +156,9 @@ void compute(const State &s, Rgb out[LED_COUNT])
   {
     fill(out, 0, MAIN_LEDS, scaled(BLUE, triangle(s.nowMs, STOPPED_BREATH_MS, 0.1f)));
   }
-  else if (s.mode == BodyMode::Walk)
+  else if (s.mode == BodyMode::Walk || s.mode == BodyMode::Perform)
   {
+    // Moving: the load bar, as gestures load the servos like walking.
     int lit = loadSegments(s.currentA, s.tripCurrentA);
     // Each segment covers trip/5 of current; one whose midpoint is above the
     // sustained limit is red, so the bar turns red where Sleep would trip.

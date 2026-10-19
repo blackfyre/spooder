@@ -16,8 +16,8 @@ import (
 	"github.com/blackfyre/spooder/desktop/internal/protocol"
 )
 
-// goldenPath is test/golden/protocol_v2.txt, written by the C++ encoder.
-var goldenPath = filepath.Join("..", "..", "..", "test", "golden", "protocol_v2.txt")
+// goldenPath is test/golden/protocol_v3.txt, written by the C++ encoder.
+var goldenPath = filepath.Join("..", "..", "..", "test", "golden", "protocol_v3.txt")
 
 type vector struct {
 	name     string
@@ -69,12 +69,14 @@ func decodeOne(t *testing.T, b []byte) protocol.Frame {
 // The one-line decode of every golden vector.
 func TestFormatGoldenVectors(t *testing.T) {
 	want := map[string]string{
-		"command_walk":                         "command seq=0 mode=2 translateX=0 translateY=50 rotate=0 height=50 speed=44 gait=0 stride=0 flags=1 clearCounter=0 modeRequestCounter=0",
-		"command_extremes_seq_wrap":            "command seq=255 mode=4 translateX=-128 translateY=127 rotate=-100 height=255 speed=100 gait=5 stride=1 flags=255 clearCounter=255 modeRequestCounter=255",
-		"command_estop_no_controller":          "command seq=0 mode=3 translateX=0 translateY=0 rotate=0 height=0 speed=0 gait=0 stride=0 flags=2 clearCounter=1 modeRequestCounter=0",
+		"command_walk":                         "command seq=0 mode=2 translateX=0 translateY=50 rotate=0 height=50 speed=44 gait=0 stride=0 flags=1 clearCounter=0 modeRequestCounter=0 gesture=0 gestureRequestCounter=0",
+		"command_extremes_seq_wrap":            "command seq=255 mode=4 translateX=-128 translateY=127 rotate=-100 height=255 speed=100 gait=5 stride=1 flags=255 clearCounter=255 modeRequestCounter=255 gesture=255 gestureRequestCounter=255",
+		"command_stand_gesture_wiggle":         "command seq=17 mode=0 translateX=0 translateY=0 rotate=0 height=30 speed=44 gait=0 stride=0 flags=1 clearCounter=0 modeRequestCounter=4 gesture=2 gestureRequestCounter=9",
+		"command_estop_no_controller":          "command seq=0 mode=3 translateX=0 translateY=0 rotate=0 height=0 speed=0 gait=0 stride=0 flags=2 clearCounter=1 modeRequestCounter=0 gesture=0 gestureRequestCounter=0",
 		"telemetry_calibrate_usb":              "telemetry #7  Calibrate  gait Tri  output on  6.01 V  1.35 A  faults none  link 1000 ok 2 bad  source USB",
+		"telemetry_perform_say_hi":             "telemetry #30  Perform  gait Tri  output on  6.05 V  2.10 A  faults none  link 0 ok 0 bad  source bridge  gesture say hi",
 		"telemetry_conflict":                   "telemetry #128  Sleep  gait Tri  output off  0.00 V  0.00 A  faults emergency stop  link 0 ok 0 bad  source conflict (bridge and USB)",
-		"telemetry_extremes":                   "telemetry #255  mode 255  gait 255  output on  65.53 V  65.53 A  faults overcurrent, sustained current, undervoltage, brown-out, overvoltage, emergency stop, fault bit 6, fault bit 7, fault bit 8, fault bit 9, fault bit 10, fault bit 11, fault bit 12, fault bit 13, fault bit 14, fault bit 15  link 65535 ok 65535 bad  source conflict (bridge and USB)  tof 65535 mm (status 255)  pitch -327.68 deg roll 327.67 deg",
+		"telemetry_extremes":                   "telemetry #255  mode 255  gait 255  output on  65.53 V  65.53 A  faults overcurrent, sustained current, undervoltage, brown-out, overvoltage, emergency stop, fault bit 6, fault bit 7, fault bit 8, fault bit 9, fault bit 10, fault bit 11, fault bit 12, fault bit 13, fault bit 14, fault bit 15  link 65535 ok 65535 bad  source conflict (bridge and USB)  gesture 255  tof 65535 mm (status 255)  pitch -327.68 deg roll 327.67 deg",
 		"calibration_set_default_joint0":       "calibration_set seq=1 requestId=1 joint=0 offsetCentideg=9000 pulse0Us=500 pulse180Us=2500 flags=0",
 		"calibration_set_reversed_joint17":     "calibration_set seq=42 requestId=200 joint=17 offsetCentideg=-2450 pulse0Us=2400 pulse180Us=600 flags=1",
 		"calibration_set_extremes":             "calibration_set seq=255 requestId=255 joint=255 offsetCentideg=-32768 pulse0Us=0 pulse180Us=65535 flags=255",

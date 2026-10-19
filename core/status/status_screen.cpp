@@ -6,7 +6,8 @@
 namespace status_screen
 {
 
-static const char *const BODY_MODES[] = {"Initialise", "Stand", "Walk", "Sleep", "Calibrate"};
+static const char *const BODY_MODES[] = {"Initialise", "Stand", "Walk", "Sleep", "Calibrate", "Perform"};
+static const char *const GESTURES[] = {"none", "say hi", "wiggle", "dance", "attack", "ball"};
 static const char *const GAITS[] = {"Tri", "Wave", "Ripple", "Bi", "Quad", "Hop"};
 
 const char *faultName(uint16_t bit)
@@ -116,8 +117,12 @@ void compose(const Inputs &in, Line out[LINE_COUNT])
     set(out[1], Tone::Warn, "Link: ok  USB in control");
   else
     set(out[1], Tone::Good, "Link: ok");
-  // Longest: "Body Initialise  Gait Ripple", exactly LINE_CHARS.
-  snprintf(buf, sizeof(buf), "Body %s  Gait %s", name(BODY_MODES, 5, t.bodyMode), name(GAITS, 6, t.gait));
+  // Longest: "Body Initialise  Gait Ripple", exactly LINE_CHARS. While a
+  // gesture plays, it replaces the gait: "Body Perform: say hi".
+  if (t.gesture != 0)
+    snprintf(buf, sizeof(buf), "Body Perform: %s", name(GESTURES, 6, t.gesture));
+  else
+    snprintf(buf, sizeof(buf), "Body %s  Gait %s", name(BODY_MODES, 6, t.bodyMode), name(GAITS, 6, t.gait));
   set(out[2], Tone::Normal, buf);
   snprintf(buf, sizeof(buf), "Out %s  %u.%02u V  %u.%02u A", t.outputsOn ? "on" : "off", t.voltageMv / 1000,
            (t.voltageMv % 1000) / 10, t.currentMa / 1000, (t.currentMa % 1000) / 10);
@@ -178,7 +183,7 @@ void composeSetup(const SetupInputs &in, Line out[LINE_COUNT])
   // The body mode, red while any fault is latched; nothing while the link is
   // down, as on the normal screen.
   if (in.telemetryFresh)
-    setShort(out[7], in.telemetry.faults ? Tone::Bad : Tone::Normal, name(BODY_MODES, 5, in.telemetry.bodyMode));
+    setShort(out[7], in.telemetry.faults ? Tone::Bad : Tone::Normal, name(BODY_MODES, 6, in.telemetry.bodyMode));
 }
 
 } // namespace status_screen

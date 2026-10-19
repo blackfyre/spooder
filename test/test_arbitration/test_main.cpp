@@ -201,6 +201,33 @@ void test_clear_accepted_only_from_the_source_in_control()
   TEST_ASSERT_FALSE(tick(absent(), usb).input.clearRequested);
 }
 
+void test_gesture_requests_count_only_from_the_source_in_control()
+{
+  Input bridge = link(true, RequestedMode::Stand);
+  Input usb = link(false);
+  Arbitration out = tick(bridge, usb);
+  uint32_t seq = out.input.command.gestureSeq;
+  // The idle USB link's request is ignored.
+  usb.gestureSeq = 1;
+  usb.gesture = protocol::GESTURE_BALL;
+  out = tick(bridge, usb);
+  TEST_ASSERT_EQUAL_UINT32(seq, out.input.command.gestureSeq);
+  // The bridge's, in control, counts once and carries its id.
+  bridge.gestureSeq = 1;
+  bridge.gesture = protocol::GESTURE_WIGGLE;
+  out = tick(bridge, usb);
+  TEST_ASSERT_EQUAL_UINT32(seq + 1, out.input.command.gestureSeq);
+  TEST_ASSERT_EQUAL(protocol::GESTURE_WIGGLE, out.input.command.gesture);
+  out = tick(bridge, usb);
+  TEST_ASSERT_EQUAL_UINT32(seq + 1, out.input.command.gestureSeq);
+  // A change of source does not count as a request.
+  bridge = link(false);
+  usb = link(true, RequestedMode::Stand);
+  usb.gestureSeq = 1;
+  out = tick(bridge, usb);
+  TEST_ASSERT_EQUAL_UINT32(seq + 1, out.input.command.gestureSeq);
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -214,5 +241,6 @@ int main()
   RUN_TEST(test_first_tick_sets_counter_baselines);
   RUN_TEST(test_emergency_stop_from_the_idle_source);
   RUN_TEST(test_clear_accepted_only_from_the_source_in_control);
+  RUN_TEST(test_gesture_requests_count_only_from_the_source_in_control);
   return UNITY_END();
 }

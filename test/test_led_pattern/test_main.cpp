@@ -130,6 +130,14 @@ void test_walking_load_bar_tracks_current()
   TEST_ASSERT_EQUAL_INT(3, litCount(0, MAIN_LEDS));
 }
 
+void test_perform_shows_the_load_bar_like_walking()
+{
+  State s = healthy(BodyMode::Perform);
+  s.currentA = 5.0f;
+  compute(s, out);
+  TEST_ASSERT_EQUAL_INT(3, litCount(0, MAIN_LEDS));
+}
+
 void test_walking_bar_turns_red_past_sustained_limit()
 {
   State s = healthy(BodyMode::Walk);
@@ -222,5 +230,6 @@ int main()
   RUN_TEST(test_walking_bar_uses_the_gait_colour);
   RUN_TEST(test_input_indicator_states);
   RUN_TEST(test_normal_brightness_is_dim);
+  RUN_TEST(test_perform_shows_the_load_bar_like_walking);
   return UNITY_END();
 }

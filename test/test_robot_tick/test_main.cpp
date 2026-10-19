@@ -89,6 +89,8 @@ struct Frontend
   RequestedMode mode = RequestedMode::Sleep;
   uint8_t clearCounter = 0;
   uint8_t modeCounter = 0;
+  uint8_t gesture = 0;
+  uint8_t gestureCounter = 0;
   uint8_t seq = 0;
   std::vector<uint8_t> extra; // further frames for the next tick
 };
@@ -129,6 +131,8 @@ static void tick()
       c.flags = (f.connected ? protocol::FLAG_CONTROLLER_CONNECTED : 0) | (f.estop ? protocol::FLAG_EMERGENCY_STOP : 0);
       c.clearCounter = f.clearCounter;
       c.modeRequestCounter = f.modeCounter;
+      c.gesture = f.gesture;
+      c.gestureRequestCounter = f.gestureCounter;
       uint8_t frame[protocol::MAX_FRAME_SIZE];
       int n = protocol::encodeCommand(c, f.seq++, frame);
       bytes[l].insert(bytes[l].end(), frame, frame + n);
@@ -529,6 +533,66 @@ void test_serial_input_mode()
   TEST_ASSERT_EQUAL(3, n); // at 1 s, 2 s and on request
 }
 
+// --- Gestures ---
+
+static void requestGesture(Frontend &f, uint8_t g)
+{
+  f.gesture = g;
+  f.gestureCounter++;
+}
+
+void test_gesture_plays_over_usb_and_telemetry_reports_it()
+{
+  standOnUsb();
+  requestGesture(usb(), protocol::GESTURE_WIGGLE);
+  ticks(10);
+  TEST_ASSERT_TRUE(state.body.mode == body::Mode::Perform);
+  const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_NOT_NULL(t);
+  TEST_ASSERT_EQUAL(protocol::GESTURE_WIGGLE, t->telemetry.gesture);
+  TEST_ASSERT_EQUAL((uint8_t)body::Mode::Perform, t->telemetry.bodyMode);
+  ticks(250); // 5 s: the whole wiggle
+  TEST_ASSERT_TRUE(state.body.mode == body::Mode::Stand);
+  t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_EQUAL(0, t->telemetry.gesture);
+}
+
+void test_explicit_stand_request_ends_a_gesture()
+{
+  standOnUsb();
+  requestGesture(usb(), protocol::GESTURE_SAY_HI);
+  ticks(10);
+  TEST_ASSERT_TRUE(state.body.mode == body::Mode::Perform);
+  request(usb(), RequestedMode::Stand); // Stand again: a new explicit request
+  ticks(60); // the first keyframe ends by 600 ms, the return takes 400 ms more
+  TEST_ASSERT_TRUE(state.body.mode == body::Mode::Stand);
+}
+
+void test_fault_mid_gesture_stops_reporting_the_gesture()
+{
+  standOnUsb();
+  requestGesture(usb(), protocol::GESTURE_SAY_HI);
+  ticks(10);
+  TEST_ASSERT_TRUE(state.body.mode == body::Mode::Perform);
+  bridge().active = true;
+  bridge().estop = true; // the e-stop stops the body mid-gesture
+  ticks(10);
+  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_NOT_NULL(t);
+  TEST_ASSERT_EQUAL(0, t->telemetry.gesture);
+}
+
+void test_gesture_from_the_idle_bridge_is_ignored()
+{
+  standOnUsb();
+  bridge().active = true; // no gamepad: not in control
+  tick();
+  requestGesture(bridge(), protocol::GESTURE_WIGGLE);
+  ticks(10);
+  TEST_ASSERT_TRUE(state.body.mode == body::Mode::Stand);
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -550,5 +614,9 @@ int main()
   RUN_TEST(test_status_line_once_a_second);
   RUN_TEST(test_text_and_frames_in_loop_order);
   RUN_TEST(test_serial_input_mode);
+  RUN_TEST(test_gesture_plays_over_usb_and_telemetry_reports_it);
+  RUN_TEST(test_explicit_stand_request_ends_a_gesture);
+  RUN_TEST(test_fault_mid_gesture_stops_reporting_the_gesture);
+  RUN_TEST(test_gesture_from_the_idle_bridge_is_ignored);
   return UNITY_END();
 }

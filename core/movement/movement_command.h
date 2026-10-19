@@ -31,6 +31,14 @@ struct MovementCommand
   int gait = 0;             // index into gait::Gait; unknown values are ignored
   StrideMode stride = StrideMode::Dynamic;
   uint32_t issuedAtMs = 0;  // millis() when the controller produced the command
+  // Gesture requests: each change of gestureSeq requests `gesture` (a
+  // gesture::Gesture id) once. The body takes the first value it sees as the
+  // baseline, so a restart never replays an old request.
+  uint8_t gesture = 0;
+  uint32_t gestureSeq = 0;
+  // Advances with every explicit mode request (the source in control's), so
+  // movement can tell a new Stand request from a continuing one.
+  uint32_t modeRequestSeq = 0;
 };
 
 #endif // MOVEMENT_COMMAND_H

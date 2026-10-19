@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-// goldenPath is test/golden/protocol_v2.txt, written by the C++ encoder
+// goldenPath is test/golden/protocol_v3.txt, written by the C++ encoder
 // (test/test_protocol_golden).
-var goldenPath = filepath.Join("..", "..", "..", "test", "golden", "protocol_v2.txt")
+var goldenPath = filepath.Join("..", "..", "..", "test", "golden", "protocol_v3.txt")
 
 type vector struct {
 	name   string

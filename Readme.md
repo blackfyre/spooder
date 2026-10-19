@@ -35,12 +35,13 @@ flowchart LR
 
 - **Gaits**: tri, wave, ripple, bi, quad and hop, from the upstream gait table, with dynamic or fixed stride and adjustable height and speed.
 - **Power protection**: overcurrent, overload, brown-out, low and high voltage, and an emergency stop. Faults latch, and clearing one never restarts motion by itself: a new mode request must follow.
-- **Link protocol v2**: CRC-16 framed messages for commands, telemetry, calibration sets and reports, and the pose. It is pinned by golden vectors that the C++ and Go implementations both test against.
+- **Link protocol v3**: CRC-16 framed messages for commands (with gesture requests), telemetry, calibration sets and reports, and the pose. It is pinned by golden vectors that the C++ and Go implementations both test against.
 - **Live joint calibration**: per joint, an offset, the pulses for 0° and 180°, and the direction.
   - Changes are guarded (Calibrate only, offset within ±30° of the default, pulses 400–2600 µs) and rate-limited to 60°/s.
   - They are held in RAM, confirmed by the robot's reports, and exported as the compiled defaults.
   - Coxa offsets are shown from the servo centre.
 - **Source arbitration**: the bridge or USB, whichever reports a connected controller. If both do, the robot sleeps.
+- **Gestures**: say hi and wiggle, from Stand: scripted, rate-limited moves that any other request, the e-stop or a fault interrupts. Dance, attack and ball follow once the body geometry is measured.
 - **Legs pane**: forward kinematics of the reported pose, each joint's pulse, rings at the servo limits, and a top view of all six legs.
 
 ## Getting started
@@ -101,6 +102,7 @@ Flash both boards together when the link protocol changes. A mismatched pair fai
 | D-pad right / left | Speed |
 | `X` | Toggle stride: dynamic / fixed |
 | Both stick buttons held 1 s | Clear faults |
+| `L2` held + `A` / `B` | Gesture: say hi / wiggle (from Stand) |
 
 ## Verification
 

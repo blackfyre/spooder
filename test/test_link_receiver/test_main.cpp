@@ -226,6 +226,43 @@ void test_pose_rounds_and_saturates()
   TEST_ASSERT_EQUAL_UINT16(0, p.joints[17].pulseUs);
 }
 
+// --- Gesture requests ---
+
+static protocol::Command gestureFrame(uint8_t gesture, uint8_t counter)
+{
+  protocol::Command c = frame(RequestedMode::Stand);
+  c.gesture = gesture;
+  c.gestureRequestCounter = counter;
+  return c;
+}
+
+void test_each_new_gesture_counter_is_one_request()
+{
+  Input in = tick(gestureFrame(0, 0));
+  uint32_t seq = in.gestureSeq;
+  in = tick(gestureFrame(protocol::GESTURE_WIGGLE, 1));
+  TEST_ASSERT_EQUAL_UINT32(seq + 1, in.gestureSeq);
+  TEST_ASSERT_EQUAL(protocol::GESTURE_WIGGLE, in.gesture);
+  // A held button: the same counter in later frames requests nothing more.
+  for (int i = 0; i < 10; i++)
+    in = tick(gestureFrame(protocol::GESTURE_WIGGLE, 1));
+  TEST_ASSERT_EQUAL_UINT32(seq + 1, in.gestureSeq);
+  in = tick(gestureFrame(protocol::GESTURE_SAY_HI, 2));
+  TEST_ASSERT_EQUAL_UINT32(seq + 2, in.gestureSeq);
+  TEST_ASSERT_EQUAL(protocol::GESTURE_SAY_HI, in.gesture);
+}
+
+void test_gesture_counter_after_a_link_gap_is_only_a_baseline()
+{
+  Input in = tick(gestureFrame(0, 3));
+  uint32_t seq = in.gestureSeq;
+  now += LINK_GAP_MS;
+  in = tick(gestureFrame(protocol::GESTURE_SAY_HI, 0)); // a restarted bridge
+  TEST_ASSERT_EQUAL_UINT32(seq, in.gestureSeq);
+  in = tick(gestureFrame(protocol::GESTURE_SAY_HI, 1));
+  TEST_ASSERT_EQUAL_UINT32(seq + 1, in.gestureSeq);
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -246,5 +283,7 @@ int main()
   RUN_TEST(test_first_frame_sets_baseline_only);
   RUN_TEST(test_bridge_restart_after_gap_neither_clears_nor_requests);
   RUN_TEST(test_short_gap_keeps_counting);
+  RUN_TEST(test_each_new_gesture_counter_is_one_request);
+  RUN_TEST(test_gesture_counter_after_a_link_gap_is_only_a_baseline);
   return UNITY_END();
 }

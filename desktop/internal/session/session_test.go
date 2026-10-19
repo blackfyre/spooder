@@ -92,6 +92,39 @@ func TestTakeControlAndModeRequests(t *testing.T) {
 	}
 }
 
+// Spec "Gesture controls": one request per press, only in control.
+func TestGestureRequests(t *testing.T) {
+	s, _ := connected(t)
+	if err := s.RequestGesture(protocol.GestureWiggle); !errors.Is(err, ErrNotInControl) {
+		t.Fatalf("gesture while observing: %v", err)
+	}
+	if c := s.Command(); c.GestureRequestCounter != 0 {
+		t.Fatalf("counter moved while observing: %+v", c)
+	}
+	if err := s.TakeControl(); err != nil {
+		t.Fatal(err)
+	}
+	for i, g := range []uint8{protocol.GestureWiggle, protocol.GestureWiggle, protocol.GestureSayHi} {
+		if err := s.RequestGesture(g); err != nil {
+			t.Fatal(err)
+		}
+		c := s.Command()
+		if c.Gesture != g || c.GestureRequestCounter != uint8(i+1) {
+			t.Fatalf("request %d: %+v", i, c)
+		}
+	}
+	for _, g := range []uint8{protocol.GestureNone, protocol.GestureCount, 255} {
+		if err := s.RequestGesture(g); err == nil {
+			t.Fatalf("gesture %d accepted", g)
+		}
+	}
+	s.Frame(protocol.Frame{Type: protocol.TypeTelemetry, Telemetry: protocol.Telemetry{BodyMode: uint8(BodyPerform), Gesture: protocol.GestureSayHi}}, link.Stats{})
+	snap := s.Snapshot()
+	if snap.Body != BodyPerform || snap.Gesture != protocol.GestureSayHi || snap.Body.String() != "Perform" {
+		t.Fatalf("snapshot body %v gesture %d", snap.Body, snap.Gesture)
+	}
+}
+
 func TestTakeControlNeedsConnection(t *testing.T) {
 	s := New(newClock().now, nil)
 	if err := s.TakeControl(); !errors.Is(err, ErrNotConnected) {

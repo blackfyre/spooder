@@ -455,6 +455,56 @@ void test_to_command_sets_flags_and_fields()
   TEST_ASSERT_EQUAL((uint8_t)RequestedMode::Sleep, c.mode);
 }
 
+// --- Gesture layer ---
+
+void test_l2_layer_requests_gestures_once_per_press()
+{
+  pad.buttons |= BUTTON_L2;
+  tick();
+  const struct
+  {
+    uint16_t button;
+    uint8_t gesture;
+  } cases[] = {{BUTTON_A, protocol::GESTURE_SAY_HI}, {BUTTON_B, protocol::GESTURE_WIGGLE},
+               {BUTTON_X, protocol::GESTURE_DANCE},  {BUTTON_Y, protocol::GESTURE_ATTACK},
+               {BUTTON_R2, protocol::GESTURE_BALL}};
+  uint8_t counter = last.gestureRequestCounter;
+  for (const auto &c : cases)
+  {
+    pad.buttons |= c.button;
+    for (int i = 0; i < 5; i++) // held: still one request
+      tick();
+    pad.buttons &= ~c.button;
+    tick();
+    counter++;
+    TEST_ASSERT_EQUAL(counter, last.gestureRequestCounter);
+    TEST_ASSERT_EQUAL(c.gesture, last.gesture);
+    protocol::Command cmd = toCommand(last, false);
+    TEST_ASSERT_EQUAL(c.gesture, cmd.gesture);
+    TEST_ASSERT_EQUAL(counter, cmd.gestureRequestCounter);
+  }
+}
+
+void test_l2_layer_suppresses_the_buttons_own_functions()
+{
+  pad.buttons |= BUTTON_L2;
+  tick();
+  Desired before = last;
+  pressButton(BUTTON_Y); // attack, not Sleep
+  pressButton(BUTTON_X); // dance, not the stride
+  pressButton(BUTTON_B); // wiggle, not the stick mode
+  TEST_ASSERT_TRUE(last.mode == before.mode);
+  TEST_ASSERT_TRUE(last.stride == before.stride);
+  TEST_ASSERT_TRUE(last.stickMode == before.stickMode);
+  TEST_ASSERT_EQUAL(before.modeRequestCounter, last.modeRequestCounter);
+  // Released, the buttons are themselves again.
+  pad.buttons &= ~BUTTON_L2;
+  tick();
+  pressButton(BUTTON_B);
+  TEST_ASSERT_TRUE(last.stickMode != before.stickMode);
+  TEST_ASSERT_EQUAL(before.gestureRequestCounter + 3, last.gestureRequestCounter);
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -489,5 +539,7 @@ int main()
   RUN_TEST(test_stick_inside_dead_zone_is_zero);
   RUN_TEST(test_output_continuous_at_dead_zone_edge);
   RUN_TEST(test_to_command_sets_flags_and_fields);
+  RUN_TEST(test_l2_layer_requests_gestures_once_per_press);
+  RUN_TEST(test_l2_layer_suppresses_the_buttons_own_functions);
   return UNITY_END();
 }
