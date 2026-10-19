@@ -127,6 +127,7 @@ Phase offsets are in progress units out of `CYCLE_POINTS` = 1000. Legs are liste
 | Quad | 0, ⅓, ⅔, 0, ⅓, ⅔ | 4.1/6 | 1 | 1.2 | 1.8 | 220 | 200 |
 | Hop | all 0 | 3/6 | 1 | 1.6 | 2.5 | 240 | 200 |
 
+- **Translate and rotate are superposed** (`gait::strideFor`): each foot's ground stroke is the straight stroke plus the rotation stroke, so turning while walking keeps the forward stroke. It is the existing weight-normalised blend with each motion amplified by total / own weight. One scale, common to all legs, shrinks both when the combined stroke exceeds the larger of the gait's `maxStrideLength` and the longer single stroke, and further (5 % steps) until the stroke ends are reachable. A combined swing lifts to the higher path. A positive rotate turns the body anticlockwise (left feet move forward, right feet back); the bridge maps stick right to negative.
 - **Progress rate:** progress advances at `max(|translate|, |rotate|) · speed× · speedScale`, clamped to `maxSpeed · speedScale`, × 50 per second. `speedScale = (speed + 10) / 100`; the rotation scale is fixed at 0.55.
 - **Fixed stride:** stride and rotation length are a constant 70, and the input sets direction only.
 - **Adding a gait:** add an enum member, a `GAITS[]` row and raise `GAIT_COUNT`.

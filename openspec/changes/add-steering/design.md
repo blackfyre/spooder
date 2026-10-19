@@ -24,7 +24,9 @@
 Each path is turned into a displacement from the leg's stance point `S = (STANCE_DISTANCE, 0, ground)`: `dS = straight − S`, `dR = rotation − S`. The foot target is `S + k·(wS·dS_xy + wR·dR_xy)` in X and Y, with the full weights `wS = wR = 1` (the input magnitudes are already in each stroke's length).
 - Z is not summed: the swing height is the larger of the two paths' Z at that point, so a combined step lifts as high as either motion alone, never twice as high.
 - With one input at zero its displacement is zero, so the result equals the other path exactly: translate-only and rotate-only behaviour, and their existing tests, are unchanged.
-- `k` is the stride limit: `k = min(1, L / |stroke|)`, where `stroke` is the combined ground stroke (lift end to propel end) in the leg's XY plane and `L` the gait's `maxStrideLength`. Both motions shrink together, so the arc's radius is kept and only the speed drops.
+- `k` is the stride limit: `k = min(1, L / |stroke|)` over all legs, where `stroke` is the combined ground stroke (lift end to propel end) in the leg's XY plane and `L` the larger of the gait's `maxStrideLength` and the longer single-motion stroke. (At speed 100 the walk alone already exceeds `maxStrideLength`, because the speed scale applies after the gait's clamp; capping the combination at `maxStrideLength` would cut the forward stroke the moment any turn is added.) Both motions shrink together, by one factor on every leg, so the arc's radius is kept and only the speed drops. `k` then shrinks further, in 5 % steps, until every leg's combined stroke ends are reachable.
+- **Implementation:** the two paths are already blended with weights that sum to one, so superposition is the same blend with each motion amplified by total / own weight before it: the blended stroke is then the sum of the full strokes. The swing height takes the higher of the two paths explicitly.
+- **Sign:** a positive rotate turns the body anticlockwise (its stroke moves the left feet forward and the right feet back). The bridge mapped right stick right to positive, which turned the body left; D3 fixes that.
 - The phase capture points (`liftEnd`, `propelEnd`) use the same formula, so a phase change starts from where the previous segment ended, as now.
 
 *Alternative:* keep the blend and remove the normalisation (`/ weightSum`). Rejected: the paths are absolute positions, so summing them without subtracting the stance point doubles the stance offset.
@@ -35,7 +37,8 @@ The combined target goes through `kinematics::isValidTarget` like every other ta
 
 ### D3. Steer mode on the bridge
 
-- Steer mode (default): `translate = (0, leftY)`, `rotate = leftX × sign(leftY ≥ 0 ? 1 : −1) + rightX`, clamped to ±100. The sign flip gives the car convention when reversing. With the left stick centred in Y, left X turns on the spot.
+- Rotate is `−rightX`: right turns clockwise.
+- Steer mode (default): `translate = (0, leftY)`, `rotate += −leftX`, or `+leftX` when reversing, clamped to ±100. Reversing means `leftY < −10`; between −10 and 0 the forward value is zero and nothing is mirrored, so a stick held sideways turns on the spot steadily instead of flipping with stick noise. Crossing −10 starts the reverse and mirrors the turn at once, which is the car convention's inherent switch.
 - Crab mode: today's mapping.
 - `b` toggles; the mode is kept across disconnects with height, speed, gait and stride. The robot sees only translate and rotate, so it needs no change for this part.
 - The stick dead zone applies per stick as now.

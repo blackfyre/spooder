@@ -215,8 +215,10 @@ Button names are Bluepad32's (Xbox layout: `a` bottom, `b` right, `x` left, `y` 
 
 | Input | Effect |
 |---|---|
-| Left stick | Walk direction and speed (8 % dead zone) |
-| Right stick X | Rotate |
+| Left stick, steer mode (default) | Y walks forward or back; X steers: right turns clockwise, mirrored when reversing (more than 10 % back). 8 % dead zone |
+| Left stick, crab mode | Walk direction and speed, strafing too |
+| `b` | Toggle steer / crab mode (kept across reconnects; the screen shows `steer` or `crab`) |
+| Right stick X | Turn (right: clockwise), added in both modes |
 | `Home` (system) | Toggle Stand / Walk |
 | `y` | Toggle Sleep (returns to the previous mode) |
 | `Back` + `Home` held 1 s | Toggle Calibrate (leaving returns to Stand) |

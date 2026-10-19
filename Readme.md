@@ -89,8 +89,10 @@ Flash both boards together when the link protocol changes. A mismatched pair fai
 
 | Input | Effect |
 |---|---|
-| Left stick | Walk direction and speed |
-| Right stick X | Rotate |
+| Left stick (steer mode, default) | Y walks forward or back, X steers like a car (mirrored when reversing) |
+| Left stick (crab mode) | Walk in any direction, strafing too |
+| `B` | Toggle steer / crab |
+| Right stick X | Turn, added to the steering in both modes |
 | `Home` | Toggle Stand / Walk |
 | `Y` | Toggle Sleep |
 | `Back` + `Home` held 1 s | Toggle Calibrate |

@@ -35,6 +35,19 @@ constexpr int AXIS_MAX = 512;           // Bluepad32 axes span -511..512
 constexpr float DEAD_ZONE = 0.08f;      // radial, fraction of full scale
 constexpr uint32_t COMBO_HOLD_MS = 1000;
 constexpr int DIAL_STEP = 10;
+// In steer mode, the left stick reverses (steering mirrored, as a car's)
+// only below this forward value; between it and zero there is neither
+// reversing nor mirroring, so a stick held sideways does not flip the turn.
+constexpr int REVERSE_THRESHOLD = 10;
+
+// How the sticks drive the robot. Steer: left stick Y walks, left stick X
+// steers. Crab: left stick translates (strafing too). Right stick X adds
+// rotation in both.
+enum class StickMode : uint8_t
+{
+  Steer,
+  Crab,
+};
 
 struct PadState
 {
@@ -54,6 +67,7 @@ struct Desired
   uint8_t height, speed;         // 0..100
   uint8_t gait;
   StrideMode stride;
+  StickMode stickMode;
   bool controllerConnected;
   uint8_t clearCounter;
   uint8_t modeRequestCounter;
@@ -66,6 +80,7 @@ struct Mapper
   uint8_t speed = 44;
   uint8_t gait = 0;
   StrideMode stride = StrideMode::Dynamic;
+  StickMode stickMode = StickMode::Steer;
   uint8_t clearCounter = 0;
   uint8_t modeRequestCounter = 0;
 

@@ -48,6 +48,9 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 - While in control, the desktop calibrator shows its keyboard controls under the mode buttons.
 - The desktop calibrator's mode controls are on keys too: 1 Stand, 2 Calibrate, 3 Sleep, F Clear fault, only while in control.
 
+- Walking and turning are superposed instead of shared: turning while walking keeps the full forward stride and follows an arc, with one common scale when a stroke would get too long or unreachable.
+- The bridge steers like a car by default: left stick Y walks, left stick X steers, mirrored when reversing; `b` switches to the crab layout. The right stick turns the body the way it points (it was inverted). The screen shows the stick mode.
+
 ### Removed
 
 - The Nano RP2040 Connect firmware (it remains in the history).

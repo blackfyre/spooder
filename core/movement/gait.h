@@ -74,6 +74,14 @@ constexpr float FIXED_STRIDE_LENGTH = 70;
 constexpr float MIN_INPUT = 0.01f;
 
 bool isValidGait(int value);
+
+/**
+ * @brief Direction of @p leg's frame x axis in the body frame (x right, y
+ * forward), in degrees anticlockwise from +x. The leg frame's y axis is its
+ * x axis turned 90° clockwise. Matches the placement the gait rotates
+ * strides by.
+ */
+float mountAngleDeg(int leg);
 const GaitParams &params(Gait g);
 
 /**

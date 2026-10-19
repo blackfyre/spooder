@@ -169,14 +169,35 @@ Desired update(Mapper &m, const PadState &pad, uint32_t nowMs)
       m.speed = stepDial(m.speed, -DIAL_STEP);
     if (pressed & BUTTON_X)
       m.stride = m.stride == StrideMode::Dynamic ? StrideMode::Fixed : StrideMode::Dynamic;
+    if (pressed & BUTTON_B)
+      m.stickMode = m.stickMode == StickMode::Steer ? StickMode::Crab : StickMode::Steer;
 
     bool clearDown = (pad.buttons & BUTTON_THUMB_L) && (pad.buttons & BUTTON_THUMB_R);
     if (comboFired(clearDown, m.clearHeld, m.clearFired, m.clearSinceMs, nowMs))
       m.clearCounter++;
 
-    stickToVector(pad.axisX, -pad.axisY, d.translateX, d.translateY);
-    int8_t unusedY;
-    stickToVector(pad.axisRX, 0, d.rotate, unusedY);
+    int8_t leftX, leftY, rightX, unusedY;
+    stickToVector(pad.axisX, -pad.axisY, leftX, leftY);
+    stickToVector(pad.axisRX, 0, rightX, unusedY);
+    // Positive rotate turns the body anticlockwise, so a stick pushed right
+    // (positive) turns it clockwise with a negative rotate.
+    int rotate = -rightX;
+    if (m.stickMode == StickMode::Steer)
+    {
+      // Walk on Y, steer on X. Reversing mirrors the steering, as a car's;
+      // a slightly backward stick, within the threshold, neither reverses
+      // nor mirrors, so a stick held sideways turns on the spot steadily.
+      bool reversing = leftY < -REVERSE_THRESHOLD;
+      d.translateX = 0;
+      d.translateY = (leftY < 0 && !reversing) ? 0 : leftY;
+      rotate += reversing ? leftX : -leftX;
+    }
+    else
+    {
+      d.translateX = leftX;
+      d.translateY = leftY;
+    }
+    d.rotate = (int8_t)(rotate > 100 ? 100 : (rotate < -100 ? -100 : rotate));
   }
 
   d.controllerConnected = pad.connected;
@@ -185,6 +206,7 @@ Desired update(Mapper &m, const PadState &pad, uint32_t nowMs)
   d.speed = m.speed;
   d.gait = m.gait;
   d.stride = m.stride;
+  d.stickMode = m.stickMode;
   d.clearCounter = m.clearCounter;
   d.modeRequestCounter = m.modeRequestCounter;
   return d;

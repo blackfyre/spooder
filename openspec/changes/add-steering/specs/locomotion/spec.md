@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Walk mode and gaits
-In Walk the body SHALL move each leg through a repeating cycle of a ground phase and a swing phase, according to the selected gait's phase offsets, ground fraction, stride, lift height and speed limits. The supported gaits SHALL be Tri, Wave, Ripple, Bi, Quad and Hop, with their current parameters. Changing gait SHALL re-phase the legs to the new gait's offsets. Translate and rotate inputs SHALL be superposed in each leg's path: the foot's stroke SHALL be the sum of the translation stroke and the rotation stroke, so that turning while walking follows an arc without shortening the forward stride. When a leg's combined stroke would exceed the gait's stride limit, both parts SHALL scale down by the same factor. A combined swing SHALL lift no higher than the higher of the two motions alone.
+In Walk the body SHALL move each leg through a repeating cycle of a ground phase and a swing phase, according to the selected gait's phase offsets, ground fraction, stride, lift height and speed limits. The supported gaits SHALL be Tri, Wave, Ripple, Bi, Quad and Hop, with their current parameters. Changing gait SHALL re-phase the legs to the new gait's offsets. Translate and rotate inputs SHALL be superposed in each leg's path: the foot's stroke SHALL be the sum of the translation stroke and the rotation stroke, so that turning while walking follows an arc without shortening the forward stride. The combined stroke's limit SHALL be the larger of the gait's stride limit and the longer of the two single-motion strokes, so that adding a turn never shortens the forward stroke the walk alone would take. When any leg's combined stroke would exceed that limit, or a combined stroke end would be unreachable, both parts SHALL scale down by the same factor on every leg. A combined swing SHALL lift to the higher of the two motions' swings. A positive rotate amount SHALL turn the body anticlockwise, seen from above.
 
 #### Scenario: Gait change re-phases legs
 - **WHEN** the body is walking in Tri and a command selects Wave
@@ -25,4 +25,4 @@ In Walk the body SHALL move each leg through a repeating cycle of a ground phase
 
 #### Scenario: Combined stroke within the stride limit
 - **WHEN** translate and rotate are both 100 in every gait, at every body height
-- **THEN** no leg's ground stroke exceeds its gait's stride limit, the forward and rotation parts keep their ratio, and every target is reachable
+- **THEN** no leg's ground stroke exceeds the combined limit, the forward and rotation parts keep their ratio and share one scale on every leg, and every target is reachable wherever each motion alone is

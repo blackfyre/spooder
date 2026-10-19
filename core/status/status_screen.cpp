@@ -93,8 +93,9 @@ void compose(const Inputs &in, Line out[LINE_COUNT])
   }
 
   const gamepad_mapping::Desired &d = in.desired;
-  snprintf(buf, sizeof(buf), "H %u  Speed %u  %s", d.height, d.speed,
-           d.stride == StrideMode::Fixed ? "fixed" : "dynamic");
+  // Longest: "H 100 Spd 100 dynamic steer", 27 of LINE_CHARS.
+  snprintf(buf, sizeof(buf), "H %u Spd %u %s %s", d.height, d.speed,
+           d.stride == StrideMode::Fixed ? "fixed" : "dynamic", d.stickMode == gamepad_mapping::StickMode::Crab ? "crab" : "steer");
   set(out[4], Tone::Normal, buf);
 
   if (!in.telemetryFresh)

@@ -1,4 +1,5 @@
 #include "gait.h"
+#include "kinematics.h"
 
 namespace gait
 {
@@ -96,6 +97,60 @@ struct Stride
   Vector2 pivot;
 };
 
+static int placementFor(int leg)
+{
+  return (int)(LEG_PLACEMENT_ANGLE * ROTATION_MULTIPLIER[leg]);
+}
+
+// The ground stroke (propel end minus lift end) of each motion alone, in the
+// leg's XY plane: the straight stroke rotated by the leg's placement, and the
+// rotation stroke along the leg frame's Y axis.
+static Vector2 straightStroke(int leg, Vector2 v)
+{
+  float side = STRIDE_MULTIPLIER[leg];
+  float a = placementFor(leg) * (float)M_PI / 180.0f;
+  float x = 2 * v.x * side, y = -2 * v.y * side;
+  return Vector2(x * cosf(a) - y * sinf(a), x * sinf(a) + y * cosf(a));
+}
+
+static Vector2 rotationStroke(float rotateStrideLength)
+{
+  return Vector2(0, 2 * rotateStrideLength);
+}
+
+// Reachability shrink for combined strokes: at most 40 steps of 5 %, about
+// 13 % of the stroke left at worst.
+constexpr int REACH_SHRINK_STEPS = 40;
+constexpr float REACH_SHRINK_FACTOR = 0.95f;
+
+// Whether every leg's blended stroke ends, with both motions amplified by
+// total / own weight and then scaled by @p scale, are reachable.
+static bool strokeEndsReachable(const Stride &st, float f, float t, float scale, float ground)
+{
+  Vector2 v = st.v * (scale * st.weightSum / f);
+  float rot = st.rotateStrideLength * scale * st.weightSum / t;
+  float wS = f / st.weightSum, wR = t / st.weightSum;
+  Vector2 pivot(STANCE_DISTANCE, 0);
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+  {
+    float side = STRIDE_MULTIPLIER[leg];
+    int placement = placementFor(leg);
+    for (int end = -1; end <= 1; end += 2) // lift end, propel end
+    {
+      Vector3 straight = Vector3(end * v.x * side + STANCE_DISTANCE, -end * v.y * side, ground).rotate(placement, pivot);
+      Vector3 rotation(STANCE_DISTANCE, end * rot, ground);
+      if (!kinematics::isValidTarget(straight * wS + rotation * wR))
+        return false;
+    }
+  }
+  return true;
+}
+
+float mountAngleDeg(int leg)
+{
+  return (leg < LEG_COUNT / 2 ? 180.0f : 0.0f) + placementFor(leg);
+}
+
 static Stride strideFor(int leg, const GaitParams &p, const GaitInput &in)
 {
   Stride st;
@@ -116,17 +171,52 @@ static Stride strideFor(int leg, const GaitParams &p, const GaitInput &in)
   st.v.y = clampf(st.v.y, -p.maxStrideLength / 2, p.maxStrideLength / 2);
   st.v = st.v * in.speedScale;
 
+  // Superposition: footTarget blends the two paths with weights that sum to
+  // one, so with both inputs each motion is amplified by total / own weight,
+  // and the blended stroke is the sum of the two full strokes. The rotation
+  // path's bulge stays a weighted average, and blend() lifts a combined swing
+  // to the higher of the two paths. Positive rotate turns the body
+  // anticlockwise: its stroke moves the left feet forward and the right feet
+  // back. When the combined stroke of
+  // any leg exceeds the gait's stride limit (or the longer single stroke,
+  // so single-motion strokes are never shortened), both motions shrink by
+  // the same factor on every leg, which keeps the arc and its legs in step.
+  float f = fabsf(st.forwardAmount), t = fabsf(st.turnAmount);
+  if (f >= MIN_INPUT && t >= MIN_INPUT)
+  {
+    float scale = 1;
+    for (int i = 0; i < LEG_COUNT; i++)
+    {
+      Vector2 s = straightStroke(i, st.v), r = rotationStroke(st.rotateStrideLength);
+      float combined = (s + r).magnitude();
+      float limit = fmaxf(p.maxStrideLength, fmaxf(s.magnitude(), r.magnitude()));
+      if (combined > limit)
+        scale = fminf(scale, limit / combined);
+    }
+    // Shrink further, still together, until every leg's stroke ends are
+    // reachable: the ends lie farthest out, and each motion alone may reach
+    // while their sum does not.
+    for (int i = 0; i < REACH_SHRINK_STEPS && !strokeEndsReachable(st, f, t, scale, in.distanceFromGround); i++)
+      scale *= REACH_SHRINK_FACTOR;
+    st.v = st.v * (scale * st.weightSum / f);
+    st.rotateStrideLength *= scale * st.weightSum / t;
+  }
+
   st.ground = in.distanceFromGround;
   st.lift = LIFT_HEIGHT * p.liftHeightMultiplier;
   st.side = STRIDE_MULTIPLIER[leg];
-  st.placement = (int)(LEG_PLACEMENT_ANGLE * ROTATION_MULTIPLIER[leg]);
+  st.placement = placementFor(leg);
   st.pivot = Vector2(STANCE_DISTANCE, 0);
   return st;
 }
 
 static Vector3 blend(const Stride &st, Vector3 straightPoint, Vector3 rotatePoint)
 {
-  return (straightPoint * fabsf(st.forwardAmount) + rotatePoint * fabsf(st.turnAmount)) / st.weightSum;
+  Vector3 p = (straightPoint * fabsf(st.forwardAmount) + rotatePoint * fabsf(st.turnAmount)) / st.weightSum;
+  // With both motions, the swing lifts as high as the higher of the two.
+  if (fabsf(st.forwardAmount) >= MIN_INPUT && fabsf(st.turnAmount) >= MIN_INPUT)
+    p.z = fmaxf(straightPoint.z, rotatePoint.z);
+  return p;
 }
 
 // End of the ground path (start of the swing).

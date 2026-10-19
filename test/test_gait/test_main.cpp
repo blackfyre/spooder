@@ -1,5 +1,7 @@
 #include <unity.h>
 #include "movement/gait.h"
+#include "movement/kinematics.h"
+#include <math.h>
 
 using namespace gait;
 
@@ -130,6 +132,148 @@ void test_cycle_start_captured_on_phase_change()
   TEST_ASSERT_FLOAT_WITHIN(0.05, 0, cycle.start.distanceTo(propelEnd));
 }
 
+// --- steering: superposed translate and rotate --------------------------------
+
+// The leg's ground stroke (propel end minus lift end) in its XY plane.
+static Vector2 groundStroke(int leg, const GaitParams &p, const GaitInput &in)
+{
+  LegCycle a = freshCycle(), b = freshCycle();
+  Vector3 propel = footTarget(leg, p.pushFraction - 1e-6f, p, in, a, STANDING);
+  Vector3 lift = footTarget(leg, 1 - 1e-6f, p, in, b, STANDING);
+  return Vector2(propel.x - lift.x, propel.y - lift.y);
+}
+
+static bool cycleReachable(int leg, const GaitParams &p, const GaitInput &in)
+{
+  LegCycle cycle = freshCycle();
+  Vector3 current = STANDING;
+  for (int i = 0; i <= 200; i++)
+  {
+    current = footTarget(leg, i / 200.0f * 0.9999f, p, in, cycle, current);
+    if (!kinematics::isValidTarget(current))
+      return false;
+  }
+  return true;
+}
+
+static GaitInput steering(Vector2 translate, float rotate, float ground)
+{
+  GaitInput in = input(translate, rotate);
+  in.distanceFromGround = ground;
+  in.speedScale = 1.1f; // speed dial 100
+  return in;
+}
+
+void test_turning_while_walking_keeps_the_forward_stroke()
+{
+  // Each leg's combined stroke is its straight stroke plus its rotation
+  // stroke: adding a turn no longer takes stride away from walking.
+  for (int g = 0; g < GAIT_COUNT; g++)
+  {
+    const GaitParams &p = params((Gait)g);
+    for (int leg = 0; leg < LEG_COUNT; leg++)
+    {
+      Vector2 walk = groundStroke(leg, p, input(Vector2(0, 60), 0));
+      Vector2 turn = groundStroke(leg, p, input(Vector2(0, 0), 30));
+      Vector2 both = groundStroke(leg, p, input(Vector2(0, 60), 30));
+      // Within the integer truncation of the placement rotation.
+      TEST_ASSERT_FLOAT_WITHIN(3, walk.x + turn.x, both.x);
+      TEST_ASSERT_FLOAT_WITHIN(3, walk.y + turn.y, both.y);
+    }
+  }
+}
+
+void test_positive_rotate_turns_the_body_anticlockwise()
+{
+  // Walking forward moves every grounded foot backward relative to the body.
+  // A positive rotate moves the left feet (legs 1-3) forward and the right
+  // feet back, so the body's right side advances: an anticlockwise turn.
+  const GaitParams &p = params(Gait::Tri);
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+  {
+    Vector2 forward = groundStroke(leg, p, input(Vector2(0, 50), 0));
+    Vector2 turn = groundStroke(leg, p, input(Vector2(0, 0), 50));
+    bool left = leg < 3;
+    float along = forward.x * turn.x + forward.y * turn.y; // > 0: foot moves backward too
+    TEST_ASSERT_TRUE_MESSAGE(left ? along < 0 : along > 0, "rotation direction");
+  }
+}
+
+void test_combined_swing_lifts_to_the_higher_path()
+{
+  const GaitParams &p = params(Gait::Tri);
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+  {
+    float t = (p.pushFraction + 1) / 2; // mid-swing
+    LegCycle a = freshCycle(), b = freshCycle(), c = freshCycle();
+    float walk = footTarget(leg, t, p, input(Vector2(0, 60), 0), a, STANDING).z;
+    float turn = footTarget(leg, t, p, input(Vector2(0, 0), 30), b, STANDING).z;
+    float both = footTarget(leg, t, p, input(Vector2(0, 60), 30), c, STANDING).z;
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, fmaxf(walk, turn), both);
+  }
+}
+
+void test_single_motions_are_unchanged_by_steering()
+{
+  // A rotate amount below the walking threshold leaves the straight path as
+  // it was, and the same for a tiny translate on the rotation path.
+  const GaitParams &p = params(Gait::Tri);
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+  {
+    const float TS[] = {0.1f, 0.4f, 0.7f, 0.95f};
+    for (float t : TS)
+    {
+      LegCycle a = freshCycle(), b = freshCycle();
+      Vector3 walk = footTarget(leg, t, p, input(Vector2(20, 70), 0), a, STANDING);
+      Vector3 nearly = footTarget(leg, t, p, input(Vector2(20, 70), MIN_INPUT / 2), b, STANDING);
+      TEST_ASSERT_FLOAT_WITHIN(0.01f, 0, walk.distanceTo(nearly));
+    }
+  }
+}
+
+void test_combined_stroke_stays_within_the_stride_limit_and_reachable()
+{
+  const Vector2 directions[] = {Vector2(0, 100), Vector2(0, -100), Vector2(100, 0), Vector2(70.7f, 70.7f)};
+  const float grounds[] = {-60, -60 - 1.7f * 50, -60 - 1.7f * 100}; // body height 0, 50, 100
+  const float ROTATES[] = {-100, -40, 40, 100};
+  const bool FIXED[] = {false, true};
+  for (int g = 0; g < GAIT_COUNT; g++)
+  {
+    const GaitParams &p = params((Gait)g);
+    for (Vector2 d : directions)
+      for (float rotate : ROTATES)
+        for (float ground : grounds)
+          for (bool fixed : FIXED)
+          {
+            GaitInput both = steering(d, rotate, ground), walk = steering(d, 0, ground), turn = steering(Vector2(), rotate, ground);
+            both.fixedStride = walk.fixedStride = turn.fixedStride = fixed;
+            float scale = 1;
+            for (int leg = 0; leg < LEG_COUNT; leg++)
+            {
+              Vector2 s = groundStroke(leg, p, walk), r = groundStroke(leg, p, turn), c = groundStroke(leg, p, both);
+              float limit = fmaxf(p.maxStrideLength, fmaxf(s.magnitude(), r.magnitude()));
+              TEST_ASSERT_TRUE_MESSAGE(c.magnitude() <= limit + 3, "combined stroke above the limit");
+              // The combined stroke is the sum, scaled by one common factor:
+              // the same on every leg, so the arc keeps its shape.
+              Vector2 sum = s + r;
+              if (sum.magnitude() > 10)
+              {
+                float k = c.magnitude() / sum.magnitude();
+                if (leg == 0)
+                  scale = k;
+                TEST_ASSERT_FLOAT_WITHIN(0.05f, scale, k);
+                TEST_ASSERT_FLOAT_WITHIN(3 + 0.02f * sum.magnitude(), sum.x * k, c.x);
+                TEST_ASSERT_FLOAT_WITHIN(3 + 0.02f * sum.magnitude(), sum.y * k, c.y);
+              }
+              // Where each motion alone reaches every point of its cycle, so
+              // does their combination.
+              if (cycleReachable(leg, p, walk) && cycleReachable(leg, p, turn))
+                TEST_ASSERT_TRUE_MESSAGE(cycleReachable(leg, p, both), "unreachable combined target");
+            }
+          }
+  }
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -141,5 +285,10 @@ int main()
   RUN_TEST(test_fixed_stride_ignores_magnitude);
   RUN_TEST(test_dynamic_stride_scales_with_magnitude);
   RUN_TEST(test_cycle_start_captured_on_phase_change);
+  RUN_TEST(test_turning_while_walking_keeps_the_forward_stroke);
+  RUN_TEST(test_positive_rotate_turns_the_body_anticlockwise);
+  RUN_TEST(test_combined_swing_lifts_to_the_higher_path);
+  RUN_TEST(test_single_motions_are_unchanged_by_steering);
+  RUN_TEST(test_combined_stroke_stays_within_the_stride_limit_and_reachable);
   return UNITY_END();
 }

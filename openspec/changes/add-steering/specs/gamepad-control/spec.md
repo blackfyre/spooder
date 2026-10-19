@@ -2,9 +2,9 @@
 
 ### Requirement: Stick modes
 The bridge SHALL offer two stick modes, steer and crab, toggled by `b` (one toggle per press) and kept across a controller reconnect like the other settings. Steer SHALL be the default. This requirement supersedes the stick rows of the input mapping table.
-- In steer mode, left stick Y SHALL set the forward or backward translate, left stick X SHALL steer, and the translate's sideways part SHALL be zero. While the left stick points backward, steering SHALL be mirrored as a car's is: steering left while reversing turns the body clockwise.
+- In steer mode, left stick Y SHALL set the forward or backward translate, left stick X SHALL steer, and the translate's sideways part SHALL be zero. While the left stick points backward by more than 10 %, the robot SHALL reverse and steering SHALL be mirrored as a car's is: steering left while reversing turns the body clockwise. Between 0 and 10 % backward there SHALL be no reverse and no mirroring, so that a stick held sideways turns the body on the spot without flipping direction.
 - In crab mode, the left stick SHALL set the translate vector and the right stick X the rotate amount, as before.
-- In both modes, right stick X SHALL add to the rotate amount, and the sum SHALL be clamped to −100..100.
+- In both modes, right stick X SHALL add to the rotate amount, and the sum SHALL be clamped to −100..100. A stick pushed right SHALL turn the body clockwise, and left anticlockwise.
 - The status screen SHALL show the stick mode.
 
 #### Scenario: Steering while walking

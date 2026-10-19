@@ -46,10 +46,26 @@ void test_healthy_screen_shows_every_item()
   TEST_ASSERT_TRUE(screenContains("6.02 V"));
   TEST_ASSERT_TRUE(screenContains("1.23 A"));
   TEST_ASSERT_TRUE(screenContains("H 40"));
-  TEST_ASSERT_TRUE(screenContains("Speed 44"));
+  TEST_ASSERT_TRUE(screenContains("Spd 44"));
   TEST_ASSERT_TRUE(screenContains("dynamic"));
+  TEST_ASSERT_TRUE(screenContains("steer"));
   TEST_ASSERT_TRUE(screenContains("Faults: none"));
   TEST_ASSERT_FALSE(screenContains("E-STOP"));
+}
+
+void test_stick_mode_shown_and_settings_line_fits()
+{
+  Inputs in = healthy();
+  in.desired.stickMode = gamepad_mapping::StickMode::Crab;
+  in.desired.height = 100;
+  in.desired.speed = 100;
+  compose(in, out);
+  TEST_ASSERT_TRUE(screenContains("crab"));
+  in.desired.stickMode = gamepad_mapping::StickMode::Steer;
+  compose(in, out);
+  TEST_ASSERT_TRUE(screenContains("H 100 Spd 100 dynamic steer"));
+  for (int l = 0; l < LINE_COUNT; l++)
+    TEST_ASSERT_TRUE_MESSAGE(strlen(out[l].text) <= (size_t)LINE_CHARS, out[l].text);
 }
 
 void test_no_gamepad_is_shown()
@@ -134,7 +150,7 @@ void test_link_lost_hides_robot_values()
   TEST_ASSERT_FALSE(screenContains("overcurrent"));
   TEST_ASSERT_FALSE(screenContains("Out on"));
   // Bridge-side settings are still shown.
-  TEST_ASSERT_TRUE(screenContains("Speed 44"));
+  TEST_ASSERT_TRUE(screenContains("Spd 44"));
 }
 
 void test_sensors_shown_only_when_available()
@@ -325,6 +341,7 @@ void test_setup_screen_cuts_overlong_text()
 int main()
 {
   UNITY_BEGIN();
+  RUN_TEST(test_stick_mode_shown_and_settings_line_fits);
   RUN_TEST(test_setup_screen_shows_every_item);
   RUN_TEST(test_setup_screen_states);
   RUN_TEST(test_every_setup_line_fits_at_the_widest);

@@ -115,6 +115,15 @@ void test_reconnect_starts_in_stand_and_keeps_settings()
   TEST_ASSERT_TRUE(d.stride == StrideMode::Fixed);
 }
 
+void test_stick_mode_survives_reconnect()
+{
+  pressButton(BUTTON_B);
+  pad.connected = false;
+  tick();
+  pad.connected = true;
+  TEST_ASSERT_TRUE(tick().stickMode == StickMode::Crab);
+}
+
 void test_reconnect_clears_sleep()
 {
   pressButton(BUTTON_Y);
@@ -283,6 +292,7 @@ void test_clear_does_not_change_mode_request_counter()
 
 void test_left_stick_translates_with_y_forward()
 {
+  pressButton(BUTTON_B); // crab: the left stick translates
   pad.axisY = -511; // Bluepad32: up is negative
   Desired d = tick();
   TEST_ASSERT_EQUAL(100, d.translateY);
@@ -312,18 +322,92 @@ void test_translate_magnitude_is_clamped()
 
 void test_right_stick_x_rotates_and_y_is_unused()
 {
-  pad.axisRX = -511;
+  pad.axisRX = -511; // left: anticlockwise, positive
   pad.axisRY = 512;
   Desired d = tick();
-  TEST_ASSERT_EQUAL(-100, d.rotate);
+  TEST_ASSERT_EQUAL(100, d.rotate);
   TEST_ASSERT_EQUAL(0, d.translateX);
   TEST_ASSERT_EQUAL(0, d.translateY);
+}
+
+// --- Stick modes ---
+
+void test_steer_is_the_default_and_b_toggles_crab()
+{
+  TEST_ASSERT_TRUE(last.stickMode == StickMode::Steer);
+  pressButton(BUTTON_B);
+  TEST_ASSERT_TRUE(last.stickMode == StickMode::Crab);
+  pad.buttons |= BUTTON_B; // held: one toggle per press
+  for (int i = 0; i < 10; i++)
+    tick();
+  TEST_ASSERT_TRUE(last.stickMode == StickMode::Steer);
+}
+
+void test_steering_while_walking()
+{
+  // Left stick forward and to the left: forward, no strafe, and the same
+  // turn as the right stick to the left: anticlockwise, a positive rotate.
+  pad.axisY = -pct(700);
+  pad.axisX = -pct(700);
+  Desired d = tick();
+  TEST_ASSERT_EQUAL(0, d.translateX);
+  TEST_ASSERT_TRUE(d.translateY > 50);
+  TEST_ASSERT_TRUE(d.rotate > 50);
+  TEST_ASSERT_EQUAL(d.translateY, d.rotate); // a 45 degree stick
+}
+
+void test_steering_while_reversing_is_mirrored()
+{
+  pad.axisY = pct(700); // back
+  pad.axisX = -pct(700); // left
+  Desired d = tick();
+  TEST_ASSERT_EQUAL(0, d.translateX);
+  TEST_ASSERT_TRUE(d.translateY < -50);
+  TEST_ASSERT_TRUE(d.rotate < -50); // the rear swings right: clockwise
+}
+
+void test_steering_sideways_turns_on_the_spot()
+{
+  // Left stick X alone turns, as right stick X does; a slightly backward
+  // stick within the reverse threshold does not flip it.
+  pad.axisX = -511;
+  TEST_ASSERT_TRUE(tick().rotate == 100);
+  pad.axisY = pct(80); // a little back: no reversing, no mirroring
+  Desired d = tick();
+  TEST_ASSERT_EQUAL(0, d.translateY);
+  TEST_ASSERT_TRUE(d.rotate > 90);
+  pad.axisY = pct(200); // clearly back: reverse, mirrored
+  d = tick();
+  TEST_ASSERT_TRUE(d.translateY < -REVERSE_THRESHOLD);
+  TEST_ASSERT_TRUE(d.rotate < 0);
+}
+
+void test_right_stick_adds_rotation_in_both_modes_and_clamps()
+{
+  pad.axisY = -pct(700);
+  pad.axisX = pct(700); // steer right: clockwise, negative
+  pad.axisRX = 512;
+  TEST_ASSERT_EQUAL(-100, tick().rotate);
+  pad.axisRX = -pct(300); // right stick left takes some of it back
+  Desired d = tick();
+  TEST_ASSERT_TRUE(d.rotate < 0 && d.rotate > -d.translateY);
+
+  pad = PadState();
+  pad.connected = true;
+  tick();
+  pressButton(BUTTON_B); // crab
+  pad.axisX = pct(700);
+  pad.axisRX = pct(500);
+  d = tick();
+  TEST_ASSERT_TRUE(d.translateX > 50);
+  TEST_ASSERT_TRUE(d.rotate < -40 && d.rotate > -60);
 }
 
 // --- Dead zone ---
 
 void test_stick_inside_dead_zone_is_zero()
 {
+  pressButton(BUTTON_B); // crab, so left stick X would translate
   pad.axisX = pct(50); // 5 %
   Desired d = tick();
   TEST_ASSERT_EQUAL(0, d.translateX);
@@ -396,6 +480,12 @@ int main()
   RUN_TEST(test_left_stick_translates_with_y_forward);
   RUN_TEST(test_translate_magnitude_is_clamped);
   RUN_TEST(test_right_stick_x_rotates_and_y_is_unused);
+  RUN_TEST(test_steer_is_the_default_and_b_toggles_crab);
+  RUN_TEST(test_steering_while_walking);
+  RUN_TEST(test_steering_while_reversing_is_mirrored);
+  RUN_TEST(test_steering_sideways_turns_on_the_spot);
+  RUN_TEST(test_right_stick_adds_rotation_in_both_modes_and_clamps);
+  RUN_TEST(test_stick_mode_survives_reconnect);
   RUN_TEST(test_stick_inside_dead_zone_is_zero);
   RUN_TEST(test_output_continuous_at_dead_zone_edge);
   RUN_TEST(test_to_command_sets_flags_and_fields);
