@@ -35,6 +35,7 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
   - `mise run desktop-sim` runs it together with the calibrator, and `mise run e2e` tests the calibrator against it.
 - **Bridge image-size check.** Every build and upload checks the app against the factory partition of the custom partition table, and reports the headroom.
 - **Toolchain.** mise provides every toolchain, and the SDKs are pinned git submodules. OpenSpec holds the specifications.
+- **Calibrator icon.** A hexapod from above in the Blackfyre colours (`desktop/assets`), and `mise run desktop-install`, which installs a launcher and the icon for the current user on Linux.
 - **Project files.** An MIT licence, this changelog and an expanded readme.
 
 ### Changed

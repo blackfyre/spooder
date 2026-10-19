@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Spooder calibrator: the hexapod from above, in the Blackfyre colours. -->
+  <rect x="16" y="16" width="480" height="480" rx="104" fill="#1B1B19"/>
+  <g fill="none" stroke="#F3F2EE" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <!-- left legs: front, middle, rear (coxa out, then the leg to the foot) -->
+    <polyline points="206,186 150,150 112,96"/>
+    <polyline points="196,256 128,256 80,288"/>
+    <polyline points="206,326 150,362 112,416"/>
+    <!-- right legs -->
+    <polyline points="306,186 362,150 400,96"/>
+    <polyline points="316,256 384,256 432,288"/>
+    <polyline points="306,326 362,362 400,416"/>
+  </g>
+  <!-- body -->
+  <polygon points="256,136 326,178 326,334 256,376 186,334 186,178" fill="#E2551D"/>
+  <!-- knee servos -->
+  <g fill="#E2551D" stroke="#1B1B19" stroke-width="10">
+    <circle cx="150" cy="150" r="24"/><circle cx="128" cy="256" r="24"/><circle cx="150" cy="362" r="24"/>
+    <circle cx="362" cy="150" r="24"/><circle cx="384" cy="256" r="24"/><circle cx="362" cy="362" r="24"/>
+  </g>
+  <!-- front marker -->
+  <polygon points="256,170 286,214 226,214" fill="#1B1B19"/>
+</svg>

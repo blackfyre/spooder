@@ -170,6 +170,15 @@ robot=$$
 exec build/virtual-robot/virtual-robot --link "$usb" --echo
 '''
 
+[tasks.desktop-install]
+description = "Install the calibrator's launcher and icon for this user (Linux, ~/.local/share)"
+depends = ["desktop-build"]
+run = "desktop/scripts/install-desktop-entry.sh"
+
+[tasks.desktop-icons]
+description = "Render desktop/assets/icon.svg to the committed PNGs and .ico (needs resvg and ImageMagick)"
+run = "desktop/scripts/render-icons.sh"
+
 [tasks.desktop-test]
 description = "Run the desktop calibrator's Go tests (vet, then go test)"
 depends = ["desktop-deps"]

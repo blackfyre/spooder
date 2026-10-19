@@ -36,6 +36,7 @@ mise run desktop-build   # the desktop calibrator -> build/desktop/spooder-calib
 mise run desktop-run     # build and start it (run from the checkout: it exports there)
 mise run desktop-test    # gofmt, go vet and go test of desktop/
 mise run desktop-deps    # name the missing Linux packages for the Gio build
+mise run desktop-install # the launcher and icon for this user (Linux); desktop-icons re-renders the icon
 mise run virtual-robot   # the virtual robot -> build/virtual-robot/virtual-robot
 mise run virtual-robot-run  # run it, USB terminal linked at build/virtual-robot/usb
 mise run desktop-sim      # both: the virtual robot in this terminal, the calibrator on its port
@@ -96,6 +97,7 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `internal/legview`: the legs pane's geometry: forward kinematics (tested against `test/golden/leg_pose.txt`), leg mounting, servo limits.
   - `internal/calib`: the joint table shown from reports, pending edits, one change in flight, resend and confirmation by request id.
   - `internal/export`: `calibration_defaults.cpp` in the fixed format (tested against the fixture `test/golden/calibration_defaults.cpp`), the checkout check, the diff and the atomic write.
+  - `assets/`: the app icon, `icon.svg`, with its rendered PNGs and `icon.ico`.
   - `internal/virtualrobot`: runs the virtual robot for tests; `e2e/`: end-to-end tests of the real link and session against it (skipped when it is not built).
   - `internal/ui`: the Gio window in the Blackfyre look; `internal/ui/fonts`: Archivo and JetBrains Mono with their OFL licences. `internal/appearance` and `internal/winreg` are copied from bopen (MIT, `desktop/LICENSE.bopen`).
 - `tools/virtual-robot/`: the virtual robot, a native C++17 program (CMake, Ninja) running `core/robot/robot_tick` behind a pseudo-terminal that acts as the robot's USB port (frames and debug text as on the board), optionally a second one for the bridge link, or a simulated bridge. Simulated supply and servo current; commands on standard input (`supply V`, `current A|auto`, `load K`, `bridge off|idle|gamepad|clear`, `estop on|off`, `unplug`, `plug`, `step N`, `status`, `quit`); `--help` lists the options (`--link`, `--speed`, `--stepped`, `--bridge-pty`). The desktop calibrator connects with `--port build/virtual-robot/usb`.

@@ -1,3 +1,5 @@
+<img src="desktop/assets/icon-256.png" alt="" width="96" align="right">
+
 # Spooder
 
 > A shameless iteration over [Aecert's Hexapod V1](https://github.com/Ryan-Mirch/Aecerts_Hexapod_V1).
@@ -60,7 +62,7 @@ mise run desktop-sim
 
 This builds the virtual robot and the calibrator, runs the robot in your terminal and opens the calibrator on its port. Click **Connect**, then **Calibrate**. In the terminal, `supply 7.5`, `estop on`, `load 5`, `unplug` or `bridge gamepad` exercise the faults and the arbitration. `quit` or closing the window ends both.
 
-The calibrator needs cgo and the Wayland, X11 and EGL development packages on Linux. `mise run desktop-deps` names any that are missing.
+The calibrator needs cgo and the Wayland, X11 and EGL development packages on Linux. `mise run desktop-deps` names any that are missing. `mise run desktop-install` adds it to your desktop's launcher with its icon.
 
 ### Flash the boards
 
