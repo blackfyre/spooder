@@ -7,7 +7,7 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 ### Added
 
 - **Robot on the Pimoroni Servo 2040.** A pico-sdk firmware running a 20 ms control tick: link input, power protection, supervisor, calibration, body state machine, servo output on GPIO0–17, the status LEDs and telemetry.
-- **Movement core.** The upstream inverse kinematics, Bézier foot paths and gait table (tri, wave, ripple, bi, quad), ported to a non-blocking, hardware-free state machine (Initialise, Stand, Walk, Sleep, Calibrate) on a fixed 5 ms grid, with host tests.
+- **Movement core.** The upstream inverse kinematics, Bézier foot paths and gait table (tri, wave, ripple, bi, quad, hop), ported to a non-blocking, hardware-free state machine (Initialise, Stand, Walk, Sleep, Calibrate) on a fixed 5 ms grid, with host tests.
 - **Power protection.** Overcurrent, sustained overload, brown-out, low and high voltage, and the emergency stop. Faults latch and cut servo output at once. Clearing a fault never restarts motion; a new mode request must follow. Limits are set at build time for the fitted servos and supply.
 - **Status LEDs.** The six WS2812 LEDs show the operating state and faults.
 - **Gamepad bridge on the TTGO T-Display.**
