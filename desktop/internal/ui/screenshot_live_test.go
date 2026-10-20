@@ -5,6 +5,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -78,6 +79,17 @@ func TestLiveScreenshots(t *testing.T) {
 			}
 			frame(w, router)
 		}
+		save := func(name string, img image.Image) {
+			t.Helper()
+			f, err := os.Create(filepath.Join(dir, "live-"+theme+"-"+name+".png"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer f.Close()
+			if err := png.Encode(f, img); err != nil {
+				t.Fatal(err)
+			}
+		}
 		shoot := func(name string) {
 			t.Helper()
 			var ops op.Ops
@@ -92,14 +104,29 @@ func TestLiveScreenshots(t *testing.T) {
 			if err := hw.Screenshot(img); err != nil {
 				t.Fatal(err)
 			}
-			f, err := os.Create(filepath.Join(dir, "live-"+theme+"-"+name+".png"))
-			if err != nil {
+			save(name, img)
+		}
+		// The four-view window, on the same session.
+		viewsEnv := w.env
+		viewsEnv.Selection = new(atomic.Int32)
+		views, err := newViewsWindow(viewsEnv)
+		if err != nil {
+			t.Fatal(err)
+		}
+		shootViews := func(name string) { // on the same GPU context, at the same size
+			t.Helper()
+			var ops op.Ops
+			gtx := layout.Context{Ops: &ops, Metric: unit.Metric{PxPerDp: 1, PxPerSp: 1},
+				Constraints: layout.Exact(image.Pt(width, height)), Now: nextFrameTime(), Source: new(input.Router).Source()}
+			views.frame(gtx)
+			if err := hw.Frame(&ops); err != nil {
 				t.Fatal(err)
 			}
-			defer f.Close()
-			if err := png.Encode(f, img); err != nil {
+			img := image.NewRGBA(image.Rectangle{Max: image.Pt(width, height)})
+			if err := hw.Screenshot(img); err != nil {
 				t.Fatal(err)
 			}
+			save(name, img)
 		}
 
 		// Connected and observing: the preselected --port, Connect.
@@ -113,8 +140,32 @@ func TestLiveScreenshots(t *testing.T) {
 		time.Sleep(1200 * time.Millisecond) // a status line with the supply settled
 		shoot("observing")
 
-		// In control, Calibrate, a change awaiting the robot's confirmation.
+		// In control, walking forward from the keyboard: the legs pane, the
+		// charts and the four views.
 		click(w, router, &w.control)
+		click(w, router, &w.modes[0]) // Stand
+		waitFor("Stand", func(s session.Snapshot) bool {
+			return s.Body == session.BodyStand && s.Telemetry.OutputsOn
+		})
+		time.Sleep(2 * time.Second) // settled
+		if err := s.SetDrive(session.Drive{Forward: true}); err != nil {
+			t.Fatal(err)
+		}
+		waitFor("Walk", func(s session.Snapshot) bool { return s.Body == session.BodyWalk })
+		time.Sleep(4 * time.Second) // into the stride, with history to chart
+		w.tab = tabLegs
+		frame(w, router)
+		shoot("walking-legs")
+		w.tab = tabCharts
+		frame(w, router)
+		shoot("walking-charts")
+		shootViews("walking-views")
+		if err := s.SetDrive(session.Drive{}); err != nil {
+			t.Fatal(err)
+		}
+		w.tab = tabLog
+
+		// Calibrate, a change awaiting the robot's confirmation.
 		click(w, router, &w.modes[1]) // Calibrate
 		waitFor("Calibrate", func(s session.Snapshot) bool {
 			return s.Body == session.BodyCalibrate && s.Editable && s.Telemetry.OutputsOn

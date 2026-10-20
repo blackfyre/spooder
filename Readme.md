@@ -48,6 +48,38 @@ flowchart LR
 - **Charts**: ten minutes of supply, current, link counters and robot internals (motion share, backstop, tick time), with CSV export.
 - **Keyboard driving**: walk, steer, step aside and change gait, speed, height and stride from the calibrator.
 
+## Screenshots
+
+All taken against the virtual robot, in the calibrator's dark or light look (following your system's).
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/walking-legs-light.png">
+  <img alt="The calibrator in control, walking forward in the tri gait from the keyboard: the status strip, the key hints and the legs pane drawing leg 1 mid-stride" src="docs/images/walking-legs-dark.png">
+</picture>
+
+*Driving from the keyboard: walking forward in the tri gait, the legs pane following the reported pose.*
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/four-views-light.png">
+  <img alt="The four-view window: the robot mid-stride from the top, isometrically from the front left, from the front and from the left, with the selected leg 1 highlighted and the ground line at the feet" src="docs/images/four-views-dark.png">
+</picture>
+
+*The four-view window (**4 views** in the top bar): top, isometric, front and left, from the same pose.*
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/charts-light.png">
+  <img alt="The charts tab: supply voltage with its limits, servo current with the trip and sustained limits, and the frames accepted and rejected on each link" src="docs/images/charts-dark.png">
+</picture>
+
+*The charts tab: ten minutes of supply, current, link and robot-internal history, with CSV export.*
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/estop-light.png">
+  <img alt="The calibrator after an emergency stop: the red banner, the fault in the status strip, output off, and the debug log showing the fault latching and movement stopping" src="docs/images/estop-dark.png">
+</picture>
+
+*An emergency stop: the fault latches, output turns off, and the debug log records why.*
+
 ## Getting started
 
 [mise](https://mise.jdx.dev) provides every toolchain. The SDKs are pinned git submodules.
