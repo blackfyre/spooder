@@ -41,8 +41,12 @@ flowchart LR
   - They are held in RAM, confirmed by the robot's reports, and exported as the compiled defaults.
   - Coxa offsets are shown from the servo centre.
 - **Source arbitration**: the bridge or USB, whichever reports a connected controller. If both do, the robot sleeps.
+- **Rumble feedback**: the gamepad rumbles when a fault latches, the bridge's e-stop switches, the robot link drops or returns, or a gesture is refused.
 - **Gestures**: say hi and wiggle, from Stand: scripted, rate-limited moves that any other request, the e-stop or a fault interrupts. Dance, attack and ball follow once the body geometry is measured.
 - **Legs pane**: forward kinematics of the reported pose, each joint's pulse, rings at the servo limits, and a top view of all six legs.
+- **Four-view window**: the whole robot from the top, front, left and isometrically, from the same pose.
+- **Charts**: ten minutes of supply, current, link counters and robot internals (motion share, backstop, tick time), with CSV export.
+- **Keyboard driving**: walk, steer, step aside and change gait, speed, height and stride from the calibrator.
 
 ## Getting started
 
@@ -53,7 +57,7 @@ mise install          # Python, PlatformIO, CMake, Ninja, Arm GNU toolchain, Go
 mise run setup        # fetch the pinned submodules
 ```
 
-The robot firmware needs power limits chosen for your servos and supply. Copy `firmware/servo2040/src/power_limits.example.h` to `power_limits.h` and adjust it.
+The robot firmware needs power limits chosen for your servos and supply. Copy `firmware/servo2040/src/power_limits.example.h` to `power_limits.h` and adjust it. The servo model sets how fast the joints may turn: `SPOODER_SERVO_PROFILE` names it (default `MG996R`; the table is in `core/movement/servo_profile.h`).
 
 ### Try it without hardware
 

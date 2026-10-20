@@ -9,6 +9,7 @@ import (
 
 	"github.com/blackfyre/spooder/desktop/internal/calib"
 	"github.com/blackfyre/spooder/desktop/internal/link"
+	"github.com/blackfyre/spooder/desktop/internal/protocol"
 	"github.com/blackfyre/spooder/desktop/internal/session"
 )
 
@@ -236,3 +237,20 @@ func editHint(snap session.Snapshot) string {
 	}
 	return ""
 }
+
+// bridgeText is the bridge link as the robot reports it: its state (down,
+// or up with or without a gamepad) and its frame counts, shown in every
+// state, as a stalled or failing link is when they matter.
+func bridgeText(t protocol.Telemetry) (state, counts string) {
+	state = "down"
+	if t.Flags&protocol.TelemetryBridgeLinkUp != 0 {
+		state = "up · no pad"
+		if t.Flags&protocol.TelemetryBridgeGamepad != 0 {
+			state = "up · pad"
+		}
+	}
+	return state, fmt.Sprintf("%d ok · %d bad", t.BridgeValidFrames, t.BridgeDiscardedFrames)
+}
+
+func bridgeState(t protocol.Telemetry) string  { s, _ := bridgeText(t); return s }
+func bridgeCounts(t protocol.Telemetry) string { _, c := bridgeText(t); return c }

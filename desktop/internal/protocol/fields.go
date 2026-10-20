@@ -19,6 +19,8 @@ func (t FrameType) Name() string {
 		return "calibration_report"
 	case TypePose:
 		return "pose"
+	case TypeDiagnostics:
+		return "diagnostics"
 	}
 	return "type" + strconv.Itoa(int(t))
 }
@@ -68,6 +70,8 @@ func Fields(f Frame) []string {
 		add("rollCentideg", int(t.RollCentideg))
 		add("flags", int(t.Flags))
 		add("gesture", int(t.Gesture))
+		add("bridgeValidFrames", int(t.BridgeValidFrames))
+		add("bridgeDiscardedFrames", int(t.BridgeDiscardedFrames))
 	case TypeCalibrationSet:
 		c := f.CalibrationSet
 		add("requestId", int(c.RequestID))
@@ -96,9 +100,19 @@ func Fields(f Frame) []string {
 			add(n+"servoCentideg", int(j.ServoCentideg))
 			add(n+"pulseUs", int(j.PulseUs))
 		}
+	case TypeDiagnostics:
+		d := f.Diagnostics
+		for i, name := range diagnosticsNames {
+			add(name, int(*d.fields()[i]))
+		}
 	}
 	return out
 }
+
+// diagnosticsNames are the diagnostics fields' names, in payload order.
+var diagnosticsNames = []string{"motionSharePermille", "backstopTicks", "tickMaxUs", "tickMeanUs",
+	"averageCurrentMa", "tripCurrentMa", "sustainedCurrentMa", "minMv", "maxMv", "brownoutMv",
+	"budgetDegPerS", "ratedDegPerS"}
 
 // Encode re-encodes a decoded frame.
 func Encode(f Frame) []byte {
@@ -113,6 +127,8 @@ func Encode(f Frame) []byte {
 		return EncodeCalibrationReport(f.CalibrationReport, f.Seq)
 	case TypePose:
 		return EncodePose(f.Pose, f.Seq)
+	case TypeDiagnostics:
+		return EncodeDiagnostics(f.Diagnostics, f.Seq)
 	}
 	return nil
 }
@@ -125,6 +141,8 @@ func Summary(f Frame) string {
 		fields = fields[:3]
 	case TypePose:
 		fields = fields[:2] // seq and flags
+	case TypeDiagnostics:
+		fields = fields[:5] // seq, share, backstop, tick times
 	}
 	return f.Type.Name() + " " + strings.Join(fields, " ")
 }

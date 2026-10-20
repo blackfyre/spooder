@@ -74,6 +74,15 @@ struct BodyState
   Vector3 offsets[LEG_COUNT];
   bool offsetsChanged[LEG_COUNT];
 
+  // Joint speed budget in degrees per second (0: none). init() loads the
+  // build's servo profile. Each step advances motion by the share of the
+  // elapsed time that keeps every joint within it (motionScale: the
+  // smallest share in the last step, 1 = all).
+  float jointBudgetDegPerS;
+  float motionScale;
+  uint32_t motionPendingUs; // elapsed time not yet advanced (under a budget)
+  uint8_t pendingGesture;   // a gesture request waiting for the next piece
+
   // false once Sleep has folded the legs: servo output should be off.
   bool outputsEnabled;
 
@@ -87,6 +96,8 @@ struct BodyState
   Vector2 translate;
   float rotate;
   float height;
+  float speed;       // speed dial, 0..100
+  float fixedStride; // share of the fixed stride mode, 0..1
 
   gait::Gait currentGait;
   float cycleProgress[LEG_COUNT];
@@ -94,12 +105,14 @@ struct BodyState
 
   int initialiseStep;
   uint32_t initialiseElapsedMs; // time spent in the current Initialise pose
+  uint32_t initialiseCarryUs;   // time below a whole millisecond, not yet counted
   StandTransition stand;
   bool sleepFolded;
 
   // Gestures: the player, the mode-request sequence it started under, and
   // the last gesture request sequence seen.
   gesture::Player perform;
+  uint32_t performCarryUs; // time below a whole millisecond, not yet played
   uint32_t performRequestSeq;
   bool gestureSeqKnown;
   uint32_t lastGestureSeq;
@@ -118,7 +131,9 @@ void setOffsets(BodyState &s, int leg, Vector3 offsets);
 
 /**
  * @brief Advances the body by the time since the previous step (clamped to
- * MAX_STEP_MS) and returns.
+ * MAX_STEP_MS) and returns. Outside Initialise, motion advances by less when
+ * the full time would turn a joint faster than the joint speed budget; the
+ * stale-command timeout still counts elapsed time.
  *
  * The whole state machine runs in fixed internal sub-steps, so transitions,
  * holds and smoothing land on the same time grid whatever the tick length.

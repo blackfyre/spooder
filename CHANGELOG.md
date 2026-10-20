@@ -37,6 +37,11 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 - **Toolchain.** mise provides every toolchain, and the SDKs are pinned git submodules. OpenSpec holds the specifications.
 - **Calibrator icon.** A hexapod from above in the Blackfyre colours (`desktop/assets`), and `mise run desktop-install`, which installs a launcher and the icon for the current user on Linux.
 - **Gestures.** A Perform body mode plays say hi and wiggle from Stand: keyframes of body shifts over planted feet and lifted legs, eased and rate-limited to 300 mm/s per foot, interrupted at once by Sleep, a stale command, the e-stop or a fault, and ended after the current keyframe by any other request. Triggered by L2 + a face button on the gamepad and by buttons or keys 4–8 in the desktop calibrator; the bridge screen, the calibrator and the console show the gesture playing.
+- **Gamepad rumble.** The bridge rumbles the gamepad when a protection fault latches, its e-stop switches on or off, the robot link is lost or regained, or a gesture request does not play; one pattern per event, by priority, never repeating within a second.
+- **Servo profiles and the joint speed budget.**
+  - The build names the fitted servo model (`SPOODER_SERVO_PROFILE`, default `MG996R`). Its rated speed and the share usable under load (MG996R: 429°/s, 0.6) set a joint speed budget.
+  - Movement slows its own clock, in 20 ms pieces, wherever full speed would turn a joint faster than the budget. Feet keep their paths, and motion stays independent of the tick length.
+  - An output rate backstop never moves a joint faster than the servo's rated speed. It reports on the USB console when it engages.
 - **Project files.** An MIT licence, this changelog and an expanded readme.
 
 ### Changed
@@ -47,12 +52,25 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 
 - The desktop calibrator's top bar puts the ports, Refresh, Connect, the control toggle and the e-stop on one aligned row of equal-height buttons, with the link state beneath.
 - While in control, the desktop calibrator shows its keyboard controls under the mode buttons.
+- **Four-view window in the desktop calibrator.** "4 views" in the top bar opens a second window that draws the whole robot from the pose: top, front, left and isometric views. The body is a schematic plate, and the window shows the ground at the lowest foot, the selected leg, the servo limits and the leg numbers. The three orthographic views share one scale.
+- **Charts in the desktop calibrator.** A charts tab keeps ten minutes of supply voltage, current, link frame rates, a mode/output/fault timeline, joint speeds against the servo budget, the selected leg's servo angles, the budget's motion share, the control tick's time and backstop hits. It has 30 s, 2 min and 10 min windows, a hover readout on every chart, and a CSV export.
+- **Diagnostics frame.** The robot sends its internals to the USB host at 10 Hz: the budget's motion share, backstop count, tick time, averaged current, its power limits and the servo profile's speeds. It is a new frame type of protocol version 3, so the bridge is unaffected.
+- The desktop calibrator drives the robot from the keyboard while in control. W/S walk, A/D steer (as the bridge's car layout: on the spot without walking, mirrored when reversing) and Q/E step sideways. Z/X set the speed dial, C/V the height, G the gait and T the stride mode. Losing the window focus stops the input.
 - The desktop calibrator's mode controls are on keys too: 1 Stand, 2 Calibrate, 3 Sleep, F Clear fault, only while in control.
 
 - Walking and turning are superposed instead of shared: turning while walking keeps the full forward stride and follows an arc, with one common scale when a stroke would get too long or unreachable.
 - The bridge steers like a car by default: left stick Y walks, left stick X steers, mirrored when reversing; `b` switches to the crab layout. The right stick turns the body the way it points (it was inverted). The screen shows the stick mode.
 
 - The link protocol is version 3: the command frame carries a gesture request and its counter (14-byte payload), telemetry the gesture playing. Flash both boards together.
+
+- Walking at higher speed dial settings is slower: as fast as the servos can follow, no faster.
+- Feet are fitted to the servos' 0–180° travel outside Calibrate: a target that would take a joint past its end (with the calibration offsets) is moved just enough, continuously, so the joints agree with each other instead of one being clamped at its pulse limit.
+- The speed dial and the stride mode are eased like translate and height, so changing either no longer moves every foot at once.
+- The movement code costs much less on the RP2040: the stride's reach is solved exactly instead of searched, trigonometry and powers are gone from the foot paths, and phase tracking computes the stride only on a phase change.
+- A leg entering its cycle part-way through a phase (entering Walk, a gait change) starts from where its foot is, instead of jumping onto the path (up to 45° in one tick in Bi and Ripple).
+- Foot targets are valid only within the femur and tibia's reach from the femur joint, less 4 mm (295 mm), not 340 mm from the coxa pivot. Strides that would not reach shrink smoothly, for single motions too. At body height 100 they are shorter than before: 50–78% at the default dial.
+
+- Telemetry on every link also reports the bridge link: up or down, whether a gamepad is on it, and its frame counts (reserved bytes, no version bump). The desktop calibrator shows it in a Bridge cell, and `mise run monitor --frames` on each telemetry line.
 
 ### Removed
 

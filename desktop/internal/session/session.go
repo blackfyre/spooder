@@ -10,8 +10,9 @@
 //     accepts its e-stop.
 //   - Control: frames report a connected controller; Stand, Calibrate and
 //     Sleep advance the mode-request counter, Clear fault the clear counter
-//     and a gesture the gesture-request counter. Translate and rotate are
-//     always zero.
+//     and a gesture the gesture-request counter. Held drive keys request
+//     Walk from Stand and set translate and rotate while walking; the
+//     walking settings (speed, height, gait, stride) travel in every frame.
 //   - Releasing control, losing the connection or shutting down stops
 //     reporting a controller and abandons unconfirmed joint edits.
 package session
@@ -30,8 +31,9 @@ import (
 // rule uses the same second).
 const StaleAfter = time.Second
 
-// Command defaults for the fields the app never changes, as the bridge's
-// gamepad mapping starts: body height 0, speed 44, gait Tri, dynamic stride.
+// Command defaults while observing, and the walking settings' starting
+// values, as the bridge's gamepad mapping starts: body height 0, speed 44,
+// gait Tri, dynamic stride.
 const (
 	commandHeight = 0
 	commandSpeed  = 44
@@ -79,18 +81,23 @@ type Session struct {
 	// The latest gesture request and its counter (protocol.Gesture* ids).
 	gesture        uint8
 	gestureCounter uint8
-	telemetry      protocol.Telemetry
-	telemetryAt    time.Time
-	haveTelemetry  bool
-	stats          link.Stats
-	calib          calib.Model
-	reportAt       time.Time
-	pose           protocol.Pose
-	poseAt         time.Time
-	havePose       bool
-	log            []LogLine
-	frames         []FrameLine
-	strayLines     int
+	// Driving: the held drive keys and the walking settings.
+	drive                       Drive
+	speed, height, gait, stride uint8
+	telemetry                   protocol.Telemetry
+	telemetryAt                 time.Time
+	haveTelemetry               bool
+	stats                       link.Stats
+	calib                       calib.Model
+	reportAt                    time.Time
+	pose                        protocol.Pose
+	poseAt                      time.Time
+	havePose                    bool
+	history                     History
+	historyVersion              uint64
+	log                         []LogLine
+	frames                      []FrameLine
+	strayLines                  int
 }
 
 // New returns a session in observe mode. now defaults to time.Now; onChange,
@@ -100,7 +107,7 @@ func New(now func() time.Time, onChange func()) *Session {
 	if now == nil {
 		now = time.Now
 	}
-	return &Session{now: now, onChange: onChange, mode: RequestSleep}
+	return &Session{now: now, onChange: onChange, mode: RequestSleep, speed: commandSpeed, height: commandHeight}
 }
 
 func (s *Session) changed() {
@@ -124,6 +131,7 @@ func (s *Session) connected() bool { return s.link.Status == link.Connected }
 func (s *Session) release() {
 	s.control = false
 	s.mode = RequestSleep
+	s.drive = Drive{}
 	s.calib.DropPending()
 }
 
@@ -141,6 +149,8 @@ func (s *Session) LinkState(st link.State) {
 			s.calib.Forget()
 			s.haveTelemetry = false
 			s.havePose = false
+			s.history = History{Start: s.now()}
+			s.historyVersion++
 		}
 		return nil
 	})
@@ -154,11 +164,18 @@ func (s *Session) Frame(f protocol.Frame, st link.Stats) {
 		switch f.Type {
 		case protocol.TypeTelemetry:
 			s.telemetry, s.telemetryAt, s.haveTelemetry = f.Telemetry, now, true
+			s.history.addTelemetry(TelemetrySample{At: now, T: f.Telemetry, Host: st})
+			s.historyVersion++
+		case protocol.TypeDiagnostics:
+			s.history.addDiagnostics(DiagnosticsSample{At: now, D: f.Diagnostics})
+			s.historyVersion++
 		case protocol.TypeCalibrationReport:
 			s.calib.Report(f.CalibrationReport)
 			s.reportAt = now
 		case protocol.TypePose:
 			s.pose, s.poseAt, s.havePose = f.Pose, now, true
+			s.history.addPose(now, f.Pose)
+			s.historyVersion++
 		}
 		s.frames = appendCapped(s.frames, FrameLine{At: now, Text: protocol.Summary(f)}, MaxFrameLines)
 		return nil
@@ -202,6 +219,7 @@ func (s *Session) Command() protocol.Command {
 	if s.control && s.connected() {
 		c.Flags |= protocol.FlagControllerConnected
 		c.Mode = uint8(s.mode)
+		s.drives(&c)
 	}
 	if s.estop {
 		c.Flags |= protocol.FlagEmergencyStop
@@ -257,7 +275,7 @@ func (s *Session) RequestMode(m RequestedMode) error {
 		switch m {
 		case RequestStand, RequestCalibrate, RequestSleep:
 		default:
-			return errors.New("the app does not walk the robot")
+			return errors.New("walk by driving: hold a drive key in Stand")
 		}
 		s.mode = m
 		s.modeCounter++
@@ -340,9 +358,13 @@ type Snapshot struct {
 	Control       bool
 	EmergencyStop bool // the app's e-stop flag
 	Mode          RequestedMode
-	CanControl    bool // Take control is possible
-	ModesEnabled  bool // Stand, Calibrate, Sleep and Clear fault are live
-	Editable      bool
+	// Driving: the held keys and the walking settings the app sends in
+	// control.
+	Drive                       Drive
+	Speed, Height, Gait, Stride uint8
+	CanControl                  bool // Take control is possible
+	ModesEnabled                bool // Stand, Calibrate, Sleep and Clear fault are live
+	Editable                    bool
 
 	HaveTelemetry bool
 	Fresh         bool // telemetry no older than StaleAfter
@@ -384,6 +406,11 @@ func (s *Session) Snapshot() Snapshot {
 		Control:       s.control,
 		EmergencyStop: s.estop,
 		Mode:          s.mode,
+		Drive:         s.drive,
+		Speed:         s.speed,
+		Height:        s.height,
+		Gait:          s.gait,
+		Stride:        s.stride,
 		CanControl:    s.connected(),
 		ModesEnabled:  s.control && s.connected(),
 		Editable:      s.editable(),

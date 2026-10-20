@@ -14,6 +14,7 @@ import (
 	"github.com/blackfyre/spooder/desktop/internal/calib"
 	"github.com/blackfyre/spooder/desktop/internal/export"
 	"github.com/blackfyre/spooder/desktop/internal/link"
+	"github.com/blackfyre/spooder/desktop/internal/protocol"
 )
 
 func TestSelectionMoves(t *testing.T) {
@@ -57,6 +58,22 @@ func TestNudgeKeys(t *testing.T) {
 	}
 	if _, _, _, ok := nudgeKey("Q", 0); ok {
 		t.Fatal("Q nudges")
+	}
+}
+
+func TestBridgeText(t *testing.T) {
+	for _, tc := range []struct {
+		tel           protocol.Telemetry
+		state, counts string
+	}{
+		// Down still shows the counts: a stalled or failing link.
+		{protocol.Telemetry{BridgeValidFrames: 9, BridgeDiscardedFrames: 4}, "down", "9 ok · 4 bad"},
+		{protocol.Telemetry{Flags: protocol.TelemetryBridgeLinkUp, BridgeValidFrames: 12}, "up · no pad", "12 ok · 0 bad"},
+		{protocol.Telemetry{Flags: protocol.TelemetryBridgeLinkUp | protocol.TelemetryBridgeGamepad, BridgeValidFrames: 3, BridgeDiscardedFrames: 1}, "up · pad", "3 ok · 1 bad"},
+	} {
+		if state, counts := bridgeText(tc.tel); state != tc.state || counts != tc.counts {
+			t.Errorf("%q %q, want %q %q", state, counts, tc.state, tc.counts)
+		}
 	}
 }
 

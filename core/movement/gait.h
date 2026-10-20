@@ -47,10 +47,14 @@ enum class LegPhase : uint8_t
 
 // Per-leg cycle state. The cycle start point is captured whenever the leg
 // changes phase, so each path segment starts where the foot actually is.
+// A leg that enters a phase part-way (entering Walk, a gait change) runs
+// that segment from where it entered (segmentStart, a cycle position 0..1)
+// to the phase's end, so the foot does not jump onto the path.
 struct LegCycle
 {
   LegPhase phase;
   Vector3 start;
+  float segmentStart = 0;
 };
 
 // Body-level inputs to the foot path, already smoothed and scaled.
@@ -58,7 +62,8 @@ struct GaitInput
 {
   Vector2 translate;         // -100..100 per axis
   float rotate;              // -100..100
-  bool fixedStride;          // constant stride/rotation length, input sets direction only
+  float fixedStride;         // share of the fixed stride (constant stride/rotation length, input sets
+                             // direction only) blended with the dynamic one: 0 dynamic, 1 fixed
   float distanceFromGround;  // foot height relative to the coxa pivot
   float speedScale;          // global speed multiplier
   float rotationScale;       // global rotation multiplier
@@ -84,8 +89,11 @@ bool isValidGait(int value);
 float mountAngleDeg(int leg);
 const GaitParams &params(Gait g);
 
+constexpr int MAX_BEZIER_POINTS = 5;
+
 /**
- * @brief Evaluates a Bézier curve with @p numPoints control points at t (0..1).
+ * @brief Evaluates a Bézier curve with @p numPoints (at most
+ * MAX_BEZIER_POINTS) control points at t (0..1).
  */
 Vector3 bezier(const Vector3 *points, int numPoints, float t);
 

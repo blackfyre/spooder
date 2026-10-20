@@ -29,6 +29,7 @@ const (
 	TypeCalibrationSet    FrameType = 3
 	TypeCalibrationReport FrameType = 4
 	TypePose              FrameType = 5 // robot to the USB host only
+	TypeDiagnostics       FrameType = 6 // robot to the USB host only
 )
 
 const (
@@ -42,11 +43,13 @@ const (
 	CalibrationReportPayloadSize = 2 + CalibrationJoints*CalibrationJointSize // 128
 	PoseJointSize                = 6
 	PosePayloadSize              = 2 + CalibrationJoints*PoseJointSize // 110
+	DiagnosticsPayloadSize       = 24
 	CommandFrameSize             = HeaderSize + CommandPayloadSize + CRCSize
 	TelemetryFrameSize           = HeaderSize + TelemetryPayloadSize + CRCSize
 	CalibrationSetFrameSize      = HeaderSize + CalibrationSetPayloadSize + CRCSize
 	CalibrationReportFrameSize   = HeaderSize + CalibrationReportPayloadSize + CRCSize
 	PoseFrameSize                = HeaderSize + PosePayloadSize + CRCSize
+	DiagnosticsFrameSize         = HeaderSize + DiagnosticsPayloadSize + CRCSize
 	MaxFrameSize                 = CalibrationReportFrameSize // 135
 )
 
@@ -97,6 +100,10 @@ const (
 	TelemetrySourceConflict  uint8 = 1 << 0 // both links claim control: the robot sleeps
 	TelemetryUSBInControl    uint8 = 1 << 1
 	TelemetryBridgeInControl uint8 = 1 << 2
+	// The bridge link's state, on every link: a valid bridge frame within
+	// the link-gap time, and a gamepad on it.
+	TelemetryBridgeLinkUp  uint8 = 1 << 3
+	TelemetryBridgeGamepad uint8 = 1 << 4
 )
 
 // Telemetry is sent by the robot to every link, every 100 ms.
@@ -116,6 +123,10 @@ type Telemetry struct {
 	RollCentideg     int16
 	Flags            uint8 // Telemetry* bits
 	Gesture          uint8 // Gesture* id being played, 0 when none
+	// The bridge link's decoder counts, on every link (zero from an older
+	// robot).
+	BridgeValidFrames     uint16
+	BridgeDiscardedFrames uint16
 }
 
 // CalibrationReversed is the calibration set flag and report joint flag for
@@ -177,6 +188,31 @@ type Pose struct {
 	Joints [CalibrationJoints]PoseJoint
 }
 
+// Diagnostics are the robot's internals over the last telemetry window
+// (five ticks) and its configured limits, sent to the USB host only, at
+// 10 Hz.
+type Diagnostics struct {
+	MotionSharePermille uint16 // smallest share the joint speed budget allowed; 1000 = full
+	BackstopTicks       uint16 // ticks the output rate backstop held a joint back (wraps)
+	TickMaxUs           uint16 // the control tick's longest working time
+	TickMeanUs          uint16 // and its mean
+	AverageCurrentMa    uint16 // protection's average over its sustained window
+	TripCurrentMa       uint16 // configured limits
+	SustainedCurrentMa  uint16
+	MinMv               uint16
+	MaxMv               uint16
+	BrownoutMv          uint16
+	BudgetDegPerS       uint16 // the servo profile's joint speed budget
+	RatedDegPerS        uint16 // and its rated no-load speed (the backstop)
+}
+
+// fields lists the diagnostics fields in payload order.
+func (d *Diagnostics) fields() []*uint16 {
+	return []*uint16{&d.MotionSharePermille, &d.BackstopTicks, &d.TickMaxUs, &d.TickMeanUs,
+		&d.AverageCurrentMa, &d.TripCurrentMa, &d.SustainedCurrentMa, &d.MinMv, &d.MaxMv,
+		&d.BrownoutMv, &d.BudgetDegPerS, &d.RatedDegPerS}
+}
+
 // CRC16 is CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF, no reflection).
 func CRC16(data []byte) uint16 {
 	crc := uint16(0xFFFF)
@@ -216,6 +252,8 @@ func PayloadSize(t FrameType) int {
 		return CalibrationReportPayloadSize
 	case TypePose:
 		return PosePayloadSize
+	case TypeDiagnostics:
+		return DiagnosticsPayloadSize
 	}
 	return -1
 }
@@ -279,6 +317,8 @@ func EncodeTelemetry(t Telemetry, seq uint8) []byte {
 	put16(p[19:], uint16(t.RollCentideg))
 	p[21] = t.Flags
 	p[22] = t.Gesture
+	put16(p[23:], t.BridgeValidFrames)
+	put16(p[25:], t.BridgeDiscardedFrames)
 	return finish(f)
 }
 
@@ -323,6 +363,23 @@ func EncodePose(p Pose, seq uint8) []byte {
 	return finish(f)
 }
 
+// EncodeDiagnostics returns the complete diagnostics frame.
+func EncodeDiagnostics(d Diagnostics, seq uint8) []byte {
+	f, b := newFrame(TypeDiagnostics, seq)
+	for i, v := range d.fields() {
+		put16(b[2*i:], *v)
+	}
+	return finish(f)
+}
+
+func parseDiagnostics(b []byte) Diagnostics {
+	var d Diagnostics
+	for i, v := range d.fields() {
+		*v = get16(b[2*i:])
+	}
+	return d
+}
+
 func parseCommand(p []byte) Command {
 	return Command{
 		Mode: p[0], TranslateX: int8(p[1]), TranslateY: int8(p[2]), Rotate: int8(p[3]),
@@ -340,6 +397,7 @@ func parseTelemetry(p []byte) Telemetry {
 		SensorsAvailable: p[13], ToFMm: get16(p[14:]), ToFStatus: p[16],
 		PitchCentideg: int16(get16(p[17:])), RollCentideg: int16(get16(p[19:])),
 		Flags: p[21], Gesture: p[22],
+		BridgeValidFrames: get16(p[23:]), BridgeDiscardedFrames: get16(p[25:]),
 	}
 }
 
@@ -381,4 +439,5 @@ type Frame struct {
 	CalibrationSet    CalibrationSet
 	CalibrationReport CalibrationReport
 	Pose              Pose
+	Diagnostics       Diagnostics
 }

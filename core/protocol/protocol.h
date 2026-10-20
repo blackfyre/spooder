@@ -29,7 +29,8 @@ enum class FrameType : uint8_t
   Telemetry = 2,
   CalibrationSet = 3,
   CalibrationReport = 4,
-  Pose = 5, // robot to USB host only
+  Pose = 5,        // robot to USB host only
+  Diagnostics = 6, // robot to USB host only
 };
 
 constexpr int HEADER_SIZE = 5;
@@ -42,13 +43,16 @@ constexpr int CALIBRATION_SET_PAYLOAD_SIZE = 9;
 constexpr int CALIBRATION_REPORT_PAYLOAD_SIZE = 2 + CALIBRATION_JOINTS * CALIBRATION_JOINT_SIZE; // 128
 constexpr int POSE_JOINT_SIZE = 6;
 constexpr int POSE_PAYLOAD_SIZE = 2 + CALIBRATION_JOINTS * POSE_JOINT_SIZE; // 110
+constexpr int DIAGNOSTICS_PAYLOAD_SIZE = 24;
 constexpr int COMMAND_FRAME_SIZE = HEADER_SIZE + COMMAND_PAYLOAD_SIZE + CRC_SIZE;
 constexpr int TELEMETRY_FRAME_SIZE = HEADER_SIZE + TELEMETRY_PAYLOAD_SIZE + CRC_SIZE;
 constexpr int CALIBRATION_SET_FRAME_SIZE = HEADER_SIZE + CALIBRATION_SET_PAYLOAD_SIZE + CRC_SIZE;
 constexpr int CALIBRATION_REPORT_FRAME_SIZE = HEADER_SIZE + CALIBRATION_REPORT_PAYLOAD_SIZE + CRC_SIZE;
 constexpr int POSE_FRAME_SIZE = HEADER_SIZE + POSE_PAYLOAD_SIZE + CRC_SIZE;
+constexpr int DIAGNOSTICS_FRAME_SIZE = HEADER_SIZE + DIAGNOSTICS_PAYLOAD_SIZE + CRC_SIZE;
 constexpr int MAX_FRAME_SIZE = CALIBRATION_REPORT_FRAME_SIZE; // 135
-static_assert(POSE_FRAME_SIZE <= MAX_FRAME_SIZE, "every frame fits the decoder buffer");
+static_assert(POSE_FRAME_SIZE <= MAX_FRAME_SIZE && DIAGNOSTICS_FRAME_SIZE <= MAX_FRAME_SIZE,
+              "every frame fits the decoder buffer");
 
 // Command flags.
 constexpr uint8_t FLAG_CONTROLLER_CONNECTED = 1u << 0;
@@ -89,6 +93,10 @@ constexpr uint8_t SENSOR_ATTITUDE = 1u << 1;
 constexpr uint8_t TELEMETRY_SOURCE_CONFLICT = 1u << 0; // both links claim control: the robot sleeps
 constexpr uint8_t TELEMETRY_USB_IN_CONTROL = 1u << 1;
 constexpr uint8_t TELEMETRY_BRIDGE_IN_CONTROL = 1u << 2;
+// The bridge link's state, on every link (the USB host's view of the bridge):
+// a valid bridge frame within the link-gap time, and a gamepad on it.
+constexpr uint8_t TELEMETRY_BRIDGE_LINK_UP = 1u << 3;
+constexpr uint8_t TELEMETRY_BRIDGE_GAMEPAD = 1u << 4;
 
 // Robot to every link, every 100 ms.
 struct Telemetry
@@ -108,6 +116,10 @@ struct Telemetry
   int16_t rollCentideg;
   uint8_t flags;            // TELEMETRY_* bits
   uint8_t gesture;          // GESTURE_* id being played, 0 when none
+  // The bridge link's decoder counts, on every link (bytes 23-26, reserved
+  // and zero before; an older robot reports zero).
+  uint16_t bridgeValidFrames;
+  uint16_t bridgeDiscardedFrames;
 };
 
 // Calibration set flags and report joint flags.
@@ -166,6 +178,24 @@ struct Pose
   PoseJoint joints[CALIBRATION_JOINTS]; // servo output order
 };
 
+// Robot to the USB host only, at 10 Hz: the robot's internals over the last
+// telemetry window (five ticks), and its configured limits.
+struct Diagnostics
+{
+  uint16_t motionSharePermille;  // smallest share the joint speed budget allowed; 1000 = full
+  uint16_t backstopTicks;        // ticks the output rate backstop held a joint back (wraps)
+  uint16_t tickMaxUs;            // the control tick's longest working time
+  uint16_t tickMeanUs;           // and its mean
+  uint16_t averageCurrentMa;     // protection's average over its sustained window
+  uint16_t tripCurrentMa;        // configured limits
+  uint16_t sustainedCurrentMa;
+  uint16_t minMv;
+  uint16_t maxMv;
+  uint16_t brownoutMv;
+  uint16_t budgetDegPerS;        // the servo profile's joint speed budget
+  uint16_t ratedDegPerS;         // and its rated no-load speed (the backstop)
+};
+
 /**
  * @brief CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF, no reflection).
  */
@@ -180,6 +210,7 @@ int encodeTelemetry(const Telemetry &t, uint8_t seq, uint8_t *out);
 int encodeCalibrationSet(const CalibrationSet &c, uint8_t seq, uint8_t *out);
 int encodeCalibrationReport(const CalibrationReport &r, uint8_t seq, uint8_t *out);
 int encodePose(const Pose &p, uint8_t seq, uint8_t *out);
+int encodeDiagnostics(const Diagnostics &d, uint8_t seq, uint8_t *out);
 
 struct Frame
 {
@@ -190,6 +221,7 @@ struct Frame
   CalibrationSet calibrationSet;       // valid when type == CalibrationSet
   CalibrationReport calibrationReport; // valid when type == CalibrationReport
   Pose pose;                           // valid when type == Pose
+  Diagnostics diagnostics;             // valid when type == Diagnostics
 };
 
 // Incremental decoder. Feed every received byte with push(), and after each

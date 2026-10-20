@@ -35,6 +35,11 @@ add_library(spooder_core STATIC
 target_include_directories(spooder_core PUBLIC ${SPOODER_CORE})
 target_compile_options(spooder_core PRIVATE -Wall -Wextra)
 
+# Servo profile: the servo model fitted, which sets the joint speed budget
+# (core/movement/servo_profile.h lists the known names).
+set(SPOODER_SERVO_PROFILE "MG996R" CACHE STRING "Servo model fitted (see core/movement/servo_profile.h)")
+target_compile_definitions(spooder_core PUBLIC SPOODER_SERVO_PROFILE="${SPOODER_SERVO_PROFILE}")
+
 # Power-protection limits: required, chosen for the servos and supply fitted.
 set(SPOODER_POWER_LIMITS "${CMAKE_CURRENT_LIST_DIR}/src/power_limits.h" CACHE FILEPATH
     "Header defining the SPOODER_* power limits (see src/power_limits.example.h)")

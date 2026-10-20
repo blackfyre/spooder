@@ -278,3 +278,127 @@ func TestGestureRehearsal(t *testing.T) {
 		}
 	}
 }
+
+// Spec "Confirming the bridge link from the computer": the robot's USB
+// telemetry reports the (simulated) bridge link, up without and with a
+// gamepad, and down once it stops.
+func TestBridgeLinkIsVisibleOnUSB(t *testing.T) {
+	t.Parallel()
+	r := StartRobot(t)
+	c := Connect(t, r)
+	r.Do("bridge idle")
+	first := c.WaitFor(t, 3*time.Second, "the bridge link up, no gamepad", func(s session.Snapshot) bool {
+		f := s.Telemetry.Flags
+		return s.Fresh && f&protocol.TelemetryBridgeLinkUp != 0 && f&protocol.TelemetryBridgeGamepad == 0 && s.Telemetry.BridgeValidFrames > 0
+	})
+	c.WaitFor(t, 2*time.Second, "the bridge counts rising", func(s session.Snapshot) bool {
+		return s.Telemetry.BridgeValidFrames > first.Telemetry.BridgeValidFrames
+	})
+	r.Do("bridge gamepad")
+	c.WaitFor(t, 2*time.Second, "a gamepad on the bridge", func(s session.Snapshot) bool {
+		return s.Telemetry.Flags&protocol.TelemetryBridgeGamepad != 0
+	})
+	r.Do("bridge off")
+	c.WaitFor(t, 2*time.Second, "the bridge link down", func(s session.Snapshot) bool {
+		return s.Fresh && s.Telemetry.Flags&(protocol.TelemetryBridgeLinkUp|protocol.TelemetryBridgeGamepad) == 0
+	})
+}
+
+// Spec "Driving from the keyboard": from Stand, a held drive key walks the
+// robot, the walking settings reach it, releasing the keys holds the feet,
+// and Stand ends walking.
+func TestDrivingWalksTheRobot(t *testing.T) {
+	t.Parallel()
+	r := StartRobot(t)
+	c := Connect(t, r)
+	if err := c.S.TakeControl(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.S.RequestMode(session.RequestStand); err != nil {
+		t.Fatal(err)
+	}
+	c.WaitFor(t, 5*time.Second, "Stand", func(s session.Snapshot) bool {
+		return s.Body == session.BodyStand && s.Telemetry.OutputsOn
+	})
+	time.Sleep(1500 * time.Millisecond) // the stand transition settles
+	if err := c.S.NextGait(); err != nil {
+		t.Fatal(err)
+	}
+	standing := c.S.Snapshot().Pose
+	moved := func(p protocol.Pose) float64 {
+		most := 0.0
+		for i, j := range p.Joints {
+			most = math.Max(most, math.Abs(float64(j.CommandedCentideg-standing.Joints[i].CommandedCentideg))/100)
+		}
+		return most
+	}
+	if err := c.S.SetDrive(session.Drive{Forward: true, SteerRight: true}); err != nil {
+		t.Fatal(err)
+	}
+	c.WaitFor(t, 4*time.Second, "walking in Wave with the legs moving", func(s session.Snapshot) bool {
+		return s.Body == session.BodyWalk && session.GaitName(s.Telemetry.Gait) == "Wave" && s.PoseFresh && moved(s.Pose) > 5
+	})
+	if err := c.S.SetDrive(session.Drive{}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(3 * time.Second) // the input eases out
+	standing = c.S.Snapshot().Pose
+	time.Sleep(500 * time.Millisecond)
+	if s := c.S.Snapshot(); s.Body != session.BodyWalk || moved(s.Pose) > 0.5 {
+		t.Fatalf("released: body %v, legs moved %.2f°", s.Body, moved(s.Pose))
+	}
+	if err := c.S.RequestMode(session.RequestStand); err != nil {
+		t.Fatal(err)
+	}
+	c.WaitFor(t, 5*time.Second, "back in Stand", func(s session.Snapshot) bool {
+		return s.Body == session.BodyStand
+	})
+}
+
+// Spec "Diagnostics frame contents" and "Charts": walking fast on the
+// virtual robot, the diagnostics arrive at about 10 Hz with the budget
+// slowing the motion, and the history fills.
+func TestDiagnosticsWhileWalkingFast(t *testing.T) {
+	t.Parallel()
+	r := StartRobot(t)
+	c := Connect(t, r)
+	if err := c.S.TakeControl(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.S.RequestMode(session.RequestStand); err != nil {
+		t.Fatal(err)
+	}
+	c.WaitFor(t, 5*time.Second, "Stand", func(s session.Snapshot) bool {
+		return s.Body == session.BodyStand && s.Telemetry.OutputsOn
+	})
+	time.Sleep(1500 * time.Millisecond)
+	for i := 0; i < 6; i++ {
+		_ = c.S.StepSpeed(1) // dial 44 -> 100
+	}
+	if err := c.S.SetDrive(session.Drive{Forward: true}); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	c.WaitFor(t, 6*time.Second, "the budget slowing the walk", func(session.Snapshot) bool {
+		h, _ := c.S.HistorySince(start)
+		for _, d := range h.Diagnostics {
+			if d.D.MotionSharePermille < 1000 {
+				return true
+			}
+		}
+		return false
+	})
+	time.Sleep(time.Second)
+	h, _ := c.S.HistorySince(start)
+	elapsed := time.Since(start).Seconds()
+	if rate := float64(len(h.Diagnostics)) / elapsed; rate < 7 || rate > 13 {
+		t.Fatalf("diagnostics at %.1f Hz", rate)
+	}
+	last := h.Diagnostics[len(h.Diagnostics)-1].D
+	if last.BudgetDegPerS != 257 || last.RatedDegPerS != 429 || last.TickMaxUs == 0 || last.TripCurrentMa == 0 {
+		t.Fatalf("diagnostics %+v", last)
+	}
+	if len(h.Telemetry) == 0 || len(h.Poses) == 0 {
+		t.Fatalf("history %d telemetry, %d poses", len(h.Telemetry), len(h.Poses))
+	}
+}

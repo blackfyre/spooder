@@ -40,7 +40,7 @@ The app SHALL offer an emergency-stop control, also on the Space key, that toggl
 - **THEN** the robot's servo output switches off and the app shows the emergency stop
 
 ### Requirement: Keyboard controls shown
-The mode controls SHALL also be on keys, 1 for Stand, 2 for Calibrate, 3 for Sleep and F for Clear fault, acting like the controls themselves: only while the app is in control. Each control SHALL name its key. While the app is in control, it SHALL show its keyboard controls beside the mode controls: Space for the emergency stop, the mode keys, the arrow keys to select a joint and value, the nudge keys with their coarse modifier, and the direction key, noting that the editing keys act only in Calibrate. The list SHALL stay readable at the minimum window size.
+The mode controls SHALL also be on keys, 1 for Stand, 2 for Calibrate, 3 for Sleep and F for Clear fault, acting like the controls themselves: only while the app is in control. Each control SHALL name its key. While the app is in control, it SHALL show its keyboard controls beside the mode controls: Space for the emergency stop, the mode keys, the arrow keys to select a joint and value, the nudge keys with their coarse modifier, and the direction key; the editor's heading SHALL say that editing needs Calibrate whenever the robot is elsewhere. The list SHALL stay readable at the minimum window size.
 
 #### Scenario: Taking control
 - **WHEN** the operator takes control

@@ -48,6 +48,8 @@ static Telemetry sampleTelemetry()
   t.rollCentideg = 32767;
   t.flags = TELEMETRY_SOURCE_CONFLICT | TELEMETRY_BRIDGE_IN_CONTROL;
   t.gesture = GESTURE_DANCE;
+  t.bridgeValidFrames = 64000;
+  t.bridgeDiscardedFrames = 9;
   return t;
 }
 
@@ -183,6 +185,8 @@ void test_telemetry_round_trip()
   TEST_ASSERT_EQUAL(t.rollCentideg, f.telemetry.rollCentideg);
   TEST_ASSERT_EQUAL_HEX8(t.flags, f.telemetry.flags);
   TEST_ASSERT_EQUAL(t.gesture, f.telemetry.gesture);
+  TEST_ASSERT_EQUAL_UINT16(t.bridgeValidFrames, f.telemetry.bridgeValidFrames);
+  TEST_ASSERT_EQUAL_UINT16(t.bridgeDiscardedFrames, f.telemetry.bridgeDiscardedFrames);
   // The flags are byte 21 of the payload.
   TEST_ASSERT_EQUAL_HEX8(t.flags, buf[HEADER_SIZE + 21]);
 }
@@ -249,6 +253,25 @@ void test_pose_round_trip()
   TEST_ASSERT_EQUAL_HEX16((uint16_t)p.joints[17].commandedCentideg, (uint16_t)(j17[0] | j17[1] << 8));
   TEST_ASSERT_EQUAL_HEX16((uint16_t)p.joints[17].servoCentideg, (uint16_t)(j17[2] | j17[3] << 8));
   TEST_ASSERT_EQUAL_HEX16(p.joints[17].pulseUs, (uint16_t)(j17[4] | j17[5] << 8));
+}
+
+void test_diagnostics_round_trip()
+{
+  uint8_t buf[MAX_FRAME_SIZE];
+  Diagnostics d = {412, 65535, 6480, 5210, 2380, 9000, 6000, 5200, 6800, 4800, 257, 429};
+  int n = encodeDiagnostics(d, 12, buf);
+  TEST_ASSERT_EQUAL(DIAGNOSTICS_FRAME_SIZE, n);
+  TEST_ASSERT_EQUAL(31, n);
+  Frame f;
+  TEST_ASSERT_EQUAL(1, feedAndCount(buf, n, f));
+  TEST_ASSERT_TRUE(f.type == FrameType::Diagnostics);
+  TEST_ASSERT_EQUAL(12, f.seq);
+  TEST_ASSERT_EQUAL(0, memcmp(&d, &f.diagnostics, sizeof d));
+  // Layout: twelve little-endian 16-bit fields in declaration order.
+  TEST_ASSERT_EQUAL_HEX8(6, buf[2]);
+  TEST_ASSERT_EQUAL_HEX8(24, buf[4]);
+  TEST_ASSERT_EQUAL_HEX16(412, (uint16_t)(buf[HEADER_SIZE] | buf[HEADER_SIZE + 1] << 8));
+  TEST_ASSERT_EQUAL_HEX16(429, (uint16_t)(buf[HEADER_SIZE + 22] | buf[HEADER_SIZE + 23] << 8));
 }
 
 void test_pose_between_telemetry_frames()
@@ -523,6 +546,7 @@ int main()
   RUN_TEST(test_calibration_set_round_trip);
   RUN_TEST(test_calibration_report_round_trip);
   RUN_TEST(test_pose_round_trip);
+  RUN_TEST(test_diagnostics_round_trip);
   RUN_TEST(test_pose_between_telemetry_frames);
   RUN_TEST(test_report_and_commands_back_to_back);
   RUN_TEST(test_every_single_byte_corruption_is_rejected);

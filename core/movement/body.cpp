@@ -1,4 +1,5 @@
 #include "body.h"
+#include "servo_profile.h"
 
 namespace body
 {
@@ -21,6 +22,8 @@ constexpr float STAND_RATE = 1250;            // progress units per second
 constexpr float TRANSLATE_TAU_S = 0.25f;
 constexpr float ROTATE_TAU_S = 0.16f;
 constexpr float HEIGHT_TAU_S = 0.5f;
+constexpr float SPEED_TAU_S = 0.25f;
+constexpr float STRIDE_MODE_TAU_S = 0.25f;
 constexpr float SLEEP_TAU_S = 0.33f;
 constexpr float SLEEP_SNAP_MM = 1;
 constexpr float CALIBRATION_RATE = 50;        // mm per second
@@ -28,7 +31,23 @@ constexpr float CALIBRATION_INBETWEEN_Z = -20;
 constexpr float STAND_LIFT_CLEARANCE = 50;    // minimum lift of the in-between point
 constexpr float AT_POSITION_MM = 0.01f;
 // Internal sub-step: the state machine advances in these increments.
-constexpr uint32_t INTEGRATION_STEP_MS = 5;
+constexpr uint32_t INTEGRATION_STEP_US = 5000;
+
+// Joint speed budget (design: the motion clock). A step that would turn a
+// joint faster than the budget is run again over less motion time, aiming
+// this far below the budget; at most this many runs; never less than this
+// share of the elapsed time.
+constexpr float BUDGET_AIM = 0.9f;
+constexpr int MAX_BUDGET_RUNS = 3;
+constexpr float LAST_RUN_MARGIN = 0.7f;
+constexpr float MIN_MOTION_SCALE = 0.02f;
+// Under a budget, motion advances in pieces of this much wall time, each
+// governed on its own.
+constexpr uint32_t BUDGET_INTERVAL_US = 20000;
+// At most this many pieces per step (50 ms ticks need three): after an
+// overrun the rest is dropped, as MAX_STEP_MS drops a long stall, so catching
+// up cannot make the next step longer still.
+constexpr uint32_t MAX_PIECES_PER_STEP = 3;
 
 // Speed dial 0..100 → speed scale, as upstream; rotation scale is fixed.
 constexpr float ROTATION_SCALE = 0.55f;
@@ -38,10 +57,41 @@ static float clampf(float v, float lo, float hi)
   return v < lo ? lo : (v > hi ? hi : v);
 }
 
+// Adds @p dtUs to @p carryUs and takes the whole milliseconds out of it, for
+// the parts that count time in milliseconds.
+static uint32_t takeWholeMs(uint32_t &carryUs, uint32_t dtUs)
+{
+  carryUs += dtUs;
+  uint32_t ms = carryUs / 1000;
+  carryUs -= ms * 1000;
+  return ms;
+}
+
 // First-order smoothing factor for a time constant, independent of step size.
+// Sub-steps mostly repeat a few lengths, so the last factor per time constant
+// is kept: expf is costly on the board.
 static float smoothing(float dtS, float tauS)
 {
-  return 1.0f - expf(-dtS / tauS);
+  struct Cached
+  {
+    float tauS, dtS, factor;
+  };
+  static Cached cache[8];
+  static int next = 0;
+  for (Cached &c : cache)
+    if (c.tauS == tauS)
+    {
+      if (c.dtS != dtS)
+      {
+        c.dtS = dtS;
+        c.factor = 1.0f - expf(-dtS / tauS);
+      }
+      return c.factor;
+    }
+  Cached &c = cache[next];
+  next = (next + 1) % 8;
+  c = Cached{tauS, dtS, 1.0f - expf(-dtS / tauS)};
+  return c.factor;
 }
 
 static float stepToward(float value, float target, float maxStep)
@@ -88,6 +138,17 @@ static void setFoot(BodyState &s, int leg, Vector3 target)
   s.rejected[leg] = true;
 }
 
+// Where a leg's foot ends up for @p p: fitted to its servo travel, as
+// solveAngles fits it (outside Calibrate). A destination the body waits for
+// must be the fitted one, or a leg whose offsets put it out of travel would
+// never arrive.
+static Vector3 fittedFor(const BodyState &s, int leg, Vector3 p)
+{
+  JointAngles unused;
+  kinematics::solveLegInRange(p, s.offsets[leg], unused);
+  return p;
+}
+
 static bool atPosition(Vector3 a, Vector3 b)
 {
   return a.distanceTo(b) < AT_POSITION_MM;
@@ -114,7 +175,7 @@ static void pickHighestLegs(BodyState &s)
     {
       if (st.currentLegs[0] == i || st.currentLegs[1] == i || st.currentLegs[2] == i)
         continue;
-      if (st.legDone[i] || atPosition(s.feet[i], end))
+      if (st.legDone[i] || atPosition(s.feet[i], fittedFor(s, i, end)))
         continue;
       if (st.currentLegs[j] == -1 || s.feet[i].z > s.feet[st.currentLegs[j]].z)
         st.currentLegs[j] = i;
@@ -219,24 +280,24 @@ static void enterWalk(BodyState &s)
   rephase(s);
 }
 
-static gait::GaitInput gaitInput(const BodyState &s, const MovementCommand &cmd)
+static gait::GaitInput gaitInput(const BodyState &s)
 {
   gait::GaitInput in;
   in.translate = s.translate;
   in.rotate = s.rotate;
-  in.fixedStride = cmd.stride == StrideMode::Fixed;
+  in.fixedStride = s.fixedStride;
   in.distanceFromGround = groundForHeight(s.height);
-  in.speedScale = (cmd.speed + 10) * 0.01f;
+  in.speedScale = (s.speed + 10) * 0.01f;
   in.rotationScale = ROTATION_SCALE;
   return in;
 }
 
 // Advances gait progress over one integration sub-step. Zero input stops
 // progress; footTarget then holds every leg.
-static void advanceWalk(BodyState &s, const MovementCommand &cmd, float dtS)
+static void advanceWalk(BodyState &s, float dtS)
 {
   const gait::GaitParams &p = gait::params(s.currentGait);
-  gait::GaitInput in = gaitInput(s, cmd);
+  gait::GaitInput in = gaitInput(s);
   if (gait::inputWeight(in) < gait::MIN_INPUT)
     return;
 
@@ -254,10 +315,10 @@ static void advanceWalk(BodyState &s, const MovementCommand &cmd, float dtS)
 
 // Writes foot targets for the current progress. Called after advanceWalk, so
 // targets correspond to the current time rather than lagging by one step.
-static void stepWalk(BodyState &s, const MovementCommand &cmd)
+static void stepWalk(BodyState &s)
 {
   const gait::GaitParams &p = gait::params(s.currentGait);
-  gait::GaitInput in = gaitInput(s, cmd);
+  gait::GaitInput in = gaitInput(s);
 
   for (int i = 0; i < LEG_COUNT; i++)
   {
@@ -268,10 +329,10 @@ static void stepWalk(BodyState &s, const MovementCommand &cmd)
 
 // Before leaving Walk mid-step, bring the feet to where the gait has them
 // now, so the next transition starts from the current position.
-static void leaveWalk(BodyState &s, const MovementCommand &cmd)
+static void leaveWalk(BodyState &s)
 {
   if (s.mode == Mode::Walk)
-    stepWalk(s, cmd);
+    stepWalk(s);
 }
 
 // --- Sleep -----------------------------------------------------------------
@@ -294,11 +355,12 @@ static void stepSleep(BodyState &s, float dtS)
   bool allThere = true;
   for (int i = 0; i < LEG_COUNT; i++)
   {
-    Vector3 next = interpolate(s.feet[i], REST_POSE, a);
-    if (next.distanceTo(REST_POSE) < SLEEP_SNAP_MM)
-      next = REST_POSE;
+    Vector3 rest = fittedFor(s, i, REST_POSE);
+    Vector3 next = interpolate(s.feet[i], rest, a);
+    if (next.distanceTo(rest) < SLEEP_SNAP_MM)
+      next = rest;
     setFoot(s, i, next);
-    if (!atPosition(s.feet[i], REST_POSE))
+    if (!atPosition(s.feet[i], rest))
       allThere = false;
   }
 
@@ -348,14 +410,15 @@ static void stepCalibrate(BodyState &s, float dtS)
 static void enterPerform(BodyState &s, gesture::Gesture g, uint32_t modeRequestSeq)
 {
   gesture::start(s.perform, g, s.feet, standingPoint(s));
+  s.performCarryUs = 0;
   s.performRequestSeq = modeRequestSeq;
   s.mode = Mode::Perform;
 }
 
-static void stepPerform(BodyState &s, uint32_t dtMs)
+static void stepPerform(BodyState &s, uint32_t dtUs)
 {
   Vector3 targets[LEG_COUNT];
-  gesture::advance(s.perform, dtMs, standingPoint(s), targets);
+  gesture::advance(s.perform, takeWholeMs(s.performCarryUs, dtUs), standingPoint(s), targets);
   for (int i = 0; i < LEG_COUNT; i++)
     setFoot(s, i, targets[i]);
   if (s.perform.done)
@@ -375,9 +438,9 @@ uint8_t playingGesture(const BodyState &s)
 
 // --- Initialise ------------------------------------------------------------
 
-static void stepInitialise(BodyState &s, uint32_t dtMs)
+static void stepInitialise(BodyState &s, uint32_t dtUs)
 {
-  s.initialiseElapsedMs += dtMs;
+  s.initialiseElapsedMs += takeWholeMs(s.initialiseCarryUs, dtUs);
   if (s.initialiseElapsedMs >= INIT_HOLD_MS[s.initialiseStep])
   {
     s.initialiseElapsedMs -= INIT_HOLD_MS[s.initialiseStep];
@@ -404,6 +467,9 @@ void init(BodyState &s)
   s.started = false;
   s.outputsEnabled = true;
   s.currentGait = Gait::Tri;
+  s.speed = MovementCommand().speed;
+  s.jointBudgetDegPerS = servo_profile::SELECTED.budgetDegPerS();
+  s.motionScale = 1;
   s.initialiseStep = 0;
   s.initialiseElapsedMs = 0;
   for (int i = 0; i < LEG_COUNT; i++)
@@ -453,6 +519,11 @@ static void smoothCommand(BodyState &s, const MovementCommand &cmd, float dtS)
   // as usual, once the body is back in Stand.
   if (s.mode != Mode::Perform)
     s.height = interpolate(s.height, cmd.height, smoothing(dtS, HEIGHT_TAU_S));
+  // The speed dial and the stride mode change the stride: eased, so the feet
+  // do not jump.
+  s.speed = interpolate(s.speed, cmd.speed, smoothing(dtS, SPEED_TAU_S));
+  float fixed = cmd.stride == StrideMode::Fixed ? 1.0f : 0.0f;
+  s.fixedStride = interpolate(s.fixedStride, fixed, smoothing(dtS, STRIDE_MODE_TAU_S));
 }
 
 // Resolves the requested mode against the current mode. Sleep (requested or
@@ -465,7 +536,7 @@ static void resolveMode(BodyState &s, RequestedMode req, const MovementCommand &
   {
     if (s.mode != Mode::Sleep)
     {
-      leaveWalk(s, cmd);
+      leaveWalk(s);
       enterSleep(s);
     }
     return;
@@ -504,7 +575,7 @@ static void resolveMode(BodyState &s, RequestedMode req, const MovementCommand &
   case Mode::Walk:
     if (req != RequestedMode::Walk)
     {
-      leaveWalk(s, cmd);
+      leaveWalk(s);
       enterStand(s, Mode::Walk);
     }
     break;
@@ -545,9 +616,9 @@ static bool isStale(BodyState &s, uint32_t issuedAtMs, uint32_t nowMs)
 }
 
 // One fixed sub-step of the whole state machine.
-static void subStep(BodyState &s, const MovementCommand &cmd, RequestedMode req, uint8_t newGesture, uint32_t dtMs)
+static void subStep(BodyState &s, const MovementCommand &cmd, RequestedMode req, uint8_t newGesture, uint32_t dtUs)
 {
-  float dtS = dtMs / 1000.0f;
+  float dtS = dtUs / 1e6f;
 
   resolveMode(s, req, cmd, newGesture);
   selectGait(s, cmd.gait);
@@ -557,13 +628,13 @@ static void subStep(BodyState &s, const MovementCommand &cmd, RequestedMode req,
   switch (s.mode)
   {
   case Mode::Initialise:
-    stepInitialise(s, dtMs);
+    stepInitialise(s, dtUs);
     break;
   case Mode::Stand:
     stepStand(s, dtS);
     break;
   case Mode::Walk:
-    advanceWalk(s, cmd, dtS);
+    advanceWalk(s, dtS);
     break;
   case Mode::Sleep:
     stepSleep(s, dtS);
@@ -572,7 +643,7 @@ static void subStep(BodyState &s, const MovementCommand &cmd, RequestedMode req,
     stepCalibrate(s, dtS);
     break;
   case Mode::Perform:
-    stepPerform(s, dtMs);
+    stepPerform(s, dtUs);
     break;
   }
 }
@@ -587,16 +658,76 @@ static void solveAngles(BodyState &s)
     s.pendingSolve[i] = false;
     s.offsetsChanged[i] = false;
     // setFoot only records targets solveLeg accepts, so this succeeds.
-    if (kinematics::solveLeg(s.feet[i], s.offsets[i], s.angles[i]))
+    // Outside Calibrate the foot is fitted into the servos' travel (the
+    // recorded foot follows); Calibrate shows each joint as calibrated.
+    bool solved = s.mode == Mode::Calibrate ? kinematics::solveLeg(s.feet[i], s.offsets[i], s.angles[i])
+                                            : kinematics::solveLegInRange(s.feet[i], s.offsets[i], s.angles[i]);
+    if (solved)
       s.legUpdated[i] = true;
   }
 }
+
+// The walk's foot paths and the joint angles, after a step's sub-steps.
+static void finishMotion(BodyState &s)
+{
+  // Walk evaluates its foot paths once per step; phases were tracked per sub-step.
+  if (s.mode == Mode::Walk)
+    stepWalk(s);
+
+  solveAngles(s);
+}
+
+// Runs the state machine over @p motionUs of motion time, then finishes the
+// step. With @p halfway, also leaves there the state finished at the first
+// sub-step boundary from half the time on, and returns that share of the
+// time (0 without).
+static float advanceMotion(BodyState &s, const MovementCommand &cmd, RequestedMode req, uint8_t newGesture,
+                           uint32_t motionUs, BodyState *halfway = nullptr)
+{
+  float share = 0;
+  // At least one (possibly zero-length) sub-step, so the first call acts.
+  uint32_t done = 0;
+  do
+  {
+    uint32_t h = motionUs - done < INTEGRATION_STEP_US ? motionUs - done : INTEGRATION_STEP_US;
+    subStep(s, cmd, req, newGesture, h);
+    newGesture = 0;
+    done += h;
+    if (halfway && share == 0 && done < motionUs && 2 * done >= motionUs)
+    {
+      *halfway = s;
+      finishMotion(*halfway);
+      share = (float)done / motionUs;
+    }
+  } while (done < motionUs);
+
+  finishMotion(s);
+  return share;
+}
+
+// The largest joint angle change from @p before to @p after, in degrees.
+static float largestJointChange(const BodyState &before, const BodyState &after)
+{
+  float largest = 0;
+  for (int i = 0; i < LEG_COUNT; i++)
+  {
+    const JointAngles &a = before.angles[i], &b = after.angles[i];
+    largest = fmaxf(largest, fmaxf(fabsf(b.coxa - a.coxa), fmaxf(fabsf(b.femur - a.femur), fabsf(b.tibia - a.tibia))));
+  }
+  return largest;
+}
+
+// The trial runs of a governed step, the first run's part-way state and the
+// closest run so far: a BodyState is too large for the board's 2 KB main
+// stack. One body steps at a time.
+static BodyState trial, halfway, best;
 
 void step(BodyState &s, const MovementCommand &rawCmd, uint32_t nowMs)
 {
   uint32_t dtMs = s.started ? nowMs - s.lastStepMs : 0;
   if (dtMs > MAX_STEP_MS)
     dtMs = MAX_STEP_MS;
+  bool first = !s.started;
   s.started = true;
   s.lastStepMs = nowMs;
 
@@ -608,32 +739,98 @@ void step(BodyState &s, const MovementCommand &rawCmd, uint32_t nowMs)
   }
 
   MovementCommand cmd = clampCommand(rawCmd);
+  // Staleness is judged on wall time, whatever the motion clock does.
   bool stale = isStale(s, cmd.issuedAtMs, nowMs);
   RequestedMode req = stale ? RequestedMode::Sleep : cmd.mode;
 
-  // A new gesture request is offered to the first sub-step only: acted on
-  // there or dropped. The first sequence value seen is only a baseline.
+  // A new gesture request is offered to the first sub-step only (under a
+  // budget, the next piece's): acted on there or dropped. The first sequence
+  // value seen is only a baseline.
   uint8_t newGesture = 0;
   if (s.gestureSeqKnown && cmd.gestureSeq != s.lastGestureSeq)
     newGesture = cmd.gesture;
   s.gestureSeqKnown = true;
   s.lastGestureSeq = cmd.gestureSeq;
 
-  // At least one (possibly zero-length) sub-step, so the first call acts.
-  uint32_t done = 0;
-  do
+  uint32_t wallUs = dtMs * 1000;
+  s.motionScale = 1;
+  if (s.jointBudgetDegPerS <= 0)
   {
-    uint32_t h = dtMs - done < INTEGRATION_STEP_MS ? dtMs - done : INTEGRATION_STEP_MS;
-    subStep(s, cmd, req, newGesture, h);
+    advanceMotion(s, cmd, req, newGesture, wallUs);
+    return;
+  }
+
+  // Under a budget, motion advances in whole grid pieces from the first
+  // step on; the rest of the elapsed time waits for the next step. Every
+  // tick length then governs the same pieces.
+  // A gesture request waits for the next piece rather than being lost.
+  if (newGesture)
+    s.pendingGesture = newGesture;
+  if (first)
+  {
+    // The first step acts at once (Initialise's first pose).
+    advanceMotion(s, cmd, req, s.pendingGesture, 0);
+    s.pendingGesture = 0;
+    return;
+  }
+  s.motionPendingUs += wallUs;
+  if (s.motionPendingUs > MAX_PIECES_PER_STEP * BUDGET_INTERVAL_US)
+    s.motionPendingUs = MAX_PIECES_PER_STEP * BUDGET_INTERVAL_US;
+
+  const float allowed = s.jointBudgetDegPerS * (BUDGET_INTERVAL_US / 1e6f); // degrees per piece
+  newGesture = s.pendingGesture;
+  float slowest = 1;
+  for (; s.motionPendingUs >= BUDGET_INTERVAL_US; s.motionPendingUs -= BUDGET_INTERVAL_US)
+  {
+    const float target = BUDGET_AIM * allowed;
+    float scale = 1, bestChange = INFINITY, bestScale = 1;
+    const BodyState *result = &trial;
+    for (int run = 1;; run++)
+    {
+      trial = s;
+      float share = advanceMotion(trial, cmd, req, newGesture, (uint32_t)lroundf(BUDGET_INTERVAL_US * scale),
+                                  run == 1 ? &halfway : nullptr);
+      // Initialise sets its poses as step changes: never slowed.
+      if (s.mode == Mode::Initialise)
+        break;
+      float change = largestJointChange(s, trial);
+      if (change <= allowed)
+        break;
+      // Near an awkward pose less time can even mean more change: if no run
+      // keeps within the budget, the one that came closest is kept.
+      if (change < bestChange)
+      {
+        best = trial;
+        bestChange = change;
+        bestScale = scale;
+      }
+      if (run == MAX_BUDGET_RUNS || scale <= MIN_MOTION_SCALE)
+      {
+        result = &best;
+        scale = bestScale;
+        break;
+      }
+      float next = scale * target / change; // as if change were proportional to time
+      if (share > 0)
+      {
+        // The first run also measured part-way: interpolate through no
+        // change at no time, the part-way change and the full change, which
+        // also fits a piece whose fast part comes early or late.
+        float mid = largestJointChange(s, halfway);
+        next = mid >= target ? share * target / mid
+                             : share + (1 - share) * (target - mid) / fmaxf(change - mid, 1e-6f);
+      }
+      // The last run gets a margin, being the last chance to keep within.
+      if (run + 1 == MAX_BUDGET_RUNS)
+        next *= LAST_RUN_MARGIN;
+      scale = fmaxf(MIN_MOTION_SCALE, fminf(next, scale));
+    }
+    s = *result;
+    slowest = fminf(slowest, scale);
     newGesture = 0;
-    done += h;
-  } while (done < dtMs);
-
-  // Walk evaluates its foot paths once per step; phases were tracked per sub-step.
-  if (s.mode == Mode::Walk)
-    stepWalk(s, cmd);
-
-  solveAngles(s);
+    s.pendingGesture = 0;
+  }
+  s.motionScale = slowest;
 }
 
 } // namespace body

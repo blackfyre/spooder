@@ -12,8 +12,11 @@ namespace kinematics
 constexpr float COXA_LENGTH = 41;
 constexpr float FEMUR_LENGTH = 116;
 constexpr float TIBIA_LENGTH = 183;
-// Furthest accepted foot target from the coxa pivot.
-constexpr float LEG_REACH = COXA_LENGTH + FEMUR_LENGTH + TIBIA_LENGTH;
+// Furthest accepted distance from the femur joint to the foot. Near the
+// straight knee the joint angles change without bound for a small foot
+// movement; this margin keeps that rate to about 2.5°/mm.
+constexpr float STRAIGHT_KNEE_MARGIN_MM = 4;
+constexpr float MAX_KNEE_SPAN = FEMUR_LENGTH + TIBIA_LENGTH - STRAIGHT_KNEE_MARGIN_MM;
 
 constexpr int LEG_COUNT = 6;
 constexpr int JOINTS_PER_LEG = 3; // coxa, femur, tibia
@@ -35,8 +38,8 @@ struct JointAngles
 };
 
 /**
- * @brief True when solveLeg would accept the target: finite and within
- * LEG_REACH of the coxa pivot. Cheap; no trigonometry.
+ * @brief True when solveLeg would accept the target: finite, and at most
+ * MAX_KNEE_SPAN from the femur joint. Cheap; no trigonometry.
  */
 bool isValidTarget(Vector3 target);
 
@@ -46,9 +49,23 @@ bool isValidTarget(Vector3 target);
  * leg's (coxa, femur, tibia) calibration offsets in degrees.
  *
  * @return false, leaving @p out untouched, when the target is not finite or
- *         lies further than LEG_REACH from the coxa pivot.
+ *         lies further than MAX_KNEE_SPAN from the femur joint.
  */
 bool solveLeg(Vector3 target, Vector3 offsets, JointAngles &out);
+
+/**
+ * @brief As solveLeg, but first moves @p target, as little as needed, so
+ * that every joint's servo angle (offset included) lies within 0-180°: the
+ * foot's direction into the coxa's travel, its distance from the femur joint
+ * into the tibia's, then its elevation about the femur joint into the
+ * femur's. The move is continuous in the target, so a path crossing a limit
+ * follows it instead of jumping. A target within range is solved exactly as
+ * solveLeg solves it, and left unchanged.
+ *
+ * @return false, leaving @p target and @p out untouched, when solveLeg
+ *         would reject the target.
+ */
+bool solveLegInRange(Vector3 &target, Vector3 offsets, JointAngles &out);
 
 } // namespace kinematics
 

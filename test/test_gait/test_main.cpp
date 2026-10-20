@@ -24,6 +24,14 @@ static LegCycle freshCycle()
 
 static const Vector3 STANDING(STANCE_DISTANCE, 0, 0);
 
+// The nominal path at cycle position t: enters t's phase at its start first,
+// as a walking leg does (a leg entering part-way starts from its foot).
+static Vector3 onPath(int leg, float t, const GaitParams &p, const GaitInput &in, LegCycle &cycle, Vector3 current)
+{
+  current = footTarget(leg, t < p.pushFraction ? 0 : p.pushFraction, p, in, cycle, current);
+  return footTarget(leg, t, p, in, cycle, current);
+}
+
 void setUp() {}
 void tearDown() {}
 
@@ -95,7 +103,7 @@ static Vector3 strideEnd(Vector2 translate, bool fixedStride)
 {
   const GaitParams &p = params(Gait::Tri);
   LegCycle cycle = freshCycle();
-  return footTarget(1, p.pushFraction - 1e-4f, p, input(translate, 0, fixedStride), cycle, STANDING);
+  return onPath(1, p.pushFraction - 1e-4f, p, input(translate, 0, fixedStride), cycle, STANDING);
 }
 
 void test_fixed_stride_ignores_magnitude()
@@ -125,11 +133,34 @@ void test_cycle_start_captured_on_phase_change()
   // Propelling -> Lifting starts the swing from the end of the ground path,
   // not from wherever the last step left the foot.
   LegCycle reference = freshCycle();
-  Vector3 propelEnd = footTarget(0, p.pushFraction - 1e-6f, p, input(Vector2(0, 50), 0), reference, current);
+  Vector3 propelEnd = onPath(0, p.pushFraction - 1e-6f, p, input(Vector2(0, 50), 0), reference, current);
   Vector3 later(180, -20, 0);
   footTarget(0, 0.9f, p, input(Vector2(0, 50), 0), cycle, later);
   TEST_ASSERT_TRUE(cycle.phase == LegPhase::Lifting);
   TEST_ASSERT_FLOAT_WITHIN(0.05, 0, cycle.start.distanceTo(propelEnd));
+}
+
+void test_entering_mid_swing_starts_from_the_foot()
+{
+  // A leg entering its cycle part-way through the swing (entering Walk, a
+  // gait change) starts from where its foot is and lands at the swing's end.
+  const GaitParams &p = params(Gait::Bi);
+  GaitInput in = input(Vector2(0, 50), 0);
+  float entry = (p.pushFraction + 1) / 2;
+  LegCycle cycle = freshCycle();
+  Vector3 first = footTarget(2, entry, p, in, cycle, STANDING);
+  TEST_ASSERT_TRUE(cycle.phase == LegPhase::Lifting);
+  TEST_ASSERT_FLOAT_WITHIN(1e-3, 0, first.distanceTo(STANDING));
+  // Small steps of the cycle move the foot by small amounts.
+  Vector3 at = first;
+  for (int i = 1; i <= 100; i++)
+  {
+    Vector3 next = footTarget(2, entry + (1 - 1e-6f - entry) * i / 100, p, in, cycle, at);
+    TEST_ASSERT_TRUE(next.distanceTo(at) < 10);
+    at = next;
+  }
+  LegCycle reference = freshCycle();
+  TEST_ASSERT_FLOAT_WITHIN(0.05, 0, at.distanceTo(onPath(2, 1 - 1e-6f, p, in, reference, STANDING)));
 }
 
 // --- steering: superposed translate and rotate --------------------------------
@@ -138,8 +169,8 @@ void test_cycle_start_captured_on_phase_change()
 static Vector2 groundStroke(int leg, const GaitParams &p, const GaitInput &in)
 {
   LegCycle a = freshCycle(), b = freshCycle();
-  Vector3 propel = footTarget(leg, p.pushFraction - 1e-6f, p, in, a, STANDING);
-  Vector3 lift = footTarget(leg, 1 - 1e-6f, p, in, b, STANDING);
+  Vector3 propel = onPath(leg, p.pushFraction - 1e-6f, p, in, a, STANDING);
+  Vector3 lift = onPath(leg, 1 - 1e-6f, p, in, b, STANDING);
   return Vector2(propel.x - lift.x, propel.y - lift.y);
 }
 
@@ -231,6 +262,23 @@ void test_single_motions_are_unchanged_by_steering()
   }
 }
 
+// Whether a single motion's stroke at full speed is its full length, not
+// shortened for reach: it is twice the stroke at half the speed (and, for a
+// dynamic stride, half the rotation scale). A fixed rotation does not scale.
+static bool fullLength(const GaitParams &p, GaitInput in)
+{
+  bool rotating = in.translate.magnitude() < MIN_INPUT;
+  if (rotating && in.fixedStride)
+    return true;
+  GaitInput half = in;
+  half.speedScale /= 2;
+  half.rotationScale /= 2;
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+    if (fabsf(groundStroke(leg, p, in).magnitude() - 2 * groundStroke(leg, p, half).magnitude()) > 1)
+      return false;
+  return true;
+}
+
 void test_combined_stroke_stays_within_the_stride_limit_and_reachable()
 {
   const Vector2 directions[] = {Vector2(0, 100), Vector2(0, -100), Vector2(100, 0), Vector2(70.7f, 70.7f)};
@@ -248,15 +296,18 @@ void test_combined_stroke_stays_within_the_stride_limit_and_reachable()
             GaitInput both = steering(d, rotate, ground), walk = steering(d, 0, ground), turn = steering(Vector2(), rotate, ground);
             both.fixedStride = walk.fixedStride = turn.fixedStride = fixed;
             float scale = 1;
+            bool full = fullLength(p, walk) && fullLength(p, turn);
             for (int leg = 0; leg < LEG_COUNT; leg++)
             {
               Vector2 s = groundStroke(leg, p, walk), r = groundStroke(leg, p, turn), c = groundStroke(leg, p, both);
               float limit = fmaxf(p.maxStrideLength, fmaxf(s.magnitude(), r.magnitude()));
               TEST_ASSERT_TRUE_MESSAGE(c.magnitude() <= limit + 3, "combined stroke above the limit");
               // The combined stroke is the sum, scaled by one common factor:
-              // the same on every leg, so the arc keeps its shape.
+              // the same on every leg, so the arc keeps its shape. Checked
+              // where neither single stroke is shortened for reach, so the
+              // sum is of the full strokes.
               Vector2 sum = s + r;
-              if (sum.magnitude() > 10)
+              if (full && sum.magnitude() > 10)
               {
                 float k = c.magnitude() / sum.magnitude();
                 if (leg == 0)
@@ -274,6 +325,22 @@ void test_combined_stroke_stays_within_the_stride_limit_and_reachable()
   }
 }
 
+void test_long_strides_shrink_to_reach()
+{
+  // Full forward input at dial 100 and body height 100: the full stride's
+  // ends would need a nearly straight knee, so the stroke shortens to reach.
+  for (int g = 0; g < GAIT_COUNT; g++)
+  {
+    const GaitParams &p = params((Gait)g);
+    GaitInput high = steering(Vector2(0, 100), 0, -60 - 1.7f * 100), low = steering(Vector2(0, 100), 0, -60);
+    for (int leg = 0; leg < LEG_COUNT; leg++)
+    {
+      TEST_ASSERT_TRUE(cycleReachable(leg, p, high));
+      TEST_ASSERT_TRUE(groundStroke(leg, p, high).magnitude() < groundStroke(leg, p, low).magnitude() - 10);
+    }
+  }
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -285,6 +352,8 @@ int main()
   RUN_TEST(test_fixed_stride_ignores_magnitude);
   RUN_TEST(test_dynamic_stride_scales_with_magnitude);
   RUN_TEST(test_cycle_start_captured_on_phase_change);
+  RUN_TEST(test_entering_mid_swing_starts_from_the_foot);
+  RUN_TEST(test_long_strides_shrink_to_reach);
   RUN_TEST(test_turning_while_walking_keeps_the_forward_stroke);
   RUN_TEST(test_positive_rotate_turns_the_body_anticlockwise);
   RUN_TEST(test_combined_swing_lifts_to_the_higher_path);

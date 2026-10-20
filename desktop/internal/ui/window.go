@@ -63,6 +63,10 @@ type Env struct {
 	ConfigDir  string   // for the remembered checkout
 	Checkouts  []string // candidate checkouts, see CheckoutCandidates
 	Appearance appearance.Settings
+	// OpenViews opens the four-view window (nil: no button action), which
+	// reads the editor's selected joint from Selection.
+	OpenViews func()
+	Selection *atomic.Int32
 }
 
 // Panes of the right-hand column.
@@ -71,10 +75,11 @@ const (
 	tabFrames
 	tabExport
 	tabLegs
+	tabCharts
 	tabCount
 )
 
-var tabNames = [tabCount]string{"debug log", "frames", "export", "legs"}
+var tabNames = [tabCount]string{"debug log", "frames", "export", "legs", "charts"}
 
 // Mode buttons, in display order.
 var modeButtons = [3]session.RequestedMode{session.RequestStand, session.RequestCalibrate, session.RequestSleep}
@@ -105,6 +110,7 @@ type window struct {
 	device *link.PortInfo
 
 	refresh, connect, control, estop, clearFault widget.Clickable
+	views                                        widget.Clickable // opens the four-view window
 	modes                                        [len(modeButtons)]widget.Clickable
 	gestures                                     [len(gestureButtons)]widget.Clickable
 	tabs                                         [tabCount]widget.Clickable
@@ -132,11 +138,21 @@ type window struct {
 	// The mode, clear-fault and gesture keys: one action per physical
 	// press, as for Space (the nudge keys repeat on purpose).
 	actionKeys map[key.Name]*keyLatch
+	// The drive keys held now, by name; the session gets the set on every
+	// change. Keys down while the app was not in control are suppressed
+	// until released: their key repeat must not count as a fresh press.
+	charts chartsState
+
+	held       map[key.Name]bool
+	suppressed map[key.Name]bool
+	unfocused  bool // the window has lost the keyboard focus
 }
 
 // Run shows the calibrator window and exits the process when it closes,
 // after releasing control and closing the link. It never returns.
 func Run(env Env) {
+	env.Selection = new(atomic.Int32)
+	env.OpenViews = func() { openViews(env, runViews) }
 	w, err := newWindow(env)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "spooder-calibrator:", err)
@@ -167,6 +183,8 @@ func newWindow(env Env) (*window, error) {
 	th.Face = fonts.Text
 	th.TextSize = sizeText
 	w := &window{env: env, th: th, looks: make(chan appearance.Settings, 4), portsCh: make(chan []link.PortInfo, 1), portSel: -1}
+	w.charts.window = defaultChartWindow
+	w.charts.list.Axis = layout.Vertical
 	w.editorList.Axis = layout.Vertical
 	w.logList.Axis = layout.Vertical
 	w.logList.ScrollToEnd = true
@@ -277,11 +295,22 @@ func (w *window) loop(win *app.Window) error {
 // notification, so the appearance is read again on regaining it (as bopen
 // does).
 func (w *window) focusChanged(focused bool) {
+	w.unfocused = !focused
 	if !focused {
 		w.space.reset()
 		for _, l := range w.actionKeys {
 			l.reset()
 		}
+		// No key held stays applied while the keyboard reports elsewhere.
+		// Their releases may go elsewhere too, so a key held now needs its
+		// release and a fresh press before it drives again.
+		for name, down := range w.held {
+			if down {
+				w.suppress(name)
+			}
+		}
+		w.held = nil
+		_ = w.env.Session.SetDrive(session.Drive{})
 		return
 	}
 	select {
@@ -318,6 +347,9 @@ func (w *window) frame(gtx layout.Context) {
 	w.handle(gtx)
 	w.snap = w.env.Session.Snapshot()
 	w.layout(gtx)
+	if w.env.Selection != nil {
+		w.env.Selection.Store(int32(w.sel.joint)) // for the four-view window
+	}
 	if w.snap.Link.Status != link.Disconnected {
 		// Keep ages and the "not current" marker moving.
 		gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(250 * time.Millisecond)})
@@ -343,6 +375,11 @@ func (w *window) actionKey(gtx layout.Context, ke key.Event) bool {
 	}
 	if ke.Name == clearFaultKey {
 		act = s.ClearFault
+	}
+	for _, k := range settingKeys {
+		if ke.Name == k.name {
+			act = k.action(s)
+		}
 	}
 	for i, k := range gestureKeys {
 		if ke.Name == k {
@@ -379,11 +416,101 @@ var keyFilters = []event.Filter{
 	key.Filter{Name: "=", Optional: key.ModShift}, key.Filter{Name: "+", Optional: key.ModShift},
 	key.Filter{Name: "-", Optional: key.ModShift}, key.Filter{Name: "_", Optional: key.ModShift},
 	key.Filter{Name: "*", Optional: key.ModShift}, key.Filter{Name: "R", Optional: key.ModShift},
-	// The mode buttons, in their order, and Clear fault.
-	key.Filter{Name: modeKeys[0]}, key.Filter{Name: modeKeys[1]}, key.Filter{Name: modeKeys[2]},
-	key.Filter{Name: clearFaultKey},
-	key.Filter{Name: gestureKeys[0]}, key.Filter{Name: gestureKeys[1]}, key.Filter{Name: gestureKeys[2]},
-	key.Filter{Name: gestureKeys[3]}, key.Filter{Name: gestureKeys[4]},
+	// The mode buttons, in their order, Clear fault and the gestures: with
+	// every modifier, so that a release with a modifier down still reaches
+	// the key's latch.
+	key.Filter{Name: modeKeys[0], Optional: anyModifier}, key.Filter{Name: modeKeys[1], Optional: anyModifier},
+	key.Filter{Name: modeKeys[2], Optional: anyModifier}, key.Filter{Name: clearFaultKey, Optional: anyModifier},
+	key.Filter{Name: gestureKeys[0], Optional: anyModifier}, key.Filter{Name: gestureKeys[1], Optional: anyModifier},
+	key.Filter{Name: gestureKeys[2], Optional: anyModifier}, key.Filter{Name: gestureKeys[3], Optional: anyModifier},
+	key.Filter{Name: gestureKeys[4], Optional: anyModifier},
+	// Driving, with every modifier, so that each release reaches the held
+	// set (a release with Shift down would otherwise be dropped and leave
+	// the robot walking); and the walking settings.
+	key.Filter{Name: "W", Optional: anyModifier}, key.Filter{Name: "S", Optional: anyModifier},
+	key.Filter{Name: "A", Optional: anyModifier}, key.Filter{Name: "D", Optional: anyModifier},
+	key.Filter{Name: "Q", Optional: anyModifier}, key.Filter{Name: "E", Optional: anyModifier},
+	key.Filter{Name: "Z", Optional: anyModifier}, key.Filter{Name: "X", Optional: anyModifier},
+	key.Filter{Name: "C", Optional: anyModifier}, key.Filter{Name: "V", Optional: anyModifier},
+	key.Filter{Name: "G", Optional: anyModifier}, key.Filter{Name: "T", Optional: anyModifier},
+}
+
+const anyModifier = key.ModShift | key.ModCtrl | key.ModAlt | key.ModSuper | key.ModCommand
+
+// driveKeys are held to drive, as the bridge's car layout: W and S walk, A
+// and D steer, Q and E step sideways. They act only in control, in Stand
+// or Walk.
+var driveKeys = map[key.Name]func(d *session.Drive) *bool{
+	"W": func(d *session.Drive) *bool { return &d.Forward },
+	"S": func(d *session.Drive) *bool { return &d.Back },
+	"A": func(d *session.Drive) *bool { return &d.SteerLeft },
+	"D": func(d *session.Drive) *bool { return &d.SteerRight },
+	"Q": func(d *session.Drive) *bool { return &d.StepLeft },
+	"E": func(d *session.Drive) *bool { return &d.StepRight },
+}
+
+func (w *window) suppress(name key.Name) {
+	if w.suppressed == nil {
+		w.suppressed = map[key.Name]bool{}
+	}
+	w.suppressed[name] = true
+}
+
+// settingKeys change the walking settings, once per press, only in
+// control.
+var settingKeys = [...]struct {
+	name   key.Name
+	action func(s *session.Session) func() error
+}{
+	{"Z", func(s *session.Session) func() error { return func() error { return s.StepSpeed(-1) } }},
+	{"X", func(s *session.Session) func() error { return func() error { return s.StepSpeed(1) } }},
+	{"C", func(s *session.Session) func() error { return func() error { return s.StepHeight(-1) } }},
+	{"V", func(s *session.Session) func() error { return func() error { return s.StepHeight(1) } }},
+	{"G", func(s *session.Session) func() error { return s.NextGait }},
+	{"T", func(s *session.Session) func() error { return s.ToggleStride }},
+}
+
+// driveKey follows a drive key's press or release; it reports whether ke
+// was one. A refused press (not in control) is said once per press.
+func (w *window) driveKey(gtx layout.Context, ke key.Event) bool {
+	if _, ok := driveKeys[ke.Name]; !ok {
+		return false
+	}
+	down := ke.State == key.Press
+	if !down && w.suppressed[ke.Name] {
+		delete(w.suppressed, ke.Name)
+		return true
+	}
+	if w.suppressed[ke.Name] {
+		return true // still held from before control: its key repeat
+	}
+	if !w.snap.Control || w.unfocused {
+		// Pressed without control, or handled after the focus went (queued
+		// before): it needs a fresh press once in control and focused.
+		if down {
+			w.suppress(ke.Name)
+			w.say(gtx, session.ErrNotInControl)
+		}
+		return true
+	}
+	if w.held[ke.Name] == down {
+		return true // key repeat
+	}
+	if w.held == nil {
+		w.held = map[key.Name]bool{}
+	}
+	w.held[ke.Name] = down
+	var d session.Drive
+	for name, isDown := range w.held {
+		if isDown {
+			*driveKeys[name](&d) = true
+		}
+	}
+	err := w.env.Session.SetDrive(d)
+	if down {
+		w.say(gtx, err)
+	}
+	return true
 }
 
 // gestureButtons are the gestures, in protocol id order, with their labels;
@@ -392,7 +519,7 @@ var gestureButtons = [...]struct {
 	id    uint8
 	label string
 }{
-	{protocol.GestureSayHi, "Say hi"},
+	{protocol.GestureSayHi, "Hi"},
 	{protocol.GestureWiggle, "Wiggle"},
 	{protocol.GestureDance, "Dance"},
 	{protocol.GestureAttack, "Attack"},
@@ -410,6 +537,16 @@ const clearFaultKey key.Name = "F"
 // handle processes shortcuts and clicks.
 func (w *window) handle(gtx layout.Context) {
 	s := w.env.Session
+	if !w.snap.Control {
+		// Control released or the link lost while keys were held: they need
+		// a fresh press.
+		for name, down := range w.held {
+			if down {
+				w.suppress(name)
+			}
+		}
+		w.held = nil
+	}
 	for {
 		ev, ok := gtx.Event(keyFilters...)
 		if !ok {
@@ -425,7 +562,7 @@ func (w *window) handle(gtx layout.Context) {
 			}
 			continue
 		}
-		if w.actionKey(gtx, ke) {
+		if w.driveKey(gtx, ke) || w.actionKey(gtx, ke) {
 			continue
 		}
 		if ke.State != key.Press {
@@ -449,6 +586,9 @@ func (w *window) handle(gtx layout.Context) {
 		}
 	}
 
+	if w.views.Clicked(gtx) && w.env.OpenViews != nil {
+		w.env.OpenViews()
+	}
 	if w.estop.Clicked(gtx) {
 		s.ToggleEmergencyStop()
 	}
@@ -503,6 +643,7 @@ func (w *window) handle(gtx layout.Context) {
 	}
 	w.handleEditor(gtx)
 	w.handleExport(gtx)
+	w.handleCharts(gtx)
 }
 
 // nudge steps for the four buttons of a value.

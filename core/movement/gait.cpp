@@ -36,17 +36,6 @@ static float clampf(float v, float lo, float hi)
   return v < lo ? lo : (v > hi ? hi : v);
 }
 
-static int binomialCoefficient(int n, int k)
-{
-  int result = 1;
-  for (int i = 1; i <= k; i++)
-  {
-    result *= (n - (k - i));
-    result /= i;
-  }
-  return result;
-}
-
 bool isValidGait(int value)
 {
   return value >= 0 && value < GAIT_COUNT;
@@ -59,15 +48,14 @@ const GaitParams &params(Gait g)
 
 Vector3 bezier(const Vector3 *points, int numPoints, float t)
 {
-  Vector3 pos;
+  // De Casteljau: repeated interpolation, no powers.
+  Vector3 p[MAX_BEZIER_POINTS];
   for (int i = 0; i < numPoints; i++)
-  {
-    float b = binomialCoefficient(numPoints - 1, i) * powf(1 - t, numPoints - 1 - i) * powf(t, i);
-    pos.x += b * points[i].x;
-    pos.y += b * points[i].y;
-    pos.z += b * points[i].z;
-  }
-  return pos;
+    p[i] = points[i];
+  for (int n = numPoints - 1; n > 0; n--)
+    for (int i = 0; i < n; i++)
+      p[i] = p[i] + (p[i + 1] - p[i]) * t;
+  return p[0];
 }
 
 float inputWeight(const GaitInput &in)
@@ -93,13 +81,49 @@ struct Stride
   float ground;
   float lift;
   float side;
-  int placement;
-  Vector2 pivot;
+  int leg;
 };
 
 static int placementFor(int leg)
 {
   return (int)(LEG_PLACEMENT_ANGLE * ROTATION_MULTIPLIER[leg]);
+}
+
+// Vector3::rotate about the stance pivot by a leg's placement angle, with the
+// angle's cosine and sine computed once: the same arithmetic (and integer
+// truncation), without trigonometry on every foot target.
+struct Placement
+{
+  int angle;
+  float cosA, sinA;
+};
+
+static const Placement &placement(int leg)
+{
+  static Placement table[LEG_COUNT];
+  static bool ready = false;
+  if (!ready)
+  {
+    for (int i = 0; i < LEG_COUNT; i++)
+    {
+      int a = placementFor(i);
+      float rad = a * (float)M_PI / 180.0f;
+      table[i] = Placement{a, cosf(rad), sinf(rad)};
+    }
+    ready = true;
+  }
+  return table[leg];
+}
+
+static Vector3 placed(Vector3 v, int leg)
+{
+  const Placement &pl = placement(leg);
+  if (pl.angle == 0)
+    return v;
+  float px = v.x - STANCE_DISTANCE, py = v.y;
+  int xr = px * pl.cosA - py * pl.sinA;
+  int yr = px * pl.sinA + py * pl.cosA;
+  return Vector3(xr + STANCE_DISTANCE, yr, v.z);
 }
 
 // The ground stroke (propel end minus lift end) of each motion alone, in the
@@ -108,9 +132,9 @@ static int placementFor(int leg)
 static Vector2 straightStroke(int leg, Vector2 v)
 {
   float side = STRIDE_MULTIPLIER[leg];
-  float a = placementFor(leg) * (float)M_PI / 180.0f;
+  const Placement &pl = placement(leg);
   float x = 2 * v.x * side, y = -2 * v.y * side;
-  return Vector2(x * cosf(a) - y * sinf(a), x * sinf(a) + y * cosf(a));
+  return Vector2(x * pl.cosA - y * pl.sinA, x * pl.sinA + y * pl.cosA);
 }
 
 static Vector2 rotationStroke(float rotateStrideLength)
@@ -118,32 +142,69 @@ static Vector2 rotationStroke(float rotateStrideLength)
   return Vector2(0, 2 * rotateStrideLength);
 }
 
-// Reachability shrink for combined strokes: at most 40 steps of 5 %, about
-// 13 % of the stroke left at worst.
-constexpr int REACH_SHRINK_STEPS = 40;
-constexpr float REACH_SHRINK_FACTOR = 0.95f;
+// Reachability shrink for strokes: down to about 13 % of the stroke at worst.
+constexpr float MIN_REACH_SCALE = 0.13f;
+// The placement rotation truncates to whole millimetres, which moves a point
+// by less than this; stroke ends keep it from the reach limit.
+constexpr float REACH_TRUNCATION_MARGIN_MM = 1.5f;
 
-// Whether every leg's blended stroke ends, with both motions amplified by
-// total / own weight and then scaled by @p scale, are reachable.
-static bool strokeEndsReachable(const Stride &st, float f, float t, float scale, float ground)
+// The largest s >= 0 with |p + s d| <= r, or 0 when p itself is beyond r.
+static float largestWithin(Vector2 p, Vector2 d, float r)
 {
-  Vector2 v = st.v * (scale * st.weightSum / f);
-  float rot = st.rotateStrideLength * scale * st.weightSum / t;
+  float c = p.x * p.x + p.y * p.y - r * r;
+  if (c > 0)
+    return 0;
+  float a = d.x * d.x + d.y * d.y;
+  if (a <= 0)
+    return INFINITY;
+  float b = p.x * d.x + p.y * d.y;
+  return (-b + sqrtf(b * b - a * c)) / a;
+}
+
+// The largest factor, from @p scale down to MIN_REACH_SCALE of it, at which
+// every leg's blended stroke ends (both motions amplified by total / own
+// weight) are reachable. A stroke end is the stance point plus the factor
+// times a direction, and the reach at the ground's height is a circle about
+// the coxa pivot, so each end's limit is the root of a quadratic: exact and
+// smooth in the input, with no search.
+static float reachScale(const Stride &st, float f, float t, float scale, float ground)
+{
+  const float maxSpan = kinematics::MAX_KNEE_SPAN;
+  if (fabsf(ground) >= maxSpan)
+    return scale * MIN_REACH_SCALE;
+  float r = kinematics::COXA_LENGTH + sqrtf(maxSpan * maxSpan - ground * ground) - REACH_TRUNCATION_MARGIN_MM;
+  // A motion with no input has no stroke (and no weight).
+  Vector2 v = f >= MIN_INPUT ? st.v * (st.weightSum / f) : Vector2();
+  float rot = t >= MIN_INPUT ? st.rotateStrideLength * st.weightSum / t : 0;
   float wS = f / st.weightSum, wR = t / st.weightSum;
-  Vector2 pivot(STANCE_DISTANCE, 0);
-  for (int leg = 0; leg < LEG_COUNT; leg++)
+  const Vector2 stance(STANCE_DISTANCE, 0);
+  float limit = scale;
+  // Alone, the straight stroke's ends on legs 3-5 mirror those on legs 0-2
+  // (same placement, opposite side), and the rotation stroke's are the same
+  // on every leg: fewer ends to solve.
+  int legs = wR == 0 ? LEG_COUNT / 2 : (wS == 0 ? 1 : LEG_COUNT);
+  for (int leg = 0; leg < legs; leg++)
   {
+    const Placement &pl = placement(leg);
     float side = STRIDE_MULTIPLIER[leg];
-    int placement = placementFor(leg);
     for (int end = -1; end <= 1; end += 2) // lift end, propel end
     {
-      Vector3 straight = Vector3(end * v.x * side + STANCE_DISTANCE, -end * v.y * side, ground).rotate(placement, pivot);
-      Vector3 rotation(STANCE_DISTANCE, end * rot, ground);
-      if (!kinematics::isValidTarget(straight * wS + rotation * wR))
-        return false;
+      // The straight end's offset from the stance point, rotated by the
+      // placement, blended with the rotation end's.
+      float dx = end * v.x * side, dy = -end * v.y * side;
+      Vector2 d((dx * pl.cosA - dy * pl.sinA) * wS, (dx * pl.sinA + dy * pl.cosA) * wS + end * rot * wR);
+      limit = fminf(limit, largestWithin(stance, d, r));
     }
   }
-  return true;
+  return fmaxf(limit, scale * MIN_REACH_SCALE);
+}
+
+// The reach factor of one motion of @p st on its own (the other's input zero).
+static float aloneReachScale(Stride st, bool straight, float ground)
+{
+  float f = straight ? fabsf(st.forwardAmount) : 0, t = straight ? 0 : fabsf(st.turnAmount);
+  st.weightSum = f + t;
+  return reachScale(st, f, t, 1, ground);
 }
 
 float mountAngleDeg(int leg)
@@ -151,7 +212,8 @@ float mountAngleDeg(int leg)
   return (leg < LEG_COUNT / 2 ? 180.0f : 0.0f) + placementFor(leg);
 }
 
-static Stride strideFor(int leg, const GaitParams &p, const GaitInput &in)
+// The parts of the stride every leg shares.
+static Stride commonStride(const GaitParams &p, const GaitInput &in)
 {
   Stride st;
   st.forwardAmount = in.translate.magnitude();
@@ -160,11 +222,17 @@ static Stride strideFor(int leg, const GaitParams &p, const GaitInput &in)
   st.rotateStrideLength = in.rotate * in.rotationScale;
   st.v = in.translate;
 
-  if (in.fixedStride)
+  if (in.fixedStride > 0)
   {
-    st.v.normalize();
-    st.v = st.v * FIXED_STRIDE_LENGTH;
-    st.rotateStrideLength = st.rotateStrideLength < 0 ? -FIXED_STRIDE_LENGTH : FIXED_STRIDE_LENGTH;
+    // Blended, so a change of stride mode (eased by the body) shortens or
+    // lengthens the stride gradually.
+    Vector2 fixed = in.translate;
+    fixed.normalize();
+    fixed = fixed * FIXED_STRIDE_LENGTH;
+    float fixedRotate = st.rotateStrideLength < 0 ? -FIXED_STRIDE_LENGTH : FIXED_STRIDE_LENGTH;
+    float k = clampf(in.fixedStride, 0, 1);
+    st.v = st.v * (1 - k) + fixed * k;
+    st.rotateStrideLength = st.rotateStrideLength * (1 - k) + fixedRotate * k;
   }
 
   st.v = st.v * Vector2(1, p.strideLengthMultiplier);
@@ -182,31 +250,69 @@ static Stride strideFor(int leg, const GaitParams &p, const GaitInput &in)
   // so single-motion strokes are never shortened), both motions shrink by
   // the same factor on every leg, which keeps the arc and its legs in step.
   float f = fabsf(st.forwardAmount), t = fabsf(st.turnAmount);
-  if (f >= MIN_INPUT && t >= MIN_INPUT)
+  bool combined = f >= MIN_INPUT && t >= MIN_INPUT;
+  float scale = 1;
+  if (combined)
   {
-    float scale = 1;
+    // The single strokes as each motion alone would take them, shortened
+    // where they would not reach.
+    float straightReach = aloneReachScale(st, true, in.distanceFromGround);
+    float rotationReach = aloneReachScale(st, false, in.distanceFromGround);
+    // The placement rotation keeps lengths: every leg's single strokes are
+    // as long as each other.
+    Vector2 r = rotationStroke(st.rotateStrideLength);
+    float limit = fmaxf(p.maxStrideLength, fmaxf(2 * st.v.magnitude() * straightReach, fabsf(r.y) * rotationReach));
     for (int i = 0; i < LEG_COUNT; i++)
     {
-      Vector2 s = straightStroke(i, st.v), r = rotationStroke(st.rotateStrideLength);
-      float combined = (s + r).magnitude();
-      float limit = fmaxf(p.maxStrideLength, fmaxf(s.magnitude(), r.magnitude()));
-      if (combined > limit)
-        scale = fminf(scale, limit / combined);
+      float sum = (straightStroke(i, st.v) + r).magnitude();
+      if (sum > limit)
+        scale = fminf(scale, limit / sum);
     }
-    // Shrink further, still together, until every leg's stroke ends are
-    // reachable: the ends lie farthest out, and each motion alone may reach
-    // while their sum does not.
-    for (int i = 0; i < REACH_SHRINK_STEPS && !strokeEndsReachable(st, f, t, scale, in.distanceFromGround); i++)
-      scale *= REACH_SHRINK_FACTOR;
+  }
+  // Shrink further, still together, until every leg's stroke ends are
+  // reachable: the ends lie farthest out, a long stride at an extreme
+  // height may not reach, and each motion alone may reach while their sum
+  // does not.
+  if (st.weightSum >= MIN_INPUT)
+    scale = reachScale(st, f, t, scale, in.distanceFromGround);
+  if (combined)
+  {
     st.v = st.v * (scale * st.weightSum / f);
     st.rotateStrideLength *= scale * st.weightSum / t;
+  }
+  else
+  {
+    st.v = st.v * scale;
+    st.rotateStrideLength *= scale;
   }
 
   st.ground = in.distanceFromGround;
   st.lift = LIFT_HEIGHT * p.liftHeightMultiplier;
+  return st;
+}
+
+static bool sameInput(const GaitInput &a, const GaitInput &b)
+{
+  return a.translate.x == b.translate.x && a.translate.y == b.translate.y && a.rotate == b.rotate &&
+         a.fixedStride == b.fixedStride && a.distanceFromGround == b.distanceFromGround &&
+         a.speedScale == b.speedScale && a.rotationScale == b.rotationScale;
+}
+
+static Stride strideFor(int leg, const GaitParams &p, const GaitInput &in)
+{
+  // Every leg of a step shares the stride: computed once for the same input.
+  static const GaitParams *lastParams = nullptr;
+  static GaitInput lastInput;
+  static Stride last;
+  if (lastParams != &p || !sameInput(lastInput, in))
+  {
+    last = commonStride(p, in);
+    lastParams = &p;
+    lastInput = in;
+  }
+  Stride st = last;
   st.side = STRIDE_MULTIPLIER[leg];
-  st.placement = placementFor(leg);
-  st.pivot = Vector2(STANCE_DISTANCE, 0);
+  st.leg = leg;
   return st;
 }
 
@@ -223,7 +329,7 @@ static Vector3 blend(const Stride &st, Vector3 straightPoint, Vector3 rotatePoin
 static Vector3 propelEnd(const Stride &st)
 {
   return blend(st,
-               Vector3(st.v.x * st.side + STANCE_DISTANCE, -st.v.y * st.side, st.ground).rotate(st.placement, st.pivot),
+               placed(Vector3(st.v.x * st.side + STANCE_DISTANCE, -st.v.y * st.side, st.ground), st.leg),
                Vector3(STANCE_DISTANCE, st.rotateStrideLength, st.ground));
 }
 
@@ -231,7 +337,7 @@ static Vector3 propelEnd(const Stride &st)
 static Vector3 liftEnd(const Stride &st)
 {
   return blend(st,
-               Vector3(-st.v.x * st.side + STANCE_DISTANCE, st.v.y * st.side, st.ground).rotate(st.placement, st.pivot),
+               placed(Vector3(-st.v.x * st.side + STANCE_DISTANCE, st.v.y * st.side, st.ground), st.leg),
                Vector3(STANCE_DISTANCE, -st.rotateStrideLength, st.ground));
 }
 
@@ -244,17 +350,29 @@ static void trackPhase(float t, const GaitParams &p, const Stride &st, LegCycle 
   if (t < p.pushFraction)
   {
     if (cycle.phase == LegPhase::Lifting)
+    {
       cycle.start = liftEnd(st);
+      cycle.segmentStart = 0;
+    }
     else if (cycle.phase != LegPhase::Propelling)
+    {
       cycle.start = current;
+      cycle.segmentStart = t;
+    }
     cycle.phase = LegPhase::Propelling;
   }
   else
   {
     if (cycle.phase == LegPhase::Propelling)
+    {
       cycle.start = propelEnd(st);
+      cycle.segmentStart = p.pushFraction;
+    }
     else if (cycle.phase != LegPhase::Lifting)
+    {
       cycle.start = current;
+      cycle.segmentStart = t;
+    }
     cycle.phase = LegPhase::Lifting;
   }
 }
@@ -262,10 +380,13 @@ static void trackPhase(float t, const GaitParams &p, const Stride &st, LegCycle 
 void trackPhase(int leg, float t, const GaitParams &p, const GaitInput &in,
                 LegCycle &cycle, Vector3 current)
 {
-  Stride st = strideFor(leg, p, in);
-  if (st.weightSum < MIN_INPUT)
+  if (inputWeight(in) < MIN_INPUT)
     return;
-  trackPhase(t, p, st, cycle, current);
+  // The stride is needed only where the leg changes phase.
+  LegPhase now = t < p.pushFraction ? LegPhase::Propelling : LegPhase::Lifting;
+  if (cycle.phase == now)
+    return;
+  trackPhase(t, p, strideFor(leg, p, in), cycle, current);
 }
 
 Vector3 footTarget(int leg, float t, const GaitParams &p, const GaitInput &in,
@@ -285,10 +406,10 @@ Vector3 footTarget(int leg, float t, const GaitParams &p, const GaitInput &in,
   if (cycle.phase == LegPhase::Propelling)
   {
     // Propelling: foot on the ground.
-    float s = mapFloat(t, 0, p.pushFraction, 0, 1);
+    float s = mapFloat(t, cycle.segmentStart, p.pushFraction, 0, 1);
 
     straight[0] = cycle.start;
-    straight[1] = Vector3(st.v.x * st.side + STANCE_DISTANCE, -st.v.y * st.side, st.ground).rotate(st.placement, st.pivot);
+    straight[1] = placed(Vector3(st.v.x * st.side + STANCE_DISTANCE, -st.v.y * st.side, st.ground), st.leg);
     straightPoint = bezier(straight, 2, s);
 
     rotation[0] = cycle.start;
@@ -299,12 +420,12 @@ Vector3 footTarget(int leg, float t, const GaitParams &p, const GaitInput &in,
   else
   {
     // Lifting: swing the foot to the next stride start.
-    float s = mapFloat(t, p.pushFraction, 1, 0, 1);
+    float s = mapFloat(t, cycle.segmentStart, 1, 0, 1);
 
     straight[0] = cycle.start;
     straight[1] = cycle.start + Vector3(0, 0, st.lift);
-    straight[2] = Vector3(-st.v.x * st.side + STANCE_DISTANCE, (st.v.y + STRIDE_OVERSHOOT) * st.side, st.ground + LAND_HEIGHT).rotate(st.placement, st.pivot);
-    straight[3] = Vector3(-st.v.x * st.side + STANCE_DISTANCE, st.v.y * st.side, st.ground).rotate(st.placement, st.pivot);
+    straight[2] = placed(Vector3(-st.v.x * st.side + STANCE_DISTANCE, (st.v.y + STRIDE_OVERSHOOT) * st.side, st.ground + LAND_HEIGHT), st.leg);
+    straight[3] = placed(Vector3(-st.v.x * st.side + STANCE_DISTANCE, st.v.y * st.side, st.ground), st.leg);
     straightPoint = bezier(straight, 4, s);
 
     rotation[0] = cycle.start;

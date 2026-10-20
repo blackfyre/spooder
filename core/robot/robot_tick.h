@@ -42,6 +42,8 @@ constexpr int TELEMETRY_EVERY_TICKS = 5; // 100 ms
 // Pose frames (USB only) at the telemetry rate, two ticks after it, so the
 // two never share one tick's USB transmit buffer.
 constexpr int POSE_TICK = 2;
+// Diagnostics frames (USB only) likewise, four ticks after telemetry.
+constexpr int DIAGNOSTICS_TICK = 4;
 // Longest debug text line, including the newline.
 constexpr int MAX_LOG_LINE = 160;
 
@@ -78,6 +80,9 @@ struct Inputs
   // InputMode::Serial.
   SerialInput serial;
   protection::Reading power;
+  // The working time of the previous tick() call, in microseconds, as the
+  // caller measured it (0 when not measured).
+  uint32_t previousTickUs;
 };
 
 // What the tick drives. Every call happens from inside tick().
@@ -132,6 +137,36 @@ struct RobotState
   LinkEndpoint links[LINK_COUNT];
   link_receiver::Arbiter arbiter;
   link_receiver::Source lastSource = link_receiver::Source::None;
+  // The bridge link's state for telemetry (TELEMETRY_BRIDGE_* flags).
+  uint8_t bridgeFlags = 0;
+
+  // The servo profile's joint speed budget, which movement keeps to, and its
+  // rated no-load speed, which the output rate backstop never exceeds.
+  // init() sets both from the build's profile.
+  float jointBudgetDegPerS = 0;
+  float backstopDegPerS = 0;
+  bool profileAnnounced = false; // the start-up line naming the profile
+
+  // Output rate backstop: the angles last handed to the servos, per leg
+  // whether that is known since output switched on, and how often (ticks)
+  // a joint was held back, with the joint furthest behind since the last
+  // report.
+  kinematics::JointAngles outputAngles[kinematics::LEG_COUNT] = {};
+  bool outputKnown[kinematics::LEG_COUNT] = {};
+  uint32_t backstopTicks = 0;
+  uint32_t backstopReported = 0;
+  float backstopWorstDeg = 0;
+  int backstopWorstJoint = -1; // servo output order
+
+  // Diagnostics over the current telemetry window: the smallest motion
+  // share, and the tick working times. A tick's working time is known only
+  // in the next tick, so each tick adds the previous tick's time and motion
+  // share together, and a window covers the same five ticks for both.
+  float previousMotionShare = 1;
+  float windowMotionShare = 1;
+  uint32_t windowTickMaxUs = 0;
+  uint32_t windowTickSumUs = 0;
+  uint32_t windowTicks = 0;
 
   int telemetryTick = 0;
   uint32_t lastStatusMs = 0;
@@ -140,7 +175,8 @@ struct RobotState
 
 /**
  * @brief Prepares a default-constructed @p s (call once): protection with
- * @p limits, both calibration tables from the compiled defaults, and @p nowMs
+ * @p limits, both calibration tables from the compiled defaults, the joint
+ * speed budget and backstop speed from the build's servo profile, and @p nowMs
  * as the previous tick's time.
  */
 void init(RobotState &s, InputMode mode, const protection::Limits &limits, uint32_t nowMs);

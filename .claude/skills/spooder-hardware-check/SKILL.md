@@ -42,6 +42,7 @@ J6 (unpopulated 17-pin header), pin → signal: 1 GND, 2 USER_SW, 3 GND, 4 RESET
 ```sh
 # power_limits.h must exist (copy power_limits.example.h and set the limits for the fitted servos and supply)
 mise run build            # commands from the bridge link (default)
+SPOODER_SERVO_PROFILE=MG996R mise run build  # the fitted servo model (default MG996R; see core/movement/servo_profile.h)
 # put the board in BOOTSEL: hold BOOT/USER, tap RESET; the RPI-RP2 drive must be mounted
 mise run upload           # rebuilds, then copies the .uf2
 mise run monitor          # USB console, timestamped text; Ctrl+C to exit
@@ -80,6 +81,8 @@ mise run monitor-bridge                       # Bluepad32 console; type `help`
 - `movement stopped: waiting for the fault to clear and a new request` when a fault cuts output;
 - `fault latched: <name> (<A> A, <V> V)` once per fault;
 - `point impossible to reach: (...) leg n` once per rejection;
+- `servo profile <name>: joint speed budget <n> deg/s` on the first tick;
+- `output rate backstop: <n> ticks held back; most: leg <n> <joint>, <deg> deg behind` after a status line, only when the backstop held a joint back since the last one. Expected only at speed dial 100, rarely: at the default dial it points to a bug or a calibration change made in one jump;
 - `operator source: none|bridge|USB|conflict (bridge and USB): sleeping` on each change (default build).
 
 In the default build, a connected USB host also receives binary link frames (telemetry every 100 ms, calibration reports in Calibrate) between the text lines. `mise run monitor` keeps them out of the text (and decodes them with `--frames`); a plain terminal (`monitor-raw`) shows them as stray characters. A text line marked `[n stray 0xA5]` held a byte 0xA5 outside a frame: debug text must stay ASCII.
@@ -139,6 +142,7 @@ Stop at the first stage that misbehaves.
 6. **One leg, then all 18,** with the robot on a stand, feet off the ground.
    - Boot runs Initialise, then Stand.
    - Then `w`, `g`, `r`, `z` (legs fold, then go limp), `s` (wakes through Stand) and `c`.
+   - Walking is capped at the servo profile's joint speed budget: high speed dial settings walk no faster than the servos can follow, and strides at body height 100 are shorter. If the feet still lag or the current is high, lower the profile's load share (`core/movement/servo_profile.h`) and rebuild.
 7. **Geometry and calibration.**
    - Measure the new frame's link lengths, and compare them with `kinematics::COXA/FEMUR/TIBIA_LENGTH`.
    - Recalibrate the joints per the `spooder-leg-kinematics` skill (live calibration in Calibrate, then export to `core/movement/calibration_defaults.cpp`), on the bench with the desktop calibrator (below).
@@ -197,13 +201,27 @@ The desktop app in `desktop/` speaks the link protocol on the robot's USB port. 
 1. **Connect.** The Servo 2040 (USB ID 2e8a:000a) is preselected; press Connect.
    - The debug log shows the robot's text lines and the telemetry strip its mode, supply and faults. Frames go to the frames pane, never into the log.
    - A `Stray 0xA5` banner means a text line held a byte 0xA5 outside a frame: debug text must stay ASCII.
-2. **Observe.** The app reports no controller: with the gamepad driving, nothing changes on the robot (LED 6 stays cyan). Space (or E-stop) still stops it: all six LEDs steady red, output off. Press Space again to release the app's e-stop; the fault stays latched.
+2. **Observe.** The **Bridge** cell shows the bridge link from the robot's side: `down`, or `up · no pad` / `up · pad` with its frame counts (`mise run monitor --frames` prints the same as `bridge up (...)`). With the bridge running, `up` and rising counts confirm the UART link both ways without pairing a gamepad. The app reports no controller: with the gamepad driving, nothing changes on the robot (LED 6 stays cyan). Space (or E-stop) still stops it: all six LEDs steady red, output off. Press Space again to release the app's e-stop; the fault stays latched.
 3. **Take control** with the bridge's gamepad off and the app's e-stop released. Clear fault (`F`; the fault cannot clear while any e-stop is still signalled), then Calibrate (`2`; `1` Stand, `3` Sleep). From Stand, keys `4`–`8` (or the gesture buttons) play say hi, wiggle, dance, attack and ball; rehearse them on the virtual robot first (`mise run desktop-sim`). The keys are listed under the mode buttons while in control. LED 6 shows blue (USB in control) once the fault is cleared, and the source shows `USB (this app)`.
-4. **Calibrate.** Select a joint with the arrow keys or the pointer; `=`/`-` nudge fine, Shift coarse, `R` flips the direction. A change shows `pending` until the robot's report confirms it; clamped or rejected changes are marked and show the robot's value. The joint moves at 60°/s at most.
+4. **Drive.** In control, from Stand (`1`):
+   - **Drive keys:** hold `W`/`S` to walk forward and back, `A`/`D` to steer (turning on the spot without `W`/`S`, mirrored when reversing), and `Q`/`E` to step sideways. The first press requests Walk. Releasing every key holds the feet, and `1` stands again.
+   - **Settings:** `Z`/`X` set the speed dial, `C`/`V` the height (steps of 10), `G` the next gait and `T` the stride mode. The line under the mode buttons shows what is sent.
+   - **Stopping:** losing the window focus stops the input, and Space is the e-stop.
+   - Rehearse on the virtual robot first, and keep the robot on a stand until the gait looks right.
+5. **Calibrate.** Select a joint with the arrow keys or the pointer; `=`/`-` nudge fine, Shift coarse, `R` flips the direction. A change shows `pending` until the robot's report confirms it; clamped or rejected changes are marked and show the robot's value. The joint moves at 60°/s at most.
+   - **4 views** (top bar) opens a second window with the whole robot from the pose: top, front, left and isometric. The body is a schematic plate, and the ground is at the lowest foot. The selected leg is in the accent and limits are ringed. Put it on a second screen to judge a stance, a gait or a gesture while driving or calibrating.
+   - The **charts** tab shows, on one time axis, the last 30 s, 2 min or 10 min of:
+     - power: the supply voltage against its limits, and the current and averaged current against the trip and sustained limits;
+     - links: frames accepted and rejected on the robot's, the bridge's and the host link;
+     - a mode, output and fault timeline;
+     - joints: the fastest joint speed per kind against the budget and rated speed, and the selected leg's servo angles;
+     - the robot's internals: the budget's motion share, the control tick's time against 20 ms, and backstop hits.
+
+     Hover reads every chart at one moment; Save CSV writes the kept history to the downloads folder. Use it to see supply sag under load, links dropping frames, or the servos being asked for more than they can do.
    - The **legs** pane draws the selected leg as the robot commands it (calibration pose: coxa straight out, femur straight up, tibia horizontal outward), each joint's pulse, and all six legs from above. Compare the real leg with the drawing: a joint that differs needs its offset changed. Rings mark joints near or at the 0°/180° servo limits. The top view's leg placement (legs 1–3 left; legs 1 and 6 the front pair, 3 and 4 the rear) matches the gait code and is confirmed on the robot. The body outline is a simple schematic.
-5. **Release control.** The robot sleeps (LED 6 fast amber without a bridge). Closing the window or pulling the cable does the same within about 1 s.
-6. **Conflict.** Take control while the gamepad is connected: the app and the bridge screen show the conflict, LED 6 alternates magenta and cyan, and the robot sleeps until one side lets go.
-7. **Export.** Show difference, check it, Write file: only `core/movement/calibration_defaults.cpp` changes. Or Copy text. Run `mise run test` (it checks the file's format and round trip, not its values), rebuild and flash, then confirm the robot reports the same table in Calibrate. Leave `test/golden/` alone: its files are format fixtures.
+6. **Release control.** The robot sleeps (LED 6 fast amber without a bridge). Closing the window or pulling the cable does the same within about 1 s.
+7. **Conflict.** Take control while the gamepad is connected: the app and the bridge screen show the conflict, LED 6 alternates magenta and cyan, and the robot sleeps until one side lets go.
+8. **Export.** Show difference, check it, Write file: only `core/movement/calibration_defaults.cpp` changes. Or Copy text. Run `mise run test` (it checks the file's format and round trip, not its values), rebuild and flash, then confirm the robot reports the same table in Calibrate. Leave `test/golden/` alone: its files are format fixtures.
 
 Record results in `openspec/changes/add-desktop-calibrator/tasks.md` (task 4.2).
 
@@ -231,6 +249,7 @@ Button names are Bluepad32's (Xbox layout: `a` bottom, `b` right, `x` left, `y` 
 | Bridge right button (GPIO35) | Toggle emergency stop |
 
 - One gamepad at a time; a second is refused.
+- Rumble (`core/gamepad_mapping/rumble`), on pads that have it (the SF30 Pro in its Switch and Windows modes): a long strong rumble when a protection fault latches; a short strong one when the bridge's e-stop goes on, a light tap when it goes off; a medium one when the robot link is lost, a light tap when it returns; a light tap when a gesture request did not play within 0.6 s (walking, a transition, or a gesture not scripted yet). Faults already latched when the pad connects do not rumble.
 - Disconnecting requests Sleep with zero input. Reconnecting starts in Stand with height, speed, gait and stride kept.
 - After any fault: clear it, then make a new mode request; clearing alone never restarts motion.
 - Pairing: DualShock 4 and DualSense hold Share + PS; Switch Pro holds the sync button; 8BitDo pads use their pairing combination. Bluepad32 remembers paired pads; `del_bluetooth_keys` in the bridge console forgets them.

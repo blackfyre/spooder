@@ -65,6 +65,8 @@ func (w *window) controlRow(gtx layout.Context) layout.Dimensions {
 		layout.Rigid(w.button(&w.refresh, kindQuiet, "Refresh", w.device == nil).width(100).Layout),
 		layout.Rigid(layout.Spacer{Width: 8}.Layout),
 		layout.Rigid(w.button(&w.connect, kindNeutral, label, enabled).width(120).Layout),
+		layout.Rigid(layout.Spacer{Width: 8}.Layout),
+		layout.Rigid(w.button(&w.views, kindQuiet, "4 views", w.env.OpenViews != nil).width(90).Layout),
 		layout.Rigid(layout.Spacer{Width: 24}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			kind, label := kindNeutral, "Take control"
@@ -146,6 +148,17 @@ func (w *window) cell(label, value string, c color.NRGBA) layout.FlexChild {
 	return w.wideCell(1, label, value, c)
 }
 
+// twoLineCell is a labelled value with a smaller, muted second line.
+func (w *window) twoLineCell(weight float32, label string, c color.NRGBA, value, second string) layout.FlexChild {
+	return layout.Flexed(weight, func(gtx layout.Context) layout.Dimensions {
+		return stacked(gtx, 4,
+			tracked(w.th, sizeLabel, w.pal.Muted, label),
+			oneLine(valueLabel(w.th, sizeValue, c, value)).Layout,
+			oneLine(valueLabel(w.th, sizeLabel, w.pal.Muted, second)).Layout,
+		)
+	})
+}
+
 func (w *window) wideCell(weight float32, label, value string, c color.NRGBA) layout.FlexChild {
 	return layout.Flexed(weight, func(gtx layout.Context) layout.Dimensions {
 		return stacked(gtx, 4,
@@ -182,14 +195,15 @@ func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 					w.cell("Supply", voltsText(t.VoltageMv), c),
 					w.cell("Current", ampsText(t.CurrentMa), c),
 					w.wideCell(1.6, "Source", sourceText(snap), c),
+					w.twoLineCell(1.6, "Bridge", c, bridgeState(t), bridgeCounts(t)),
 					layout.Flexed(2, func(gtx layout.Context) layout.Dimensions {
 						return stacked(gtx, 4,
 							tracked(w.th, sizeLabel, w.pal.Muted, "Faults"),
 							wrapped(valueLabel(w.th, sizeValue, faultColour, faultsText(snap.Faults))),
 						)
 					}),
-					w.wideCell(1.3, "Robot link", fmt.Sprintf("%d ok · %d bad", t.ValidFrames, t.DiscardedFrames), c),
-					w.wideCell(1.3, "Host link", fmt.Sprintf("%d ok · %d bad", snap.Stats.Valid, snap.Stats.Discarded), w.pal.Fg),
+					w.twoLineCell(1.1, "Robot link", c, fmt.Sprintf("%d ok", t.ValidFrames), fmt.Sprintf("%d bad", t.DiscardedFrames)),
+					w.twoLineCell(1.1, "Host link", w.pal.Fg, fmt.Sprintf("%d ok", snap.Stats.Valid), fmt.Sprintf("%d bad", snap.Stats.Discarded)),
 				)
 			},
 			func(gtx layout.Context) layout.Dimensions {
@@ -199,20 +213,20 @@ func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 					if snap.Control && snap.Mode == m {
 						kind = kindActive
 					}
-					ws = append(ws, w.button(&w.modes[i], kind, m.String()+" · "+string(modeKeys[i]), snap.ModesEnabled).width(130).Layout)
+					ws = append(ws, w.button(&w.modes[i], kind, m.String()+" · "+string(modeKeys[i]), snap.ModesEnabled).width(96).Layout)
 				}
-				ws = append(ws, w.button(&w.clearFault, kindNeutral, "Clear fault · "+string(clearFaultKey), snap.ModesEnabled).width(150).Layout)
+				ws = append(ws, w.button(&w.clearFault, kindNeutral, "Clear fault · "+string(clearFaultKey), snap.ModesEnabled).width(116).Layout)
 				ws = append(ws, layout.Spacer{Width: 8}.Layout)
 				for i, g := range gestureButtons {
 					kind := kindQuiet
 					if snap.Gesture == g.id && snap.Fresh {
 						kind = kindActive
 					}
-					ws = append(ws, w.button(&w.gestures[i], kind, g.label+" · "+string(gestureKeys[i]), snap.ModesEnabled).width(110).Layout)
+					ws = append(ws, w.button(&w.gestures[i], kind, g.label+" · "+string(gestureKeys[i]), snap.ModesEnabled).small().width(56).Layout)
 				}
 				state := "Observing: the app reports no controller. Take control to use these."
 				if snap.Control {
-					state = "In control: requesting " + snap.Mode.String() + ". Walking is the gamepad's."
+					state = "In control: requesting " + snap.Mode.String() + ". " + driveText(snap)
 				}
 				if snap.HaveTelemetry && !snap.Fresh {
 					ws = append(ws, w.staleMarker(snap))
@@ -239,6 +253,12 @@ func bodyText(snap session.Snapshot) string {
 	return snap.Body.String()
 }
 
+// driveText is what the app sends for walking while in control.
+func driveText(snap session.Snapshot) string {
+	return fmt.Sprintf("Sending %s, speed %d, height %d, %s stride.",
+		session.GaitName(snap.Gait), snap.Speed, snap.Height, session.StrideName(snap.Stride))
+}
+
 // keyHint is one shortcut: its keys and what they do.
 type keyHint struct {
 	keys   []string
@@ -246,15 +266,23 @@ type keyHint struct {
 }
 
 // keyHints are the shortcuts while in control. Space works in any state;
-// the editing keys act only in Calibrate.
+// the editing keys act only in Calibrate, which the editor's heading says
+// whenever the robot is elsewhere.
 var keyHints = []keyHint{
-	{[]string{"Space"}, "e-stop on / off"},
-	{[]string{"1", "2", "3"}, "Stand, Calibrate, Sleep"},
-	{[]string{"4", "…", "8"}, "gestures, from Stand"},
+	{[]string{"Space"}, "e-stop"},
+	{[]string{"1", "2", "3"}, "modes"},
+	{[]string{"4", "…", "8"}, "gestures"},
 	{[]string{"F"}, "clear fault"},
-	{[]string{"←", "→", "↑", "↓"}, "select joint and value"},
-	{[]string{"=", "−"}, "nudge, with Shift coarse"},
-	{[]string{"R"}, "flip direction"},
+	{[]string{"W", "S"}, "walk, from Stand"},
+	{[]string{"A", "D"}, "steer"},
+	{[]string{"Q", "E"}, "step aside"},
+	{[]string{"Z", "X"}, "speed"},
+	{[]string{"C", "V"}, "height"},
+	{[]string{"G"}, "gait"},
+	{[]string{"T"}, "stride"},
+	{[]string{"←", "→", "↑", "↓"}, "select"},
+	{[]string{"=", "−"}, "nudge, Shift coarse"},
+	{[]string{"R"}, "flip"},
 }
 
 // keyHints: the keyboard controls, as key caps and their actions, flowing
@@ -269,7 +297,6 @@ func (w *window) keyHints(gtx layout.Context) layout.Dimensions {
 		parts = append(parts, oneLine(textLabel(w.th, sizeText, w.pal.Fg, h.action)).Layout)
 		ws = append(ws, sideBySideWidget(4, parts...))
 	}
-	ws = append(ws, oneLine(textLabel(w.th, sizeText, w.pal.Muted, "Editing keys act in Calibrate.")).Layout)
 	return flow(gtx, 18, 6, ws...)
 }
 

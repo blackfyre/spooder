@@ -30,6 +30,11 @@ type Palette struct {
 	ButtonBg, ButtonFg, ButtonShadow color.NRGBA
 	QuietBg, QuietFg, QuietShadow    color.NRGBA
 
+	// Chart series: a categorical set of three, validated (dataviz
+	// validator, all pairs) on Surface in each mode. Not the accent orange,
+	// which marks the e-stop and active controls.
+	Series [3]color.NRGBA
+
 	// Status fills, drawn with OnStatus text or as dots.
 	Green, Yellow, Blue color.NRGBA
 	OnStatus            color.NRGBA
@@ -52,6 +57,7 @@ var (
 		ButtonBg: ink, ButtonFg: rgb(0xF3F2EE), ButtonShadow: rgb(0x000000),
 		QuietBg: rgb(0xDEDBD4), QuietFg: ink, QuietShadow: rgb(0xC4C0B8),
 		Green: rgb(0x9ECE6A), Yellow: rgb(0xE0AF68), Blue: rgb(0x7AA2F7), OnStatus: ink,
+		Series: [3]color.NRGBA{rgb(0x2A78D6), rgb(0xD55181), rgb(0x008300)},
 	}
 	darkPalette = Palette{
 		Bg: ink, Well: rgb(0x121211), Surface: rgb(0x2C2C29), SurfaceAlt: rgb(0x3A3935),
@@ -60,6 +66,7 @@ var (
 		ButtonBg: rgb(0x3A3935), ButtonFg: rgb(0xF3F2EE), ButtonShadow: rgb(0x121211),
 		QuietBg: rgb(0x242421), QuietFg: rgb(0xF3F2EE), QuietShadow: rgb(0x121211),
 		Green: rgb(0x9ECE6A), Yellow: rgb(0xE0AF68), Blue: rgb(0x7AA2F7), OnStatus: ink,
+		Series: [3]color.NRGBA{rgb(0x3987E5), rgb(0xD55181), rgb(0x1A9A1A)},
 	}
 )
 

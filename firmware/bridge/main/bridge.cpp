@@ -10,6 +10,7 @@
 
 #include "display.h"
 #include "gamepad_mapping/gamepad_mapping.h"
+#include "gamepad_mapping/rumble.h"
 #include "link.h"
 #include "setup/setup_entry.h"
 #include "setup_mode.h"
@@ -31,6 +32,7 @@ static_assert(gamepad_mapping::MISC_HOME == MISC_BUTTON_SYSTEM && gamepad_mappin
 // One controller slot; a second controller is refused.
 static ControllerPtr controller = nullptr;
 static gamepad_mapping::Mapper mapper;
+static rumble::State rumbleState;
 // The left button (GPIO0, active low, board pull-up): held during the logo,
 // it restarts the bridge into setup mode. Never read at reset: GPIO0 is a
 // strapping pin, and holding it then enters the ROM download mode.
@@ -107,8 +109,16 @@ void loop()
   gamepad_mapping::PadState pad = readPad();
   gamepad_mapping::Desired desired = gamepad_mapping::update(mapper, pad, now);
   robot_link::setDesired(desired);
+  robot_link::Status link = robot_link::status();
 
-  display::update(now, pad.connected, desired, robot_link::status());
+  // Rumble on faults, the e-stop, link loss and refused gestures.
+  rumble::Inputs feel = {now, pad.connected, link.telemetryFresh, link.telemetry.faults, link.emergencyStop,
+                         desired.gestureRequestCounter, desired.gesture, link.telemetry.gesture};
+  rumble::Request r = rumble::update(rumbleState, feel);
+  if (r.play && controller != nullptr)
+    controller->playDualRumble(0, r.durationMs, r.weak, r.strong);
+
+  display::update(now, pad.connected, desired, link);
 
   // Yield so the idle task runs (watchdog) between gamepad updates.
   delay(1);

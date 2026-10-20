@@ -443,3 +443,244 @@ func TestLayoutsInEveryState(t *testing.T) {
 		frame(w, router)
 	}
 }
+
+func hold(w *window, router *input.Router, name key.Name) {
+	router.Queue(key.Event{Name: name, State: key.Press})
+	frame(w, router)
+}
+
+func letGo(w *window, router *input.Router, name key.Name) {
+	router.Queue(key.Event{Name: name, State: key.Release})
+	frame(w, router)
+}
+
+// standingInControl takes control and requests Stand.
+func standingInControl(t *testing.T, w *window, router *input.Router) *session.Session {
+	t.Helper()
+	s := w.env.Session
+	s.LinkState(link.State{Status: link.Connected, Port: servo})
+	click(w, router, &w.control)
+	press(w, router, modeKeys[0], 0)
+	if c := s.Command(); c.Mode != uint8(session.RequestStand) {
+		t.Fatalf("not standing: %+v", c)
+	}
+	return s
+}
+
+// Spec "Walking forward" and "Steering and turning on the spot", from the
+// keyboard: held keys drive, releasing them stops.
+func TestDriveKeys(t *testing.T) {
+	w, router, _ := testWindow(t, false)
+	s := standingInControl(t, w, router)
+	hold(w, router, "W")
+	hold(w, router, "W") // key repeat
+	hold(w, router, "D")
+	c := s.Command()
+	if c.Mode != uint8(session.RequestWalk) || c.TranslateY != 100 || c.Rotate != -100 {
+		t.Fatalf("W and D held: %+v", c)
+	}
+	letGo(w, router, "W")
+	if c = s.Command(); c.TranslateY != 0 || c.Rotate != -100 {
+		t.Fatalf("D held: %+v", c)
+	}
+	letGo(w, router, "D")
+	hold(w, router, "Q")
+	if c = s.Command(); c.TranslateX != -100 || c.TranslateY != 0 || c.Rotate != 0 {
+		t.Fatalf("Q held: %+v", c)
+	}
+	letGo(w, router, "Q")
+	if c = s.Command(); c.TranslateX != 0 || c.TranslateY != 0 || c.Rotate != 0 || c.Mode != uint8(session.RequestWalk) {
+		t.Fatalf("released: %+v", c)
+	}
+}
+
+// Spec "Focus lost while driving".
+func TestFocusLossStopsDriving(t *testing.T) {
+	w, router, _ := testWindow(t, false)
+	s := standingInControl(t, w, router)
+	hold(w, router, "W")
+	if s.Command().TranslateY != 100 {
+		t.Fatal("not driving")
+	}
+	w.focusChanged(false)
+	if c := s.Command(); c.TranslateY != 0 || c.Rotate != 0 {
+		t.Fatalf("after focus loss: %+v", c)
+	}
+	w.focusChanged(true)
+	// W may still be down: its key repeat does not drive again; its
+	// release and a fresh press do. Another key drives at once.
+	hold(w, router, "W")
+	if c := s.Command(); c.TranslateY != 0 {
+		t.Fatalf("W repeat after focus loss: %+v", c)
+	}
+	letGo(w, router, "W")
+	hold(w, router, "W")
+	if c := s.Command(); c.TranslateY != 100 {
+		t.Fatalf("W pressed again: %+v", c)
+	}
+	letGo(w, router, "W")
+	hold(w, router, "S")
+	if c := s.Command(); c.TranslateY != -100 {
+		t.Fatalf("S after focus loss: %+v", c)
+	}
+}
+
+// Spec "Settings", from the keyboard, and "Drive keys while observing".
+func TestSettingKeys(t *testing.T) {
+	w, router, _ := testWindow(t, false)
+	s := w.env.Session
+	s.LinkState(link.State{Status: link.Connected, Port: servo})
+	frame(w, router)
+	before := s.Command()
+	hold(w, router, "W")
+	press(w, router, "X", 0)
+	letGo(w, router, "W")
+	if s.Command() != before {
+		t.Fatalf("observing: %+v", s.Command())
+	}
+	s = standingInControl(t, w, router)
+	for _, k := range []key.Name{"X", "X", "V", "G", "T"} {
+		press(w, router, k, 0)
+	}
+	if c := s.Command(); c.Speed != 64 || c.Height != 10 || c.Gait != 1 || c.Stride != 1 {
+		t.Fatalf("settings: %+v", c)
+	}
+	press(w, router, "Z", 0)
+	press(w, router, "C", 0)
+	if c := s.Command(); c.Speed != 54 || c.Height != 0 {
+		t.Fatalf("lowered: %+v", c)
+	}
+}
+
+// Stopping with Stand while keys are held: a release never restarts Walk;
+// only a fresh press does.
+func TestStandWhileHoldingKeysStaysStanding(t *testing.T) {
+	w, router, _ := testWindow(t, false)
+	s := standingInControl(t, w, router)
+	hold(w, router, "W")
+	hold(w, router, "D")
+	press(w, router, modeKeys[0], 0) // Stand
+	counter := s.Command().ModeRequestCounter
+	letGo(w, router, "D")
+	if c := s.Command(); c.Mode != uint8(session.RequestStand) || c.ModeRequestCounter != counter {
+		t.Fatalf("a release restarted walking: %+v", c)
+	}
+	hold(w, router, "D")
+	if c := s.Command(); c.Mode != uint8(session.RequestWalk) || c.ModeRequestCounter != counter+1 {
+		t.Fatalf("a fresh press did not walk: %+v", c)
+	}
+}
+
+// Keys held when control is released, or the link lost, are not
+// resubmitted after control is taken again.
+func TestHeldKeysDoNotOutliveControl(t *testing.T) {
+	for _, lose := range []string{"release", "disconnect"} {
+		w, router, _ := testWindow(t, false)
+		s := standingInControl(t, w, router)
+		hold(w, router, "W")
+		if lose == "release" {
+			click(w, router, &w.control)
+		} else {
+			s.LinkState(link.State{Status: link.Disconnected})
+			frame(w, router)
+			s.LinkState(link.State{Status: link.Connected, Port: servo})
+			frame(w, router)
+		}
+		click(w, router, &w.control)
+		press(w, router, modeKeys[0], 0)
+		hold(w, router, "D")
+		if c := s.Command(); c.TranslateY != 0 || c.Rotate != -100 {
+			t.Fatalf("%s: W resubmitted: %+v", lose, c)
+		}
+	}
+}
+
+// A key held across a release of control: its key repeat after control is
+// retaken is not a fresh press; only releasing and pressing it again walks.
+func TestKeyRepeatAcrossControlIsNotAFreshPress(t *testing.T) {
+	w, router, _ := testWindow(t, false)
+	s := standingInControl(t, w, router)
+	hold(w, router, "W")
+	click(w, router, &w.control) // release
+	hold(w, router, "W")         // repeat
+	click(w, router, &w.control) // retake
+	press(w, router, modeKeys[0], 0)
+	counter := s.Command().ModeRequestCounter
+	hold(w, router, "W") // repeat
+	hold(w, router, "W")
+	if c := s.Command(); c.Mode != uint8(session.RequestStand) || c.ModeRequestCounter != counter || c.TranslateY != 0 {
+		t.Fatalf("a key repeat walked: %+v", c)
+	}
+	letGo(w, router, "W")
+	hold(w, router, "W")
+	if c := s.Command(); c.Mode != uint8(session.RequestWalk) || c.TranslateY != 100 {
+		t.Fatalf("a fresh press did not walk: %+v", c)
+	}
+}
+
+// A drive key released with a modifier down still stops the robot.
+func TestReleaseWithAModifierStopsDriving(t *testing.T) {
+	for _, mods := range []key.Modifiers{key.ModShift, key.ModCtrl, key.ModShift | key.ModAlt} {
+		w, router, _ := testWindow(t, false)
+		s := standingInControl(t, w, router)
+		hold(w, router, "W")
+		router.Queue(key.Event{Name: "W", Modifiers: mods, State: key.Release})
+		frame(w, router)
+		if c := s.Command(); c.TranslateY != 0 {
+			t.Fatalf("released with %v: %+v", mods, c)
+		}
+		// Pressed with a modifier, it drives as without.
+		router.Queue(key.Event{Name: "S", Modifiers: mods, State: key.Press})
+		frame(w, router)
+		if c := s.Command(); c.TranslateY != -100 {
+			t.Fatalf("pressed with %v: %+v", mods, c)
+		}
+	}
+}
+
+// A settings or mode key released with a modifier down is released: its
+// next press acts.
+func TestModifiedReleaseUnlatchesActionKeys(t *testing.T) {
+	w, router, _ := testWindow(t, false)
+	s := standingInControl(t, w, router)
+	router.Queue(key.Event{Name: "X", State: key.Press})
+	frame(w, router)
+	router.Queue(key.Event{Name: "X", Modifiers: key.ModShift, State: key.Release})
+	frame(w, router)
+	press(w, router, "X", 0)
+	if c := s.Command(); c.Speed != 64 {
+		t.Fatalf("speed after a modified release: %+v", c)
+	}
+	counter := s.Command().ModeRequestCounter
+	router.Queue(key.Event{Name: modeKeys[0], State: key.Press})
+	frame(w, router)
+	router.Queue(key.Event{Name: modeKeys[0], Modifiers: key.ModCtrl, State: key.Release})
+	frame(w, router)
+	press(w, router, modeKeys[0], 0)
+	if c := s.Command(); c.ModeRequestCounter != counter+2 {
+		t.Fatalf("mode key after a modified release: %+v", c)
+	}
+}
+
+// A drive press queued before the focus went, and handled after, does not
+// drive.
+func TestQueuedPressAfterFocusLossDoesNotDrive(t *testing.T) {
+	w, router, _ := testWindow(t, false)
+	s := standingInControl(t, w, router)
+	router.Queue(key.Event{Name: "W", State: key.Press})
+	w.focusChanged(false)
+	frame(w, router)
+	if c := s.Command(); c.TranslateY != 0 || c.Mode != uint8(session.RequestStand) {
+		t.Fatalf("queued press drove: %+v", c)
+	}
+	w.focusChanged(true)
+	hold(w, router, "W") // its key repeat
+	if c := s.Command(); c.TranslateY != 0 {
+		t.Fatalf("repeat after regaining focus drove: %+v", c)
+	}
+	letGo(w, router, "W")
+	hold(w, router, "W")
+	if c := s.Command(); c.TranslateY != 100 {
+		t.Fatalf("fresh press: %+v", c)
+	}
+}

@@ -81,6 +81,7 @@ int main()
 
   robot_tick::init(robot, INPUT_MODE, config::POWER_LIMITS, nowMs());
   absolute_time_t next = get_absolute_time();
+  uint32_t previousTickUs = 0;
 
   while (true)
   {
@@ -105,8 +106,11 @@ int main()
     in.bytes[(int)robot_tick::Link::Usb] = usbBytes;
 #endif
     in.power = power_monitor::read();
+    in.previousTickUs = previousTickUs;
 
+    uint32_t tickStart = time_us_32();
     robot_tick::tick(robot, in, now, board);
+    previousTickUs = time_us_32() - tickStart;
 
     next = delayed_by_ms(next, robot_tick::LOOP_PERIOD_MS);
     if (absolute_time_diff_us(get_absolute_time(), next) > 0)

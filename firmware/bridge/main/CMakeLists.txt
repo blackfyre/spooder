@@ -9,6 +9,7 @@ idf_component_register(
     "link.cpp"
     "setup_mode.cpp"
     "${SPOODER_CORE}/gamepad_mapping/gamepad_mapping.cpp"
+    "${SPOODER_CORE}/gamepad_mapping/rumble.cpp"
     "${SPOODER_CORE}/protocol/protocol.cpp"
     "${SPOODER_CORE}/setup/access_point.cpp"
     "${SPOODER_CORE}/setup/calibration_export.cpp"

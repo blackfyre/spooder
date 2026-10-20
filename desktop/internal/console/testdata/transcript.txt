@@ -6,30 +6,36 @@
 12:00:00.600  > command seq=17 mode=0 translateX=0 translateY=0 rotate=0 height=30 speed=44 gait=0 stride=0 flags=1 clearCounter=0 modeRequestCounter=4 gesture=2 gestureRequestCounter=9
 12:00:00.700  operator source: USB
 12:00:00.800  > command seq=0 mode=3 translateX=0 translateY=0 rotate=0 height=0 speed=0 gait=0 stride=0 flags=2 clearCounter=1 modeRequestCounter=0 gesture=0 gestureRequestCounter=0
-12:00:00.900  > telemetry #7  Calibrate  gait Tri  output on  6.01 V  1.35 A  faults none  link 1000 ok 2 bad  source USB
-12:00:01.000  > telemetry #128  Sleep  gait Tri  output off  0.00 V  0.00 A  faults emergency stop  link 0 ok 0 bad  source conflict (bridge and USB)
+12:00:00.900  > telemetry #7  Calibrate  gait Tri  output on  6.01 V  1.35 A  faults none  link 1000 ok 2 bad  source USB  bridge down
+12:00:01.000  > telemetry #128  Sleep  gait Tri  output off  0.00 V  0.00 A  faults emergency stop  link 0 ok 0 bad  source conflict (bridge and USB)  bridge down
 12:00:01.100  supply 1.35 A (avg 1.30 A), 6.01 V; output on; mode 4; faults 0x00
-12:00:01.200  > telemetry #255  mode 255  gait 255  output on  65.53 V  65.53 A  faults overcurrent, sustained current, undervoltage, brown-out, overvoltage, emergency stop, fault bit 6, fault bit 7, fault bit 8, fault bit 9, fault bit 10, fault bit 11, fault bit 12, fault bit 13, fault bit 14, fault bit 15  link 65535 ok 65535 bad  source conflict (bridge and USB)  gesture 255  tof 65535 mm (status 255)  pitch -327.68 deg roll 327.67 deg
-12:00:01.300  > telemetry #30  Perform  gait Tri  output on  6.05 V  2.10 A  faults none  link 0 ok 0 bad  source bridge  gesture say hi
-12:00:01.400  > calibration_set seq=1 requestId=1 joint=0 offsetCentideg=9000 pulse0Us=500 pulse180Us=2500 flags=0
+12:00:01.200  > telemetry #255  mode 255  gait 255  output on  65.53 V  65.53 A  faults overcurrent, sustained current, undervoltage, brown-out, overvoltage, emergency stop, fault bit 6, fault bit 7, fault bit 8, fault bit 9, fault bit 10, fault bit 11, fault bit 12, fault bit 13, fault bit 14, fault bit 15  link 65535 ok 65535 bad  source conflict (bridge and USB)  bridge up (gamepad) 65535 ok 65535 bad  gesture 255  tof 65535 mm (status 255)  pitch -327.68 deg roll 327.67 deg
+12:00:01.300  > telemetry #30  Perform  gait Tri  output on  6.05 V  2.10 A  faults none  link 0 ok 0 bad  source bridge  bridge down  gesture say hi
+12:00:01.400  > telemetry #31  Stand  gait Tri  output on  6.06 V  0.00 A  faults none  link 420 ok 0 bad  source USB  bridge up (no gamepad) 3143 ok 2 bad
 12:00:01.500  ! frame candidate rejected (1 in total)
 12:00:01.600  fault latched: undervo\xA5ltage (0.00 A, 0.00 V)   [1 stray 0xA5]
-12:00:01.700  > calibration_set seq=42 requestId=200 joint=17 offsetCentideg=-2450 pulse0Us=2400 pulse180Us=600 flags=1
-12:00:01.800  > calibration_set seq=255 requestId=255 joint=255 offsetCentideg=-32768 pulse0Us=0 pulse180Us=65535 flags=255
-12:00:01.900  > calibration report #0  request 0  none yet  reversed 0
-12:00:02.000  > calibration report #9  request 17  clamped  reversed 1
-12:00:02.100  > calibration report #0  request 18  rejected  reversed 1
-12:00:02.200  > calibration report #255  request 255  result 255  reversed 18
-12:00:02.300  ! frame candidate rejected (2 in total)
-12:00:02.400  \xA5\x02\x01\x03\x0C\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00   [1 stray 0xA5]
-12:00:02.500  r
-12:00:02.600  ! frame candidate rejected (3 in total)
-12:00:02.700  \xA5\x03\x03\x04	\x05\x03d\x00\xF4\x01\xC4	\x00Q\xDA   [1 stray 0xA5]
-12:00:02.800  > pose seq=3 flags=1
-12:00:02.900  > pose seq=200 flags=0
-12:00:03.000  > pose seq=255 flags=255
-12:00:03.100  ! frame candidate rejected (4 in total)
-12:00:03.200  \xA5\x03\x05\x06n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xD0d   [1 stray 0xA5]
-12:00:03.300  movement stopped: waiting for the fault to clear and a new request
-12:00:03.400  -- disconnected
-12:00:03.500  -- totals: 4 telemetry, 4 calibration reports, 10 other; 4 rejected; 4 stray 0xA5
+12:00:01.700  > calibration_set seq=1 requestId=1 joint=0 offsetCentideg=9000 pulse0Us=500 pulse180Us=2500 flags=0
+12:00:01.800  > calibration_set seq=42 requestId=200 joint=17 offsetCentideg=-2450 pulse0Us=2400 pulse180Us=600 flags=1
+12:00:01.900  > calibration_set seq=255 requestId=255 joint=255 offsetCentideg=-32768 pulse0Us=0 pulse180Us=65535 flags=255
+12:00:02.000  > calibration report #0  request 0  none yet  reversed 0
+12:00:02.100  > calibration report #9  request 17  clamped  reversed 1
+12:00:02.200  > calibration report #0  request 18  rejected  reversed 1
+12:00:02.300  > calibration report #255  request 255  result 255  reversed 18
+12:00:02.400  ! frame candidate rejected (2 in total)
+12:00:02.500  \xA5\x02\x01\x03\x0C\x01\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00   [1 stray 0xA5]
+12:00:02.600  r
+12:00:02.700  ! frame candidate rejected (3 in total)
+12:00:02.800  \xA5\x03\x03\x04	\x05\x03d\x00\xF4\x01\xC4	\x00Q\xDA   [1 stray 0xA5]
+12:00:02.900  > pose seq=3 flags=1
+12:00:03.000  > pose seq=200 flags=0
+12:00:03.100  > pose seq=255 flags=255
+12:00:03.200  ! frame candidate rejected (4 in total)
+12:00:03.300  \xA5\x03\x05\x06n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xD0d   [1 stray 0xA5]
+12:00:03.400  > diagnostics #4  motion 41.2 %  backstop 0  tick 6.48 ms max 5.21 ms mean  average 2.38 A
+12:00:03.500  > diagnostics #99  motion 100.0 %  backstop 37  tick 1.91 ms max 1.65 ms mean  average 0.00 A
+12:00:03.600  > diagnostics #255  motion 6553.5 %  backstop 65535  tick 65.53 ms max 65.53 ms mean  average 65.53 A
+12:00:03.700  ! frame candidate rejected (5 in total)
+12:00:03.800  \xA5\x03\x06\x07\x18\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15\xDC   [1 stray 0xA5]
+12:00:03.900  movement stopped: waiting for the fault to clear and a new request
+12:00:04.000  -- disconnected
+12:00:04.100  -- totals: 5 telemetry, 4 calibration reports, 13 other; 5 rejected; 5 stray 0xA5

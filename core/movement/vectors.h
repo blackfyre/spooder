@@ -132,10 +132,10 @@ public:
 
   float distanceTo(Vector3 v) const
   {
-    double dx = v.x - x;
-    double dy = v.y - y;
-    double dz = v.z - z;
-    return sqrt(dx * dx + dy * dy + dz * dz);
+    float dx = v.x - x;
+    float dy = v.y - y;
+    float dz = v.z - z;
+    return sqrtf(dx * dx + dy * dy + dz * dz);
   }
 
   float magnitude() const

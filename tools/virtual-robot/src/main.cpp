@@ -161,8 +161,16 @@ static void tickOnce()
     in.byteCount[(int)Link::Bridge] = (int)simulated.size();
   }
   in.power = supply.read(board.servos);
+  // The working time of the previous tick, as the board measures it.
+  static uint32_t previousTickUs = 0;
+  in.previousTickUs = previousTickUs;
   nowMs += robot_tick::LOOP_PERIOD_MS;
+  struct timespec start, end;
+  clock_gettime(CLOCK_MONOTONIC, &start);
   robot_tick::tick(robot, in, nowMs, board);
+  clock_gettime(CLOCK_MONOTONIC, &end);
+  long us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
+  previousTickUs = us > 0 ? (uint32_t)us : 1;
   observe();
 }
 

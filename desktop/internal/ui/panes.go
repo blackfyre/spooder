@@ -36,6 +36,8 @@ func (w *window) sidePanes(gtx layout.Context) layout.Dimensions {
 				return w.exportPane(gtx)
 			case tabLegs:
 				return w.legsPane(gtx)
+			case tabCharts:
+				return w.chartsPane(gtx)
 			}
 			return w.logPane(gtx)
 		}),

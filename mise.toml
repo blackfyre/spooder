@@ -28,7 +28,7 @@ run = [
 description = "Build the Servo 2040 firmware (.uf2 in build/servo2040)"
 usage = 'flag "--serial" help="Take commands from the USB serial keys instead of the bridge link"'
 run = [
-  'cmake -S firmware/servo2040 -B build/servo2040 -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPOODER_POWER_LIMITS=${SPOODER_POWER_LIMITS:-$PWD/firmware/servo2040/src/power_limits.h} -DSPOODER_SERIAL_COMMANDS=$([ "${usage_serial:-false}" = true ] && echo ON || echo OFF)',
+  'cmake -S firmware/servo2040 -B build/servo2040 -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPOODER_POWER_LIMITS=${SPOODER_POWER_LIMITS:-$PWD/firmware/servo2040/src/power_limits.h} -DSPOODER_SERVO_PROFILE=${SPOODER_SERVO_PROFILE:-MG996R} -DSPOODER_SERIAL_COMMANDS=$([ "${usage_serial:-false}" = true ] && echo ON || echo OFF)',
   "cmake --build build/servo2040",
 ]
 
@@ -116,7 +116,7 @@ run = "python -m unittest -v test_image_size"
 [tasks.virtual-robot]
 description = "Build the virtual robot (build/virtual-robot/virtual-robot)"
 run = [
-  'cmake -S tools/virtual-robot -B build/virtual-robot -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPOODER_POWER_LIMITS=${SPOODER_POWER_LIMITS:-$PWD/firmware/servo2040/src/power_limits.h}',
+  'cmake -S tools/virtual-robot -B build/virtual-robot -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPOODER_POWER_LIMITS=${SPOODER_POWER_LIMITS:-$PWD/firmware/servo2040/src/power_limits.h} -DSPOODER_SERVO_PROFILE=${SPOODER_SERVO_PROFILE:-MG996R}',
   "cmake --build build/virtual-robot",
 ]
 

@@ -37,6 +37,7 @@ if run.runBody:   body::setOffsets(applied offsets); body::step(bodyState, cmd w
 status_leds::show(...)
 every fifth tick: telemetry on both links      // non-blocking, whole frames or nothing
 two ticks later:  pose on USB only             // link_receiver::makePose, 10 Hz
+four ticks later: diagnostics on USB only      // the window's motion share, backstop, tick time, limits
 reports due (after a set, 1 Hz in Calibrate, ≤ 5 Hz): calibration report on each link
 ```
 
@@ -78,7 +79,13 @@ The board has no pull-ups on GPIO19–21 or 26–28. Check for clashes before cl
 ## The links
 
 - **Boundary:** `core/protocol` owns framing (versioned, CRC-16/CCITT-FALSE, fixed little-endian payloads, incremental decoder). `core/protocol/link_receiver` owns what a decoded frame means to the robot. The adapters (`link` on both boards, `usb_link` on the robot) only move bytes. Both firmwares compile the same protocol code; change it in one place, bump `protocol::VERSION` when the layout changes, regenerate `test/golden/protocol_v3.txt` (`SPOODER_WRITE_GOLDEN=1 mise run test`) and flash both boards together.
-- **Frames (version 3):** command (front-end to robot, 20 ms; bytes 11 and 12 the gesture request and its counter), telemetry (robot, 100 ms; byte 21 holds the source flags, byte 22 the gesture playing), calibration set (front-end, one joint), calibration report (robot, the whole table, 135 bytes) and pose (type 5, robot to the USB host only, 117 bytes: per joint the commanded angle, the servo angle and the pulse). The pose was added without a version bump: it is additive and never sent on UART1, so the bridge is unaffected.
+- **Frames (version 3):** command (front-end to robot, 20 ms; bytes 11 and 12 the gesture request and its counter), telemetry (robot, 100 ms; byte 21 holds the source flags and, bits 3–4, the bridge link up and its gamepad; byte 22 the gesture playing; bytes 23–26 the bridge link's frame counts, on every link, so USB sees the bridge. Those fields went into reserved bytes without a version bump: an older robot sends zero), calibration set (front-end, one joint), calibration report (robot, the whole table, 135 bytes) and pose (type 5, robot to the USB host only, 117 bytes: per joint the commanded angle, the servo angle and the pulse). The pose was added without a version bump: it is additive and never sent on UART1, so the bridge is unaffected. Diagnostics (type 6, robot to the USB host only, 31 bytes) followed the same rule. Twelve 16-bit fields cover the last five ticks and the configuration:
+  - the smallest motion share the joint speed budget allowed (‰);
+  - the backstop tick count;
+  - the tick's longest and mean working time (µs; `Inputs::previousTickUs`, measured by `main.cpp` and the virtual robot, so each tick reports the previous one's time together with its motion share);
+  - the averaged current;
+  - the trip and sustained currents, and the minimum, maximum and brown-out voltages;
+  - the profile's budget and rated speed.
 - **Two links on the robot:** the bridge on UART1 and a computer on USB, each with its own `Decoder` and `link_receiver::Receiver`. `link_receiver::arbitrate` picks the one reporting a fresh, connected controller; both at once is a conflict (Sleep, `TELEMETRY_SOURCE_CONFLICT`). The e-stop is either link's; a fault clear and `requestSeq` come only from the source in control.
 - **USB shares the port with `printf`.** Frames and text are both written from the core 0 loop, so neither lands inside the other. `usb_link` writes a frame only when the CDC buffer has room for all of it. Keep debug text printable ASCII.
 - **Calibration:** sets are queued per link and processed after protection, only in Calibrate with output allowed (`processCalibration`, clamps in `joint_calibration::clampJoint`); a repeated request id is a retransmission. Reports carry the requested table; `ReportSchedule` sends one after each set and at 1 Hz in Calibrate, at most 5 Hz per link.

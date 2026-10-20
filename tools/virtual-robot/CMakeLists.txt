@@ -38,5 +38,10 @@ add_executable(virtual-robot
   ${SPOODER_CORE}/status/led_pattern.cpp
 )
 target_include_directories(virtual-robot PRIVATE ${SPOODER_CORE} ${SPOODER_FIRMWARE})
-target_compile_definitions(virtual-robot PRIVATE SPOODER_POWER_LIMITS_HEADER="${SPOODER_POWER_LIMITS}")
+# The same servo profile choice as the firmware.
+set(SPOODER_SERVO_PROFILE "MG996R" CACHE STRING "Servo model fitted (see core/movement/servo_profile.h)")
+target_compile_definitions(virtual-robot PRIVATE
+  SPOODER_POWER_LIMITS_HEADER="${SPOODER_POWER_LIMITS}"
+  SPOODER_SERVO_PROFILE="${SPOODER_SERVO_PROFILE}"
+)
 target_compile_options(virtual-robot PRIVATE -Wall -Wextra)

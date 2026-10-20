@@ -1,5 +1,9 @@
 #include <unity.h>
 #include "movement/body.h"
+#include "movement/servo_profile.h"
+#include <math.h>
+#include <stdio.h>
+#include <vector>
 
 using namespace body;
 
@@ -248,6 +252,7 @@ void test_walk_is_tick_rate_independent_at_full_input()
 void test_gait_change_rephases_legs()
 {
   bootToStand();
+  s.jointBudgetDegPerS = 0; // exact rates: without the joint speed budget
   MovementCommand walk = command(RequestedMode::Walk);
   walk.translate = Vector2(0, 50);
   run(walk, 500);
@@ -308,6 +313,7 @@ void test_rotate_only_walk_is_finite()
 void test_step_input_is_eased()
 {
   bootToStand();
+  s.jointBudgetDegPerS = 0; // exact rates: without the joint speed budget
   MovementCommand c = command(RequestedMode::Walk);
   c.translate = Vector2(0, 100);
   run(c, 20);
@@ -315,6 +321,40 @@ void test_step_input_is_eased()
   TEST_ASSERT_TRUE(s.translate.magnitude() < 100);
   run(c, 1200);
   TEST_ASSERT_FLOAT_WITHIN(2, 100, s.translate.magnitude());
+}
+
+void test_speed_dial_and_stride_mode_are_eased()
+{
+  bootToStand();
+  s.jointBudgetDegPerS = 0; // the raw paths
+  MovementCommand c = command(RequestedMode::Walk);
+  c.translate = Vector2(0, 100);
+  run(c, 1500);
+  // Steady foot movement per step at dial 44.
+  float steady = 0;
+  Vector3 last[LEG_COUNT];
+  for (int i = 0; i < LEG_COUNT; i++)
+    last[i] = s.feet[i];
+  for (int k = 0; k < 50; k++)
+  {
+    run(c, 20);
+    for (int i = 0; i < LEG_COUNT; i++)
+    {
+      steady = fmaxf(steady, s.feet[i].distanceTo(last[i]));
+      last[i] = s.feet[i];
+    }
+  }
+  c.speed = 100;
+  c.stride = StrideMode::Fixed;
+  run(c, 20);
+  TEST_ASSERT_TRUE(s.speed > 44 && s.speed < 100);
+  TEST_ASSERT_TRUE(s.fixedStride > 0 && s.fixedStride < 1);
+  // No foot jumps: the first steps move about as much as before the change.
+  for (int i = 0; i < LEG_COUNT; i++)
+    TEST_ASSERT_TRUE(s.feet[i].distanceTo(last[i]) < steady * 1.5f);
+  run(c, 1500);
+  TEST_ASSERT_FLOAT_WITHIN(1, 100, s.speed);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 1, s.fixedStride);
 }
 
 void test_sleep_resets_smoothing()
@@ -469,6 +509,7 @@ void test_offset_change_resolves_a_still_leg()
 void test_large_elapsed_time_is_bounded()
 {
   bootToStand();
+  s.jointBudgetDegPerS = 0; // exact rates: without the joint speed budget
   MovementCommand walk = command(RequestedMode::Walk);
   walk.translate = Vector2(0, 100);
   run(walk, 1500);
@@ -673,6 +714,164 @@ void test_boot_and_walk_is_tick_rate_independent()
     TEST_ASSERT_FLOAT_WITHIN(5, 0, at20[i].distanceTo(at50[i]));
 }
 
+// --- Joint speed budget ----------------------------------------------------
+
+// The largest joint angle change between two sets of angles, in degrees.
+static float largestChange(const JointAngles *a, const JointAngles *b)
+{
+  float m = 0;
+  for (int i = 0; i < LEG_COUNT; i++)
+    m = fmaxf(m, fmaxf(fabsf(a[i].coxa - b[i].coxa), fmaxf(fabsf(a[i].femur - b[i].femur), fabsf(a[i].tibia - b[i].tibia))));
+  return m;
+}
+
+// Steps @p cmd every 20 ms for @p durationMs, counting the steps and those
+// in which a joint turned faster than @p budget times @p factor; returns the
+// fastest joint speed seen, in degrees per second.
+static float fastestJoint(MovementCommand cmd, uint32_t durationMs, float budget = 0, float factor = 1,
+                          int *steps = nullptr, int *over = nullptr)
+{
+  float fastest = 0;
+  JointAngles before[LEG_COUNT];
+  for (uint32_t t = 0; t < durationMs; t += 20)
+  {
+    for (int i = 0; i < LEG_COUNT; i++)
+      before[i] = s.angles[i];
+    now += 20;
+    cmd.issuedAtMs = now;
+    step(s, cmd, now);
+    float speed = largestChange(before, s.angles) / 0.02f;
+    fastest = fmaxf(fastest, speed);
+    if (steps)
+      (*steps)++;
+    if (over && speed > budget * factor)
+      (*over)++;
+  }
+  return fastest;
+}
+
+// The governor estimates each piece from at most three runs, so it keeps
+// within 5 % of the budget nearly always; near awkward poses at the highest
+// dial settings it can miss, by bounded amounts the output backstop takes.
+static const float BUDGET_TOLERANCE = 1.05f;
+static const float MAX_MISSED_SHARE = 0.005f;
+static const float WORST_MISS = 1.6f;
+
+void test_walking_stays_within_the_budget()
+{
+  const float speeds[] = {0, 44, 100};
+  const float heights[] = {0, 50, 100};
+  const float rotates[] = {0, 100};
+  int steps = 0, over = 0;
+  for (int g = 0; g < gait::GAIT_COUNT; g++)
+    for (float speed : speeds)
+      for (float height : heights)
+        for (float rotate : rotates)
+        {
+          bootToStand();
+          float budget = s.jointBudgetDegPerS;
+          MovementCommand c = command(RequestedMode::Stand);
+          c.gait = g;
+          c.speed = speed;
+          c.height = height;
+          run(c, 1500); // settle the height
+          c.mode = RequestedMode::Walk;
+          c.translate = Vector2(0, 100);
+          c.rotate = rotate;
+          float fastest = fastestJoint(c, 3000, budget, BUDGET_TOLERANCE, &steps, &over);
+          TEST_ASSERT_TRUE(s.mode == Mode::Walk);
+          char msg[96];
+          snprintf(msg, sizeof msg, "gait %d speed %.0f height %.0f rotate %.0f: %.2f x budget", g, speed, height, rotate,
+                   fastest / budget);
+          TEST_ASSERT_TRUE_MESSAGE(fastest <= budget * WORST_MISS, msg);
+        }
+  TEST_ASSERT_TRUE(over <= steps * MAX_MISSED_SHARE);
+}
+
+void test_slow_walking_is_not_slowed()
+{
+  bootToStand();
+  MovementCommand c = command(RequestedMode::Walk);
+  c.translate = Vector2(0, 30);
+  c.speed = 0;
+  for (int i = 0; i < 150; i++)
+  {
+    run(c, 20);
+    TEST_ASSERT_EQUAL_FLOAT(1, s.motionScale);
+  }
+  TEST_ASSERT_TRUE(s.mode == Mode::Walk);
+}
+
+void test_fast_walking_is_slowed()
+{
+  bootToStand();
+  MovementCommand c = command(RequestedMode::Walk);
+  c.translate = Vector2(0, 100);
+  c.speed = 100;
+  run(c, 1000);
+  float slowest = 1;
+  for (int i = 0; i < 50; i++)
+  {
+    run(c, 20);
+    slowest = fminf(slowest, s.motionScale);
+  }
+  TEST_ASSERT_TRUE(slowest < 1);
+}
+
+// Walks fast, then stops sending: returns the time from the last command to
+// the step that starts Sleep.
+static uint32_t timeToSleepAfterLastCommand(float budget)
+{
+  bootToStand();
+  s.jointBudgetDegPerS = budget;
+  MovementCommand c = command(RequestedMode::Walk);
+  c.translate = Vector2(0, 100);
+  c.speed = 100;
+  run(c, 1000);
+  uint32_t last = now;
+  c.issuedAtMs = last; // the last command sent
+  for (uint32_t t = 20; t < 3000; t += 20)
+  {
+    now += 20;
+    step(s, c, now); // the same, ever older command
+    if (s.mode == Mode::Sleep)
+      return now - last;
+  }
+  return 0;
+}
+
+void test_stale_commands_time_out_on_wall_time_under_the_budget()
+{
+  uint32_t without = timeToSleepAfterLastCommand(0);
+  uint32_t with = timeToSleepAfterLastCommand(servo_profile::SELECTED.budgetDegPerS());
+  TEST_ASSERT_TRUE(without > COMMAND_TIMEOUT_MS);
+  TEST_ASSERT_EQUAL_UINT32(without, with);
+}
+
+// Boots and returns the time from the first step to the step that enters Stand.
+static uint32_t initialiseDuration(float budget)
+{
+  init(s);
+  s.jointBudgetDegPerS = budget;
+  now = 1000;
+  step(s, command(RequestedMode::Stand), now);
+  for (uint32_t t = 20; t < 2000; t += 20)
+  {
+    now += 20;
+    step(s, command(RequestedMode::Stand), now);
+    if (s.mode != Mode::Initialise)
+      return t;
+  }
+  return 0;
+}
+
+void test_initialise_is_not_slowed()
+{
+  uint32_t without = initialiseDuration(0);
+  TEST_ASSERT_TRUE(without > 0);
+  TEST_ASSERT_EQUAL_UINT32(without, initialiseDuration(servo_profile::SELECTED.budgetDegPerS()));
+}
+
 // --- Gestures --------------------------------------------------------------
 
 static MovementCommand gestureCommand(RequestedMode mode, gesture::Gesture g, uint32_t seq)
@@ -690,6 +889,217 @@ static uint32_t scriptMs(gesture::Gesture g)
   for (int k = 0; k < sc.count; k++)
     total += sc.frames[k].durationMs;
   return total;
+}
+
+// Distance from @p p to the polyline through @p path.
+static float distanceToPath(Vector3 p, const std::vector<Vector3> &path)
+{
+  float best = INFINITY;
+  for (size_t i = 1; i < path.size(); i++)
+  {
+    Vector3 a = path[i - 1], ab = path[i] - a;
+    float len2 = ab.x * ab.x + ab.y * ab.y + ab.z * ab.z;
+    float t = len2 > 0 ? ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y + (p.z - a.z) * ab.z) / len2 : 0;
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    best = fminf(best, p.distanceTo(a + ab * t));
+  }
+  return best;
+}
+
+void test_paths_are_kept_under_the_budget()
+{
+  // The reference: the same walk without a budget, sampled finely.
+  MovementCommand c = command(RequestedMode::Walk);
+  c.translate = Vector2(0, 100);
+  c.speed = 100;
+  bootToStand();
+  s.jointBudgetDegPerS = 0;
+  BodyState start = s;
+  uint32_t startNow = now;
+  std::vector<Vector3> reference[LEG_COUNT];
+  for (int i = 0; i < 2000; i++)
+  {
+    run(c, 1, 1);
+    for (int leg = 0; leg < LEG_COUNT; leg++)
+      reference[leg].push_back(s.feet[leg]);
+  }
+  // Under the budget from the same state: slower, along the same paths.
+  s = start;
+  now = startNow;
+  s.jointBudgetDegPerS = servo_profile::SELECTED.budgetDegPerS();
+  float slowest = 1, worst = 0, worstAtLimit = 0;
+  for (int i = 0; i < 100; i++)
+  {
+    run(c, 20);
+    slowest = fminf(slowest, s.motionScale);
+    for (int leg = 0; leg < LEG_COUNT; leg++)
+    {
+      // Where a joint is held at its servo limit the foot is fitted to it,
+      // which shows small timing differences a little more.
+      const JointAngles &a = s.angles[leg];
+      bool atLimit = fminf(fminf(a.coxa, a.femur), a.tibia) < 0.5f || fmaxf(fmaxf(a.coxa, a.femur), a.tibia) > 179.5f;
+      float d = distanceToPath(s.feet[leg], reference[leg]);
+      if (atLimit)
+        worstAtLimit = fmaxf(worstAtLimit, d);
+      else
+        worst = fmaxf(worst, d);
+    }
+  }
+  TEST_ASSERT_TRUE(slowest < 0.5f); // the budget did slow it
+  TEST_ASSERT_FLOAT_WITHIN(1, 0, worst);
+  TEST_ASSERT_FLOAT_WITHIN(2, 0, worstAtLimit);
+}
+
+void test_transitions_and_gestures_stay_within_the_budget()
+{
+  bootToStand();
+  float limit = s.jointBudgetDegPerS * BUDGET_TOLERANCE;
+  MovementCommand c = command(RequestedMode::Sleep);
+  TEST_ASSERT_TRUE(fastestJoint(c, 3000) <= limit); // Stand -> Sleep
+  c.mode = RequestedMode::Stand;
+  TEST_ASSERT_TRUE(fastestJoint(c, 3000) <= limit); // Sleep -> Stand
+  c.height = 100;
+  TEST_ASSERT_TRUE(fastestJoint(c, 4000) <= limit); // height 0 -> 100
+  c.height = 0;
+  TEST_ASSERT_TRUE(fastestJoint(c, 4000) <= limit);
+  c.mode = RequestedMode::Walk;
+  c.translate = Vector2(0, 60);
+  fastestJoint(c, 1000);
+  c.mode = RequestedMode::Stand;
+  TEST_ASSERT_TRUE(fastestJoint(c, 3000) <= limit); // Walk -> Stand
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+  c = command(RequestedMode::Calibrate);
+  TEST_ASSERT_TRUE(fastestJoint(c, 6000) <= limit); // Stand -> Calibrate
+  TEST_ASSERT_TRUE(s.mode == Mode::Calibrate);
+  c.mode = RequestedMode::Stand;
+  TEST_ASSERT_TRUE(fastestJoint(c, 3000) <= limit); // Calibrate -> Stand
+  for (gesture::Gesture g : {gesture::Gesture::SayHi, gesture::Gesture::Wiggle})
+  {
+    static uint32_t seq = 1;
+    MovementCommand play = gestureCommand(RequestedMode::Stand, g, seq++);
+    TEST_ASSERT_TRUE(fastestJoint(play, 20) <= limit);
+    TEST_ASSERT_TRUE(s.mode == Mode::Perform);
+    TEST_ASSERT_TRUE(fastestJoint(play, 2 * scriptMs(g) + 2000) <= limit);
+    TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+  }
+}
+
+void test_a_tick_without_a_whole_piece_moves_nothing()
+{
+  // 10 ms ticks under the budget: every other tick has no whole 20 ms piece.
+  // A command change on such a tick (here the speed dial and stride mode)
+  // must not move a joint before a governed piece runs.
+  bootToStand();
+  MovementCommand c = command(RequestedMode::Walk);
+  c.translate = Vector2(0, 80);
+  run(c, 1000, 10);
+  TEST_ASSERT_TRUE(s.mode == Mode::Walk);
+  if (s.motionPendingUs != 0)
+    run(c, 10, 10); // so that the next tick is one without a whole piece
+  JointAngles before[LEG_COUNT];
+  for (int i = 0; i < LEG_COUNT; i++)
+    before[i] = s.angles[i];
+  c.speed = 100;
+  c.stride = StrideMode::Fixed;
+  run(c, 10, 10);
+  TEST_ASSERT_EQUAL_FLOAT(0, largestChange(before, s.angles));
+  run(c, 10, 10);
+  TEST_ASSERT_TRUE(largestChange(before, s.angles) > 0);
+}
+
+void test_a_gesture_request_on_a_tick_without_a_piece_still_plays()
+{
+  bootToStand();
+  TEST_ASSERT_EQUAL_UINT32(0, s.motionPendingUs);
+  // Requested on a 10 ms tick, without a whole piece: nothing moves yet...
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::SayHi, 1), 10, 10);
+  TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+  // ...and the next piece plays it, though the request is not repeated.
+  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::SayHi, 1), 10, 10);
+  TEST_ASSERT_TRUE(s.mode == Mode::Perform);
+}
+
+void test_an_overrun_advances_at_most_three_pieces()
+{
+  bootToStand();
+  MovementCommand c = command(RequestedMode::Walk);
+  c.translate = Vector2(0, 60);
+  run(c, 1000);
+  float before = s.cycleProgress[0];
+  run(c, 100, 100); // one 100 ms step: three pieces, the rest dropped
+  TEST_ASSERT_EQUAL_UINT32(0, s.motionPendingUs);
+  float advanced = s.cycleProgress[0] - before;
+  if (advanced < 0)
+    advanced += gait::CYCLE_POINTS;
+  float maxPerSecond = gait::progressRate(gait::params(s.currentGait),
+                                          gait::GaitInput{s.translate, s.rotate, 0, 0, 0.54f, 0.55f});
+  TEST_ASSERT_TRUE(advanced <= maxPerSecond * 0.06f + 1);
+}
+
+static bool inTravel(const JointAngles &a)
+{
+  return a.coxa >= 0 && a.coxa <= 180 && a.femur >= 0 && a.femur <= 180 && a.tibia >= 0 && a.tibia <= 180;
+}
+
+static void runInTravel(MovementCommand c, uint32_t durationMs, const char *what)
+{
+  for (uint32_t t = 0; t < durationMs; t += 20)
+  {
+    run(c, 20);
+    for (int leg = 0; leg < LEG_COUNT; leg++)
+      TEST_ASSERT_TRUE_MESSAGE(inTravel(s.angles[leg]), what);
+  }
+}
+
+void test_every_pose_stays_within_servo_travel()
+{
+  // With the compiled defaults (femur offsets near 90 deg, so a lifted femur
+  // soon needs more than 180 deg), every mode but Calibrate fits the feet.
+  const float speeds[] = {0, 44, 100};
+  const float heights[] = {0, 50, 100};
+  const float rotates[] = {0, 100};
+  for (int g = 0; g < gait::GAIT_COUNT; g++)
+    for (float speed : speeds)
+      for (float height : heights)
+        for (float rotate : rotates)
+        {
+          init(s);
+          now = 1000;
+          MovementCommand c = command(RequestedMode::Stand);
+          c.gait = g;
+          c.speed = speed;
+          c.height = height;
+          step(s, c, now);
+          runInTravel(c, 3000, "boot and stand");
+          c.mode = RequestedMode::Walk;
+          c.translate = Vector2(0, 100);
+          c.rotate = rotate;
+          runInTravel(c, 2000, "walk");
+          c.mode = RequestedMode::Stand;
+          c.translate = Vector2();
+          c.rotate = 0;
+          runInTravel(c, 2000, "walk to stand");
+          c.mode = RequestedMode::Sleep;
+          runInTravel(c, 2000, "sleep");
+        }
+}
+
+void test_sleep_folds_with_the_rest_pose_out_of_travel()
+{
+  // The calibration guards allow a femur offset 30 deg above its default:
+  // the rest pose then needs more than 180 deg. Sleep folds to the fitted
+  // rest pose and switches the outputs off all the same.
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+  {
+    bootToStand();
+    setOffsets(s, leg, Vector3(s.offsets[leg].x, s.offsets[leg].y + 30, s.offsets[leg].z));
+    JointAngles plain;
+    kinematics::solveLeg(REST_POSE, s.offsets[leg], plain);
+    TEST_ASSERT_TRUE(plain.femur > 180);
+    run(command(RequestedMode::Sleep), 3000);
+    TEST_ASSERT_FALSE(s.outputsEnabled);
+    TEST_ASSERT_TRUE(inTravel(s.angles[leg]));
+  }
 }
 
 void test_gesture_plays_from_stand_and_returns_to_stand()
@@ -852,10 +1262,23 @@ int main()
   RUN_TEST(test_walk_is_tick_rate_independent_at_full_input);
   RUN_TEST(test_fast_gait_is_tick_rate_independent);
   RUN_TEST(test_boot_and_walk_is_tick_rate_independent);
+  RUN_TEST(test_walking_stays_within_the_budget);
+  RUN_TEST(test_slow_walking_is_not_slowed);
+  RUN_TEST(test_fast_walking_is_slowed);
+  RUN_TEST(test_stale_commands_time_out_on_wall_time_under_the_budget);
+  RUN_TEST(test_initialise_is_not_slowed);
+  RUN_TEST(test_paths_are_kept_under_the_budget);
+  RUN_TEST(test_transitions_and_gestures_stay_within_the_budget);
+  RUN_TEST(test_every_pose_stays_within_servo_travel);
+  RUN_TEST(test_sleep_folds_with_the_rest_pose_out_of_travel);
+  RUN_TEST(test_a_tick_without_a_whole_piece_moves_nothing);
+  RUN_TEST(test_an_overrun_advances_at_most_three_pieces);
+  RUN_TEST(test_a_gesture_request_on_a_tick_without_a_piece_still_plays);
   RUN_TEST(test_gait_change_rephases_legs);
   RUN_TEST(test_zero_input_walk_holds_and_stays_finite);
   RUN_TEST(test_rotate_only_walk_is_finite);
   RUN_TEST(test_step_input_is_eased);
+  RUN_TEST(test_speed_dial_and_stride_mode_are_eased);
   RUN_TEST(test_sleep_resets_smoothing);
   RUN_TEST(test_sleep_folds_then_disables_outputs);
   RUN_TEST(test_wake_goes_through_stand_before_walk);

@@ -40,6 +40,8 @@ static int payloadSize(uint8_t type)
     return CALIBRATION_REPORT_PAYLOAD_SIZE;
   case FrameType::Pose:
     return POSE_PAYLOAD_SIZE;
+  case FrameType::Diagnostics:
+    return DIAGNOSTICS_PAYLOAD_SIZE;
   }
   return -1;
 }
@@ -96,6 +98,8 @@ int encodeTelemetry(const Telemetry &t, uint8_t seq, uint8_t *out)
   put16(p + 19, (uint16_t)t.rollCentideg);
   p[21] = t.flags;
   p[22] = t.gesture;
+  put16(p + 23, t.bridgeValidFrames);
+  put16(p + 25, t.bridgeDiscardedFrames);
   return finishFrame(FrameType::Telemetry, seq, out);
 }
 
@@ -142,6 +146,25 @@ int encodePose(const Pose &p, uint8_t seq, uint8_t *out)
   return finishFrame(FrameType::Pose, seq, out);
 }
 
+// The diagnostics fields, in payload order.
+static uint16_t *diagnosticsFields(Diagnostics &d, int i)
+{
+  uint16_t *fields[DIAGNOSTICS_PAYLOAD_SIZE / 2] = {
+      &d.motionSharePermille, &d.backstopTicks, &d.tickMaxUs,          &d.tickMeanUs,
+      &d.averageCurrentMa,    &d.tripCurrentMa, &d.sustainedCurrentMa, &d.minMv,
+      &d.maxMv,               &d.brownoutMv,    &d.budgetDegPerS,      &d.ratedDegPerS,
+  };
+  return fields[i];
+}
+
+int encodeDiagnostics(const Diagnostics &d, uint8_t seq, uint8_t *out)
+{
+  Diagnostics copy = d;
+  for (int i = 0; i < DIAGNOSTICS_PAYLOAD_SIZE / 2; i++)
+    put16(out + HEADER_SIZE + 2 * i, *diagnosticsFields(copy, i));
+  return finishFrame(FrameType::Diagnostics, seq, out);
+}
+
 static void parseCommand(const uint8_t *p, Command &c)
 {
   c.mode = p[0];
@@ -176,6 +199,8 @@ static void parseTelemetry(const uint8_t *p, Telemetry &t)
   t.rollCentideg = (int16_t)get16(p + 19);
   t.flags = p[21];
   t.gesture = p[22];
+  t.bridgeValidFrames = get16(p + 23);
+  t.bridgeDiscardedFrames = get16(p + 25);
 }
 
 static void parseCalibrationSet(const uint8_t *p, CalibrationSet &c)
@@ -212,6 +237,12 @@ static void parsePose(const uint8_t *b, Pose &p)
     p.joints[i].servoCentideg = (int16_t)get16(j + 2);
     p.joints[i].pulseUs = get16(j + 4);
   }
+}
+
+static void parseDiagnostics(const uint8_t *b, Diagnostics &d)
+{
+  for (int i = 0; i < DIAGNOSTICS_PAYLOAD_SIZE / 2; i++)
+    *diagnosticsFields(d, i) = get16(b + 2 * i);
 }
 
 void Decoder::push(uint8_t byte)
@@ -280,6 +311,9 @@ void Decoder::emit(int total, Frame &out)
     break;
   case FrameType::Pose:
     parsePose(payload, out.pose);
+    break;
+  case FrameType::Diagnostics:
+    parseDiagnostics(payload, out.diagnostics);
     break;
   }
   valid_++;

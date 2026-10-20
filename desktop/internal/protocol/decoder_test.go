@@ -65,6 +65,7 @@ func TestFrameSizes(t *testing.T) {
 		{len(EncodeCalibrationSet(sampleSet(), 0)), 16},
 		{len(EncodeCalibrationReport(sampleReport(), 0)), 135},
 		{len(EncodePose(Pose{}, 0)), 117},
+		{len(EncodeDiagnostics(Diagnostics{}, 0)), 31},
 		{CalibrationReportPayloadSize, 128},
 		{PosePayloadSize, 110},
 		{MaxFrameSize, 135},

@@ -102,6 +102,26 @@ func TestScreenshots(t *testing.T) {
 		clock = clock.Add(2 * time.Second)
 		frame(w, router)
 		shoot("legs-no-pose")
+
+		// The charts: two minutes of walking with a supply dip, governed
+		// motion and an e-stop; hovered; at the minimum window size; and
+		// scrolled to the timeline.
+		w.tab = tabCharts
+		w.sel = selection{joint: 4}
+		feedHistory(s, 120)
+		frame(w, router)
+		shoot("charts")
+		w.hoverAt(0, float32(w.charts.plotX[0][0]+w.charts.plotX[0][1]*3/4))
+		frame(w, router)
+		shoot("charts-hover")
+		w.charts.hoverOn = false
+		width, height = 1000, 640
+		shoot("charts-min-window")
+		width, height = 1360, 900
+		w.charts.list.Position.First = 7
+		frame(w, router)
+		shoot("charts-timeline")
+		w.charts.list.Position.First = 0
 		_ = input.Router{}
 	}
 }

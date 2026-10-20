@@ -57,6 +57,8 @@ static const char *typeName(FrameType type)
     return "calibration_report";
   case FrameType::Pose:
     return "pose";
+  case FrameType::Diagnostics:
+    return "diagnostics";
   }
   return "?";
 }
@@ -81,10 +83,11 @@ static void describe(Text &t, const Frame &f)
     const Telemetry &m = f.telemetry;
     add(t,
         " bodyMode=%u gait=%u outputsOn=%d faults=%u voltageMv=%u currentMa=%u validFrames=%u "
-        "discardedFrames=%u sensorsAvailable=%u tofMm=%u tofStatus=%u pitchCentideg=%d rollCentideg=%d flags=%u gesture=%u",
+        "discardedFrames=%u sensorsAvailable=%u tofMm=%u tofStatus=%u pitchCentideg=%d rollCentideg=%d flags=%u gesture=%u "
+        "bridgeValidFrames=%u bridgeDiscardedFrames=%u",
         m.bodyMode, m.gait, m.outputsOn ? 1 : 0, m.faults, m.voltageMv, m.currentMa, m.validFrames,
         m.discardedFrames, m.sensorsAvailable, m.tofMm, m.tofStatus, m.pitchCentideg, m.rollCentideg, m.flags,
-        m.gesture);
+        m.gesture, m.bridgeValidFrames, m.bridgeDiscardedFrames);
     break;
   }
   case FrameType::CalibrationSet:
@@ -112,6 +115,15 @@ static void describe(Text &t, const Frame &f)
           p.joints[i].commandedCentideg, i, p.joints[i].servoCentideg, i, p.joints[i].pulseUs);
     break;
   }
+  case FrameType::Diagnostics:
+  {
+    const Diagnostics &d = f.diagnostics;
+    add(t, " motionSharePermille=%u backstopTicks=%u tickMaxUs=%u tickMeanUs=%u averageCurrentMa=%u",
+        d.motionSharePermille, d.backstopTicks, d.tickMaxUs, d.tickMeanUs, d.averageCurrentMa);
+    add(t, " tripCurrentMa=%u sustainedCurrentMa=%u minMv=%u maxMv=%u brownoutMv=%u budgetDegPerS=%u ratedDegPerS=%u",
+        d.tripCurrentMa, d.sustainedCurrentMa, d.minMv, d.maxMv, d.brownoutMv, d.budgetDegPerS, d.ratedDegPerS);
+    break;
+  }
   }
 }
 
@@ -129,6 +141,8 @@ static int encode(const Frame &f, uint8_t *out)
     return encodeCalibrationReport(f.calibrationReport, f.seq, out);
   case FrameType::Pose:
     return encodePose(f.pose, f.seq, out);
+  case FrameType::Diagnostics:
+    return encodeDiagnostics(f.diagnostics, f.seq, out);
   }
   return 0;
 }
@@ -240,7 +254,7 @@ static void buildGolden(Text &t)
   addFrame(t, "telemetry_conflict", f);
 
   f = frame(FrameType::Telemetry, 255);
-  f.telemetry = {255, 255, true, 0xFFFF, 65535, 65535, 65535, 65535, 0xFF, 65535, 255, -32768, 32767, 0xFF, 0xFF};
+  f.telemetry = {255, 255, true, 0xFFFF, 65535, 65535, 65535, 65535, 0xFF, 65535, 255, -32768, 32767, 0xFF, 0xFF, 65535, 65535};
   addFrame(t, "telemetry_extremes", f);
 
   f = frame(FrameType::Telemetry, 30);
@@ -251,6 +265,17 @@ static void buildGolden(Text &t)
   f.telemetry.flags = TELEMETRY_BRIDGE_IN_CONTROL;
   f.telemetry.gesture = GESTURE_SAY_HI;
   addFrame(t, "telemetry_perform_say_hi", f);
+
+  // On USB: the bridge link up without a gamepad, with its own counts.
+  f = frame(FrameType::Telemetry, 31);
+  f.telemetry.bodyMode = 1;
+  f.telemetry.outputsOn = true;
+  f.telemetry.voltageMv = 6060;
+  f.telemetry.validFrames = 420;
+  f.telemetry.flags = TELEMETRY_USB_IN_CONTROL | TELEMETRY_BRIDGE_LINK_UP;
+  f.telemetry.bridgeValidFrames = 3143;
+  f.telemetry.bridgeDiscardedFrames = 2;
+  addFrame(t, "telemetry_usb_bridge_link_up", f);
 
   f = frame(FrameType::CalibrationSet, 1);
   f.calibrationSet = {1, 0, 9000, 500, 2500, 0};
@@ -350,6 +375,25 @@ static void buildGolden(Text &t)
   n = encode(badPose, bytes);
   bytes[n - 2] ^= 0x80;
   addRejected(t, "reject_bad_crc_pose", bytes, n);
+
+  // Diagnostics frames (type 6, USB only), appended after the frames above.
+  // Governed walking with the example limits and the MG996R profile.
+  f = frame(FrameType::Diagnostics, 4);
+  f.diagnostics = {412, 0, 6480, 5210, 2380, 9000, 6000, 5200, 6800, 4800, 257, 429};
+  addFrame(t, "diagnostics_governed_walk", f);
+
+  f = frame(FrameType::Diagnostics, 99);
+  f.diagnostics = {1000, 37, 1910, 1650, 0, 9000, 6000, 5200, 6800, 4800, 257, 429};
+  addFrame(t, "diagnostics_idle_backstop_count", f);
+
+  f = frame(FrameType::Diagnostics, 255);
+  f.diagnostics = {65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535};
+  addFrame(t, "diagnostics_extremes", f);
+
+  Frame badDiagnostics = frame(FrameType::Diagnostics, 7);
+  n = encode(badDiagnostics, bytes);
+  bytes[n - 1] ^= 0x01;
+  addRejected(t, "reject_bad_crc_diagnostics", bytes, n);
 }
 
 static void goldenPath(char *out, int size)

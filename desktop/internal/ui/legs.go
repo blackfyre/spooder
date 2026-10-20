@@ -41,15 +41,26 @@ func (v viewport) pt(p legview.Vec2) f32.Point {
 	return f32.Pt(v.off.X+float32((p.X-v.minX)*v.scale), v.off.Y+float32((v.maxY-p.Y)*v.scale))
 }
 
-// strokePath draws a polyline.
+// strokePath draws a polyline. Points that coincide on screen (a segment
+// seen end-on) are dropped: the stroker draws spikes for zero-length
+// segments.
 func strokePath(gtx layout.Context, pts []f32.Point, width float32, c color.NRGBA) {
 	if len(pts) < 2 {
 		return
 	}
+	kept := []f32.Point{pts[0]}
+	for _, q := range pts[1:] {
+		if d := q.Sub(kept[len(kept)-1]); d.X*d.X+d.Y*d.Y >= 0.25 {
+			kept = append(kept, q)
+		}
+	}
+	if len(kept) < 2 {
+		return
+	}
 	var p clip.Path
 	p.Begin(gtx.Ops)
-	p.MoveTo(pts[0])
-	for _, q := range pts[1:] {
+	p.MoveTo(kept[0])
+	for _, q := range kept[1:] {
 		p.LineTo(q)
 	}
 	paint.FillShape(gtx.Ops, c, clip.Stroke{Path: p.End(), Width: width}.Op())

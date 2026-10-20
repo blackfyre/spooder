@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include "robot/robot_tick.h"
+#include <math.h>
+#include <stdio.h>
 
 using namespace robot_tick;
 
@@ -41,8 +43,12 @@ public:
     on = false;
     events.push_back("stop");
   }
+  kinematics::JointAngles out[kinematics::LEG_COUNT] = {}; // the angles last handed over
   void applyServos(const body::BodyState &b, const joint_calibration::Table &) override
   {
+    for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
+      if (b.legUpdated[leg])
+        out[leg] = b.angles[leg];
     on = !inhibited && b.outputsEnabled;
     applies++;
     events.push_back("apply");
@@ -67,9 +73,10 @@ public:
       while (d.next(f))
         frames[(int)link].push_back({tickNo, f});
     }
-    const char *kind = frame[2] == (uint8_t)protocol::FrameType::Telemetry ? "telemetry"
-                       : frame[2] == (uint8_t)protocol::FrameType::Pose    ? "pose"
-                                                                           : "report";
+    const char *kind = frame[2] == (uint8_t)protocol::FrameType::Telemetry     ? "telemetry"
+                       : frame[2] == (uint8_t)protocol::FrameType::Pose        ? "pose"
+                       : frame[2] == (uint8_t)protocol::FrameType::Diagnostics ? "diagnostics"
+                                                                               : "report";
     events.push_back(std::string(link == Link::Usb ? "usb " : "bridge ") + kind);
     return true;
   }
@@ -87,6 +94,11 @@ struct Frontend
   bool connected = false;
   bool estop = false;
   RequestedMode mode = RequestedMode::Sleep;
+  int8_t translateY = 0;
+  int8_t rotate = 0;
+  uint8_t height = 0;
+  uint8_t speed = 44;
+  uint8_t gait = 0;
   uint8_t clearCounter = 0;
   uint8_t modeCounter = 0;
   uint8_t gesture = 0;
@@ -100,6 +112,7 @@ static FakeBoard board;
 static Frontend fe[LINK_COUNT];
 static uint32_t now;
 static protection::Reading supply;
+static uint32_t tickUs; // the previous tick's working time each tick reports
 
 void setUp()
 {
@@ -109,6 +122,7 @@ void setUp()
     f = Frontend();
   now = 1000;
   supply = {0.5f, 6.0f};
+  tickUs = 0;
   init(state, InputMode::Links, LIMITS, now);
 }
 void tearDown() {}
@@ -126,8 +140,11 @@ static void tick()
     {
       protocol::Command c = {};
       c.mode = (uint8_t)f.mode;
-      c.height = 0;
-      c.speed = 44;
+      c.translateY = f.translateY;
+      c.rotate = f.rotate;
+      c.height = f.height;
+      c.speed = f.speed;
+      c.gait = f.gait;
       c.flags = (f.connected ? protocol::FLAG_CONTROLLER_CONNECTED : 0) | (f.estop ? protocol::FLAG_EMERGENCY_STOP : 0);
       c.clearCounter = f.clearCounter;
       c.modeRequestCounter = f.modeCounter;
@@ -147,6 +164,7 @@ static void tick()
     in.byteCount[l] = (int)bytes[l].size();
   }
   in.power = supply;
+  in.previousTickUs = tickUs;
   board.events.clear();
   board.tickNo++;
   now += LOOP_PERIOD_MS;
@@ -234,6 +252,231 @@ static void queueSet(Frontend &f, uint8_t id, uint8_t joint, int16_t offsetCenti
 }
 
 // --- start and stale ---------------------------------------------------------------
+
+void test_first_tick_names_the_servo_profile()
+{
+  tick();
+  TEST_ASSERT_TRUE(board.logs.size() >= 1);
+  TEST_ASSERT_EQUAL_STRING("servo profile MG996R: joint speed budget 257 deg/s\n", board.logs[0].c_str());
+  size_t first = board.logs.size();
+  ticks(10);
+  for (size_t i = first; i < board.logs.size(); i++)
+    TEST_ASSERT_TRUE(board.logs[i].find("servo profile") == std::string::npos);
+}
+
+// --- Output rate backstop ----------------------------------------------------
+
+static float largestOutputChange(const kinematics::JointAngles *a, const kinematics::JointAngles *b)
+{
+  float m = 0;
+  for (int i = 0; i < kinematics::LEG_COUNT; i++)
+    m = fmaxf(m, fmaxf(fabsf(a[i].coxa - b[i].coxa), fmaxf(fabsf(a[i].femur - b[i].femur), fabsf(a[i].tibia - b[i].tibia))));
+  return m;
+}
+
+// Shifts a joint's calibration offset at once (both tables, so the applied
+// table does not ramp to it): its commanded angle jumps.
+static void jumpOffset(int joint, float deg)
+{
+  state.requested.joints[joint].offsetDeg += deg;
+  state.applied.joints[joint].offsetDeg += deg;
+}
+
+void test_backstop_holds_a_fast_command_back()
+{
+  standOnUsb();
+  state.backstopDegPerS = 325; // 6.5 deg per 20 ms tick
+  ticks(5);
+  TEST_ASSERT_EQUAL_UINT32(0, state.backstopTicks);
+  const int femur = kinematics::servoOutputIndex(0, 1);
+  jumpOffset(femur, 25);
+  float before = board.out[0].femur;
+  tick();
+  float target = state.body.angles[0].femur;
+  TEST_ASSERT_TRUE(fabsf(target - before) > 20);           // the command jumped
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 6.5f, fabsf(board.out[0].femur - before)); // 325 deg/s x 20 ms
+  TEST_ASSERT_EQUAL_UINT32(1, state.backstopTicks);
+  for (int i = 0; i < 4; i++)
+  {
+    float last = board.out[0].femur;
+    tick();
+    TEST_ASSERT_TRUE(fabsf(board.out[0].femur - last) <= 6.5f + 0.01f);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, state.body.angles[0].femur, board.out[0].femur); // caught up
+  uint32_t held = state.backstopTicks;
+  ticks(5);
+  TEST_ASSERT_EQUAL_UINT32(held, state.backstopTicks);
+}
+
+void test_backstop_is_reported_on_its_own_console_line()
+{
+  standOnUsb();
+  state.backstopDegPerS = 325; // 6.5 deg per 20 ms tick
+  ticks(5);
+  jumpOffset(kinematics::servoOutputIndex(2, 2), 25);
+  board.logs.clear();
+  ticks(STATUS_PERIOD_MS / LOOP_PERIOD_MS + 1);
+  std::string line;
+  int statusLines = 0;
+  for (const std::string &l : board.logs)
+  {
+    if (l.find("output rate backstop:") == 0)
+      line = l;
+    if (l.find("supply ") == 0)
+      statusLines++;
+  }
+  TEST_ASSERT_EQUAL_STRING("output rate backstop: 3 ticks held back; most: leg 2 tibia, 18.5 deg behind\n", line.c_str());
+  TEST_ASSERT_TRUE(statusLines >= 1);
+  for (char ch : line)
+    TEST_ASSERT_TRUE(ch == '\n' || (ch >= 0x20 && ch < 0x7F));
+  // Not repeated while nothing more is held back.
+  board.logs.clear();
+  ticks(STATUS_PERIOD_MS / LOOP_PERIOD_MS + 1);
+  TEST_ASSERT_FALSE(has(board.logs, "output rate backstop:"));
+}
+
+void test_first_pulse_after_output_switches_on_is_not_limited()
+{
+  standOnUsb();
+  state.backstopDegPerS = 325; // 6.5 deg per 20 ms tick
+  request(usb(), RequestedMode::Sleep);
+  for (int i = 0; i < 200 && board.on; i++)
+    tick();
+  TEST_ASSERT_FALSE(board.on);
+  // While the servos are off they may be anywhere: the first pulses go
+  // straight to the command, however far it is from the last ones.
+  jumpOffset(kinematics::servoOutputIndex(1, 1), 25);
+  request(usb(), RequestedMode::Stand);
+  uint32_t held = state.backstopTicks;
+  for (int i = 0; i < 50 && !board.on; i++)
+    tick();
+  TEST_ASSERT_TRUE(board.on);
+  for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, state.body.angles[leg].femur, board.out[leg].femur);
+  TEST_ASSERT_EQUAL_UINT32(held, state.backstopTicks);
+}
+
+void test_walking_up_to_the_default_dial_never_engages_the_backstop()
+{
+  const uint8_t heights[] = {0, 50, 100};
+  const uint8_t speeds[] = {0, 44};
+  for (int g = 0; g < gait::GAIT_COUNT; g++)
+    for (uint8_t height : heights)
+      for (uint8_t speed : speeds)
+      {
+        setUp();
+        usb().height = height;
+        usb().gait = (uint8_t)g;
+        usb().speed = speed;
+        standOnUsb();
+        ticks(75); // settle the height
+        usb().translateY = 100;
+        usb().rotate = 50;
+        request(usb(), RequestedMode::Walk);
+        ticks(150);
+        usb().translateY = 0;
+        usb().rotate = 0;
+        request(usb(), RequestedMode::Stand);
+        ticks(100);
+        request(usb(), RequestedMode::Sleep);
+        ticks(100);
+        char msg[48];
+        snprintf(msg, sizeof msg, "gait %d height %d speed %d", g, height, speed);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, state.backstopTicks, msg);
+      }
+}
+
+// --- diagnostics -----------------------------------------------------------------
+
+// Spec "Diagnostics frame on USB only": once per telemetry period, on its own
+// tick, never on the bridge link.
+void test_diagnostics_on_usb_only_on_their_own_tick()
+{
+  standOnUsb();
+  bridge().active = true;
+  board.frames[(int)Link::Usb].clear();
+  ticks(50);
+  int diagnostics = 0;
+  for (const SentFrame &f : board.frames[(int)Link::Usb])
+  {
+    if (f.frame.type != protocol::FrameType::Diagnostics)
+      continue;
+    diagnostics++;
+    for (const SentFrame &g : board.frames[(int)Link::Usb])
+      if (g.tick == f.tick && g.frame.type != protocol::FrameType::Diagnostics)
+        TEST_FAIL_MESSAGE("diagnostics share a tick with another frame");
+  }
+  TEST_ASSERT_EQUAL(10, diagnostics);
+  TEST_ASSERT_EQUAL(0, countOf(Link::Bridge, protocol::FrameType::Diagnostics));
+}
+
+// Spec "Diagnostics frame contents": the window's tick times, the motion
+// share, the averaged current and the configured limits.
+void test_diagnostics_contents()
+{
+  standOnUsb();
+  ticks(5); // a whole window from here on
+  tickUs = 1500;
+  ticks(4);
+  tickUs = 3000;
+  ticks(1);
+  tickUs = 1500;
+  ticks(5);
+  const protocol::Frame *f = lastOf(Link::Usb, protocol::FrameType::Diagnostics);
+  TEST_ASSERT_NOT_NULL(f);
+  const protocol::Diagnostics &d = f->diagnostics;
+  TEST_ASSERT_EQUAL(3000, d.tickMaxUs);
+  TEST_ASSERT_EQUAL(1800, d.tickMeanUs); // four of 1500 and one of 3000
+  TEST_ASSERT_EQUAL(1000, d.motionSharePermille); // standing: not slowed
+  TEST_ASSERT_EQUAL(9000, d.tripCurrentMa);
+  TEST_ASSERT_EQUAL(6000, d.sustainedCurrentMa);
+  TEST_ASSERT_EQUAL(5200, d.minMv);
+  TEST_ASSERT_EQUAL(6800, d.maxMv);
+  TEST_ASSERT_EQUAL(4800, d.brownoutMv);
+  TEST_ASSERT_EQUAL(257, d.budgetDegPerS);
+  TEST_ASSERT_EQUAL(429, d.ratedDegPerS);
+  TEST_ASSERT_EQUAL(500, d.averageCurrentMa); // the 0.5 A supply reading, once the window filled
+}
+
+// A window holds the working times of the five ticks before the one that
+// sends it (each is known one tick late), the same ticks as its motion
+// shares.
+void test_diagnostics_window_holds_the_five_previous_ticks()
+{
+  standOnUsb();
+  while (board.frames[(int)Link::Usb].empty() || board.frames[(int)Link::Usb].back().frame.type != protocol::FrameType::Diagnostics)
+    tick(); // the window starts with the tick after a diagnostics frame
+  const uint32_t times[5] = {1000, 2000, 3000, 4000, 5000};
+  for (uint32_t us : times)
+  {
+    tickUs = us; // reported by the next tick
+    tick();
+  }
+  tickUs = 9000; // the sending tick's own time belongs to the next window
+  tick();
+  const protocol::Frame *f = lastOf(Link::Usb, protocol::FrameType::Diagnostics);
+  TEST_ASSERT_NOT_NULL(f);
+  TEST_ASSERT_EQUAL(5000, f->diagnostics.tickMaxUs);
+  TEST_ASSERT_EQUAL(3000, f->diagnostics.tickMeanUs);
+}
+
+// Spec "Governed walking": walking fast reports a motion share below full.
+void test_diagnostics_report_the_budget_slowing_walking()
+{
+  usb().speed = 100;
+  standOnUsb();
+  usb().translateY = 100;
+  request(usb(), RequestedMode::Walk);
+  uint16_t smallest = 1000;
+  for (int i = 0; i < 100; i++)
+  {
+    tick();
+    const protocol::Frame *f = lastOf(Link::Usb, protocol::FrameType::Diagnostics);
+    if (f && f->diagnostics.motionSharePermille < smallest)
+      smallest = f->diagnostics.motionSharePermille;
+  }
+  TEST_ASSERT_TRUE(smallest < 1000);
+}
 
 void test_boots_into_stand_on_a_fresh_request()
 {
@@ -329,7 +572,8 @@ void test_conflict_between_links_sleeps_and_is_reported()
   TEST_ASSERT_EQUAL((int)body::Mode::Sleep, (int)state.body.mode);
   const protocol::Frame *t = lastOf(Link::Bridge, protocol::FrameType::Telemetry);
   TEST_ASSERT_NOT_NULL(t);
-  TEST_ASSERT_EQUAL_HEX8(protocol::TELEMETRY_SOURCE_CONFLICT, t->telemetry.flags);
+  // The source bits (the bridge link bits are set too: it is up, with a gamepad).
+  TEST_ASSERT_EQUAL_HEX8(protocol::TELEMETRY_SOURCE_CONFLICT, t->telemetry.flags & 0x07);
 }
 
 // --- calibration -------------------------------------------------------------------
@@ -456,14 +700,14 @@ void test_reports_after_sets_no_more_than_five_per_second()
 void test_sequence_numbers_advance_only_for_sent_frames()
 {
   board.refuse[(int)Link::Usb] = true;
-  ticks(10); // two telemetry and two pose frames refused
+  ticks(10); // two telemetry, two pose and two diagnostics frames refused
   board.refuse[(int)Link::Usb] = false;
-  ticks(5); // a pose (tick 12), then telemetry (tick 15)
-  TEST_ASSERT_EQUAL(2, (int)board.frames[(int)Link::Usb].size());
+  ticks(5); // a pose (tick 12), diagnostics (tick 14), then telemetry (tick 15)
+  TEST_ASSERT_EQUAL(3, (int)board.frames[(int)Link::Usb].size());
   TEST_ASSERT_EQUAL(0, board.frames[(int)Link::Usb][0].frame.seq);
   const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
   TEST_ASSERT_NOT_NULL(t);
-  TEST_ASSERT_EQUAL(1, t->seq);
+  TEST_ASSERT_EQUAL(2, t->seq);
   TEST_ASSERT_EQUAL(3, lastOf(Link::Bridge, protocol::FrameType::Telemetry)->seq + 1);
 }
 
@@ -593,9 +837,54 @@ void test_gesture_from_the_idle_bridge_is_ignored()
   TEST_ASSERT_TRUE(state.body.mode == body::Mode::Stand);
 }
 
+// --- Bridge link state in telemetry ---
+
+void test_usb_telemetry_reports_the_bridge_link()
+{
+  standOnUsb();
+  // Not yet running: down, no counts.
+  const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_NOT_NULL(t);
+  TEST_ASSERT_EQUAL_HEX8(0, t->telemetry.flags & (protocol::TELEMETRY_BRIDGE_LINK_UP | protocol::TELEMETRY_BRIDGE_GAMEPAD));
+  // A bridge without a gamepad: up, no gamepad, rising counts.
+  bridge().active = true;
+  ticks(10);
+  t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_TRUE(t->telemetry.flags & protocol::TELEMETRY_BRIDGE_LINK_UP);
+  TEST_ASSERT_FALSE(t->telemetry.flags & protocol::TELEMETRY_BRIDGE_GAMEPAD);
+  uint16_t before = t->telemetry.bridgeValidFrames;
+  TEST_ASSERT_TRUE(before >= 5);
+  ticks(10);
+  t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_TRUE(t->telemetry.bridgeValidFrames > before);
+  // The same counts reach the bridge as its own.
+  const protocol::Frame *b = lastOf(Link::Bridge, protocol::FrameType::Telemetry);
+  TEST_ASSERT_NOT_NULL(b);
+  TEST_ASSERT_EQUAL_UINT16(b->telemetry.validFrames, b->telemetry.bridgeValidFrames);
+  // A gamepad on the bridge (a conflict with USB, but the state is reported).
+  bridge().connected = true;
+  ticks(5);
+  t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_TRUE(t->telemetry.flags & protocol::TELEMETRY_BRIDGE_GAMEPAD);
+  // Unplugged: down within the link-gap time.
+  bridge().active = false;
+  ticks((link_receiver::LINK_GAP_MS / LOOP_PERIOD_MS) + 6);
+  t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_EQUAL_HEX8(0, t->telemetry.flags & (protocol::TELEMETRY_BRIDGE_LINK_UP | protocol::TELEMETRY_BRIDGE_GAMEPAD));
+}
+
 int main()
 {
   UNITY_BEGIN();
+  RUN_TEST(test_first_tick_names_the_servo_profile);
+  RUN_TEST(test_diagnostics_on_usb_only_on_their_own_tick);
+  RUN_TEST(test_diagnostics_contents);
+  RUN_TEST(test_diagnostics_window_holds_the_five_previous_ticks);
+  RUN_TEST(test_diagnostics_report_the_budget_slowing_walking);
+  RUN_TEST(test_backstop_holds_a_fast_command_back);
+  RUN_TEST(test_backstop_is_reported_on_its_own_console_line);
+  RUN_TEST(test_first_pulse_after_output_switches_on_is_not_limited);
+  RUN_TEST(test_walking_up_to_the_default_dial_never_engages_the_backstop);
   RUN_TEST(test_boots_into_stand_on_a_fresh_request);
   RUN_TEST(test_stale_command_never_starts_the_body);
   RUN_TEST(test_command_going_stale_puts_the_body_to_sleep);
@@ -618,5 +907,6 @@ int main()
   RUN_TEST(test_explicit_stand_request_ends_a_gesture);
   RUN_TEST(test_fault_mid_gesture_stops_reporting_the_gesture);
   RUN_TEST(test_gesture_from_the_idle_bridge_is_ignored);
+  RUN_TEST(test_usb_telemetry_reports_the_bridge_link);
   return UNITY_END();
 }
