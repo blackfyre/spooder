@@ -1,6 +1,6 @@
 // The virtual robot: the robot's shared control tick (core/robot/robot_tick)
 // on the host, with pseudo-terminals for its links and simulated hardware.
-// See openspec/changes/add-virtual-robot and `virtual-robot --help`.
+// See openspec/specs/virtual-robot and `virtual-robot --help`.
 #include <errno.h>
 #include <math.h>
 #include <poll.h>

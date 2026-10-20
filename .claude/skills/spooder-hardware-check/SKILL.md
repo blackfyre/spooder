@@ -166,7 +166,7 @@ Robot on the bench supply with **no servos** until step 4; default (link) robot 
 5. **Timing under load.** With a logic analyser on the link TX, confirm a command frame at least every 20 ms while the screen changes many values.
 6. **All 18 servos,** robot on a stand: walk through the controls again.
 
-Record results in `openspec/changes/add-gamepad-bridge/tasks.md` (task 4.2).
+Record results in `openspec/changes/archive/2026-10-20-add-gamepad-bridge/tasks.md` (task 4.2).
 
 ## Setup mode and portal calibration
 
@@ -185,7 +185,7 @@ Setup mode turns the bridge into a WiFi access point with a captive portal; Blue
 4. **Phone away:** close or lock the phone, or walk out of range. Within about 1 s the portal stops counting as a controller, and the robot sleeps. The portal's mode stays Sleep when it comes back, until a mode button is pressed.
 5. **Export:** press Export, then Copy (or select the text by hand). Paste it over `core/movement/calibration_defaults.cpp` whole (leave `test/golden/` alone: its files are format fixtures), and run `mise run test`. Rebuild and flash the robot, then check in Calibrate that the robot reports the same table.
 
-Record results in `openspec/changes/add-bridge-setup-portal/tasks.md` (task 3.2).
+Record results in `openspec/changes/archive/2026-10-20-add-bridge-setup-portal/tasks.md` (task 3.2).
 
 ## Desktop calibrator (bench calibration over USB)
 
@@ -223,7 +223,7 @@ The desktop app in `desktop/` speaks the link protocol on the robot's USB port. 
 7. **Conflict.** Take control while the gamepad is connected: the app and the bridge screen show the conflict, LED 6 alternates magenta and cyan, and the robot sleeps until one side lets go.
 8. **Export.** Show difference, check it, Write file: only `core/movement/calibration_defaults.cpp` changes. Or Copy text. Run `mise run test` (it checks the file's format and round trip, not its values), rebuild and flash, then confirm the robot reports the same table in Calibrate. Leave `test/golden/` alone: its files are format fixtures.
 
-Record results in `openspec/changes/add-desktop-calibrator/tasks.md` (task 4.2).
+Record results in `openspec/changes/archive/2026-10-20-add-desktop-calibrator/tasks.md` (task 4.2).
 
 **Rehearse without the board first.** The virtual robot (`tools/virtual-robot`) runs the robot's own control tick (`core/robot/robot_tick`) behind a pseudo-terminal: `mise run desktop-sim` (debug text echoed in this terminal, the calibrator opened on the robot's USB port; closing either ends both). Type commands into the robot's terminal: `supply 7.5` (overvoltage), `estop` / `estop off` (the bridge's e-stop), `bridge gamepad` (a conflict), `load 5` (overcurrent), `unplug` / `plug`, `status`. Steps 1–6 behave as on the board, minus the LEDs and the servos; `mise run e2e` checks them automatically. It proves the logic and the protocol, not timing, wiring or power: the steps above still need the board.
 
