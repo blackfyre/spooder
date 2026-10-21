@@ -243,7 +243,7 @@ func valueText(v float64, decimals int, unit string) string {
 // values), then the plot with its value axis.
 func (w *window) chart(gtx layout.Context, i int, c chartSpec, m chartsModel) layout.Dimensions {
 	cs := &w.charts
-	return panel(gtx, w.pal.Surface, w.pal.Border, 8, func(gtx layout.Context) layout.Dimensions {
+	return panel(gtx, w.pal.Surface, w.pal.Border, radiusCard, 8, func(gtx layout.Context) layout.Dimensions {
 		return stacked(gtx, 4,
 			func(gtx layout.Context) layout.Dimensions {
 				ws := []layout.Widget{tracked(w.th, sizeLabel, w.pal.Fg, c.title+" · "+c.unit)}
@@ -419,7 +419,7 @@ func trimZero(v, step float64) string {
 // wide enough, with the hover rule.
 func (w *window) timeline(gtx layout.Context, m chartsModel) layout.Dimensions {
 	tl := m.timeline
-	return panel(gtx, w.pal.Surface, w.pal.Border, 8, func(gtx layout.Context) layout.Dimensions {
+	return panel(gtx, w.pal.Surface, w.pal.Border, radiusCard, 8, func(gtx layout.Context) layout.Dimensions {
 		// The state at the hovered moment, or the latest.
 		moment := -1e-9
 		if w.charts.hoverOn {

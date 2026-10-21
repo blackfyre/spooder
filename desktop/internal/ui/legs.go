@@ -106,7 +106,7 @@ func centredAt(gtx layout.Context, p f32.Point, size image.Point, wd layout.Widg
 func (w *window) legsPane(gtx layout.Context) layout.Dimensions {
 	st := legsFor(w.snap, w.sel)
 	if !st.Current {
-		return panel(gtx, w.pal.Surface, w.pal.Border, 16, func(gtx layout.Context) layout.Dimensions {
+		return panel(gtx, w.pal.Surface, w.pal.Border, radiusPanel, 16, func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min = gtx.Constraints.Max
 			return stacked(gtx, 8,
 				tracked(w.th, sizeTitle, w.pal.Muted, "no pose"),
@@ -161,9 +161,9 @@ func (w *window) legColour(st legsState) color.NRGBA {
 func (w *window) canvas(gtx layout.Context, draw func(gtx layout.Context, size image.Point)) layout.Dimensions {
 	size := gtx.Constraints.Max
 	r := image.Rectangle{Max: size}
-	fill(gtx, r, gtx.Dp(8), w.pal.Well)
-	outline(gtx, r, gtx.Dp(8), gtx.Dp(1), w.pal.Border)
-	cl := clip.UniformRRect(r, gtx.Dp(8)).Push(gtx.Ops)
+	fill(gtx, r, gtx.Dp(radiusTile), w.pal.Well)
+	outline(gtx, r, gtx.Dp(radiusTile), gtx.Dp(1), w.pal.Border)
+	cl := clip.UniformRRect(r, gtx.Dp(radiusTile)).Push(gtx.Ops)
 	draw(gtx, size)
 	cl.Pop()
 	return layout.Dimensions{Size: size}

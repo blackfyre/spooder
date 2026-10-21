@@ -9,9 +9,9 @@ import (
 	"github.com/blackfyre/spooder/desktop/internal/appearance"
 )
 
-// Palette holds the semantic colours the UI draws with: the Blackfyre
-// tokens of blackfyre.ninja (design D7). The structure, NewPalette and the
-// contrast helpers follow bopen's internal/ui/theme.go.
+// Palette holds the semantic colours the UI draws with, from the Blackfyre
+// design system's tokens (bf-*). The structure, NewPalette and the contrast
+// helpers follow bopen's internal/ui/theme.go.
 type Palette struct {
 	Bg         color.NRGBA // window background (paper in light mode)
 	Well       color.NRGBA // recessed areas: logs, the diff
@@ -22,11 +22,12 @@ type Palette struct {
 	Border     color.NRGBA // card outlines and rules
 
 	Accent        color.NRGBA // the orange: e-stop, primary actions, selection
-	AccentPressed color.NRGBA // the accent's shadow and pressed fill
+	AccentPressed color.NRGBA // the accent's raised edge
 	AccentText    color.NRGBA // the accent as text on Bg or Surface
 	OnAccent      color.NRGBA // text on Accent
 
-	// Neutral buttons (ink in light mode) and quiet buttons (nudges).
+	// Neutral buttons (ink in light mode) and quiet buttons (nudges, the
+	// design system's light secondary button): face, text, raised edge.
 	ButtonBg, ButtonFg, ButtonShadow color.NRGBA
 	QuietBg, QuietFg, QuietShadow    color.NRGBA
 
@@ -38,35 +39,69 @@ type Palette struct {
 	// Status fills, drawn with OnStatus text or as dots.
 	Green, Yellow, Blue color.NRGBA
 	OnStatus            color.NRGBA
+
+	dark bool
 }
 
 func rgb(v uint32) color.NRGBA {
 	return color.NRGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 0xFF}
 }
 
-// Blackfyre tokens (design D7; blackfyre.ninja styles.css and its Zed
-// theme for the dark muted, accent-text and surface shades).
+// The Blackfyre design system's colour tokens. It has one (paper) theme;
+// the dark palette is built from its dark-panel tokens, as its
+// Applications section describes.
 var (
-	ink   = rgb(0x1B1B19)
-	paper = rgb(0xE6E4DF)
+	bfPaper         = rgb(0xE6E4DF)
+	bfSurface       = rgb(0xF3F2EE)
+	bfSurfaceSunk   = rgb(0xDEDBD4)
+	bfLine          = rgb(0xD3D0C9)
+	bfLineStrong    = rgb(0xBFBBB3)
+	bfInk           = rgb(0x1B1B19)
+	bfInkRaised     = rgb(0x2C2C29)
+	bfInkCardHover  = rgb(0x383834)
+	bfInkDeep       = rgb(0x0E0E0D)
+	bfInkCode       = rgb(0x121211)
+	bfInkMuted      = rgb(0x5E5C56)
+	bfInkSubtle     = rgb(0xA19E96)
+	bfAccent        = rgb(0xE2551D)
+	bfAccentEdge    = rgb(0xA93A0F)
+	bfAccentText    = rgb(0xA3390C)
+	bfAccentOnDark  = rgb(0xFF8A4C)
+	bfOk            = rgb(0x7FD88A)
+	bfOutlineOnDark = rgb(0x000000) // bf-shadow-outline-dark
 
+	// The system's app tokens (its Applications section).
+	bfInkChip     = rgb(0x242421)
+	bfWarn        = rgb(0xE0AF68)
+	bfInfo        = rgb(0x7AA2F7)
+	bfSeries1     = rgb(0x2A78D6)
+	bfSeries2     = rgb(0xD55181)
+	bfSeries3     = rgb(0x008300)
+	bfSeries1Dark = rgb(0x3987E5)
+	bfSeries3Dark = rgb(0x1A9A1A)
+)
+
+// Text on the accent is ink, not bf-white, as the system's Applications
+// section sets it: white reaches only 3.78:1 on the orange, ink 4.56:1.
+var (
 	lightPalette = Palette{
-		Bg: paper, Well: rgb(0xDEDBD4), Surface: rgb(0xF3F2EE), SurfaceAlt: rgb(0xDEDBD4),
-		Fg: ink, Muted: rgb(0x5E5C56), Border: rgb(0xD3D0C9),
-		Accent: rgb(0xE2551D), AccentPressed: rgb(0xA93A0F), AccentText: rgb(0xA3390C), OnAccent: ink,
-		ButtonBg: ink, ButtonFg: rgb(0xF3F2EE), ButtonShadow: rgb(0x000000),
-		QuietBg: rgb(0xDEDBD4), QuietFg: ink, QuietShadow: rgb(0xC4C0B8),
-		Green: rgb(0x9ECE6A), Yellow: rgb(0xE0AF68), Blue: rgb(0x7AA2F7), OnStatus: ink,
-		Series: [3]color.NRGBA{rgb(0x2A78D6), rgb(0xD55181), rgb(0x008300)},
+		Bg: bfPaper, Well: bfSurfaceSunk, Surface: bfSurface, SurfaceAlt: bfSurfaceSunk,
+		Fg: bfInk, Muted: bfInkMuted, Border: bfLine,
+		Accent: bfAccent, AccentPressed: bfAccentEdge, AccentText: bfAccentText, OnAccent: bfInk,
+		ButtonBg: bfInk, ButtonFg: bfSurface, ButtonShadow: bfInkDeep,
+		QuietBg: bfPaper, QuietFg: bfInk, QuietShadow: bfLineStrong,
+		Green: bfOk, Yellow: bfWarn, Blue: bfInfo, OnStatus: bfInk,
+		Series: [3]color.NRGBA{bfSeries1, bfSeries2, bfSeries3},
 	}
 	darkPalette = Palette{
-		Bg: ink, Well: rgb(0x121211), Surface: rgb(0x2C2C29), SurfaceAlt: rgb(0x3A3935),
-		Fg: rgb(0xF3F2EE), Muted: rgb(0xA19E96), Border: rgb(0x3A3935),
-		Accent: rgb(0xE2551D), AccentPressed: rgb(0xA93A0F), AccentText: rgb(0xFF8A4C), OnAccent: ink,
-		ButtonBg: rgb(0x3A3935), ButtonFg: rgb(0xF3F2EE), ButtonShadow: rgb(0x121211),
-		QuietBg: rgb(0x242421), QuietFg: rgb(0xF3F2EE), QuietShadow: rgb(0x121211),
-		Green: rgb(0x9ECE6A), Yellow: rgb(0xE0AF68), Blue: rgb(0x7AA2F7), OnStatus: ink,
-		Series: [3]color.NRGBA{rgb(0x3987E5), rgb(0xD55181), rgb(0x1A9A1A)},
+		Bg: bfInk, Well: bfInkCode, Surface: bfInkRaised, SurfaceAlt: bfInkCardHover,
+		Fg: bfSurface, Muted: bfInkSubtle, Border: bfOutlineOnDark,
+		Accent: bfAccent, AccentPressed: bfAccentEdge, AccentText: bfAccentOnDark, OnAccent: bfInk,
+		ButtonBg: bfInkCardHover, ButtonFg: bfSurface, ButtonShadow: bfInkDeep,
+		QuietBg: bfInkChip, QuietFg: bfSurface, QuietShadow: bfInkDeep,
+		Green: bfOk, Yellow: bfWarn, Blue: bfInfo, OnStatus: bfInk,
+		Series: [3]color.NRGBA{bfSeries1Dark, bfSeries2, bfSeries3Dark},
+		dark:   true,
 	}
 )
 

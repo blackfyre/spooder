@@ -9,7 +9,7 @@ import (
 
 // Spec "System in dark mode": the Blackfyre dark palette; otherwise paper.
 func TestPaletteFollowsTheSystem(t *testing.T) {
-	if p := NewPalette(appearance.Settings{Dark: true}); p.Bg != rgb(0x1B1B19) || p.Well != rgb(0x121211) || p.Surface != rgb(0x2C2C29) || p.Fg != rgb(0xF3F2EE) || p.SurfaceAlt != rgb(0x3A3935) {
+	if p := NewPalette(appearance.Settings{Dark: true}); p.Bg != rgb(0x1B1B19) || p.Well != rgb(0x121211) || p.Surface != rgb(0x2C2C29) || p.Fg != rgb(0xF3F2EE) || p.SurfaceAlt != rgb(0x383834) {
 		t.Fatalf("dark %+v", p)
 	}
 	if p := NewPalette(appearance.Settings{}); p.Bg != rgb(0xE6E4DF) || p.Fg != rgb(0x1B1B19) || p.Muted != rgb(0x5E5C56) {
@@ -20,7 +20,7 @@ func TestPaletteFollowsTheSystem(t *testing.T) {
 		if p.Accent != rgb(0xE2551D) || p.AccentPressed != rgb(0xA93A0F) {
 			t.Fatalf("dark=%v: accent %v", dark, p.Accent)
 		}
-		if p.Green != rgb(0x9ECE6A) || p.Yellow != rgb(0xE0AF68) || p.Blue != rgb(0x7AA2F7) {
+		if p.Green != rgb(0x7FD88A) || p.Yellow != rgb(0xE0AF68) || p.Blue != rgb(0x7AA2F7) {
 			t.Fatalf("dark=%v: status colours", dark)
 		}
 	}

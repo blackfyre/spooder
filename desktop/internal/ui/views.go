@@ -68,7 +68,7 @@ func (v *viewsWindow) frame(gtx layout.Context) {
 	layout.UniformInset(12).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min = gtx.Constraints.Max
 		if !st.Current {
-			return panel(gtx, d.pal.Surface, d.pal.Border, 16, func(gtx layout.Context) layout.Dimensions {
+			return panel(gtx, d.pal.Surface, d.pal.Border, radiusPanel, 16, func(gtx layout.Context) layout.Dimensions {
 				gtx.Constraints.Min = gtx.Constraints.Max
 				return stacked(gtx, 8,
 					tracked(d.th, sizeTitle, d.pal.Muted, "no pose"),

@@ -21,14 +21,23 @@ func (w *window) header(gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Alignment: layout.Start}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return stacked(gtx, 2,
-				tracked(w.th, sizeTitle, w.pal.Fg, "Spooder"),
-				tracked(w.th, sizeLabel, w.pal.Muted, "Calibrator"),
+				tracked(w.th, sizeLabel, w.pal.AccentText, "Calibrator"),
+				w.title,
 			)
 		}),
 		layout.Rigid(layout.Spacer{Width: 20}.Layout),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return stacked(gtx, 6, w.controlRow, w.linkState)
 		}),
+	)
+}
+
+// title is the display title in Archivo, ending in an orange full stop, as
+// the design system sets display titles.
+func (w *window) title(gtx layout.Context) layout.Dimensions {
+	return sideBySide(gtx, 0,
+		textLabel(w.th, sizeTitle, w.pal.Fg, "Spooder").Layout,
+		textLabel(w.th, sizeTitle, w.pal.Accent, ".").Layout,
 	)
 }
 
@@ -112,7 +121,7 @@ func (w *window) banners(gtx layout.Context) layout.Dimensions {
 	banner := func(bg, fg color.NRGBA, title, body string) layout.Widget {
 		return func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.X = gtx.Constraints.Max.X
-			return panel(gtx, bg, color.NRGBA{}, 10, func(gtx layout.Context) layout.Dimensions {
+			return panel(gtx, bg, color.NRGBA{}, radiusCard, 10, func(gtx layout.Context) layout.Dimensions {
 				return sideBySide(gtx, 14,
 					tracked(w.th, 13, fg, title),
 					textLabel(w.th, sizeText, fg, body).Layout,
@@ -173,7 +182,7 @@ func (w *window) wideCell(weight float32, label, value string, c color.NRGBA) la
 func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 	snap := w.snap
 	gtx.Constraints.Min.X = gtx.Constraints.Max.X
-	return panel(gtx, w.pal.Surface, w.pal.Border, 14, func(gtx layout.Context) layout.Dimensions {
+	return panel(gtx, w.pal.Surface, w.pal.Border, radiusPanel, 14, func(gtx layout.Context) layout.Dimensions {
 		return stacked(gtx, 12,
 			func(gtx layout.Context) layout.Dimensions {
 				if !snap.HaveTelemetry {

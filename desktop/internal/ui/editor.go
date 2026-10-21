@@ -42,7 +42,7 @@ func (w *window) editor(gtx layout.Context) layout.Dimensions {
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			if !snap.HaveReport {
-				return panel(gtx, w.pal.Surface, w.pal.Border, 16, func(gtx layout.Context) layout.Dimensions {
+				return panel(gtx, w.pal.Surface, w.pal.Border, radiusPanel, 16, func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Min.X = gtx.Constraints.Max.X
 					return textLabel(w.th, sizeText, w.pal.Muted,
 						"No calibration report yet. The robot reports its table in Calibrate (at least once per second) and after every change.").Layout(gtx)
@@ -87,12 +87,12 @@ func (w *window) card(j int) layout.Widget {
 			})
 			call := m.Stop()
 			r := image.Rectangle{Max: dims.Size}
-			fill(gtx, r, gtx.Dp(8), w.pal.Surface)
+			fill(gtx, r, gtx.Dp(radiusCard), w.pal.Surface)
 			width := gtx.Dp(1)
 			if selected {
 				width = gtx.Dp(2)
 			}
-			outline(gtx, r, gtx.Dp(8), width, border)
+			outline(gtx, r, gtx.Dp(radiusCard), width, border)
 			call.Add(gtx.Ops)
 			return dims
 		})

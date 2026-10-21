@@ -21,7 +21,7 @@ func (w *window) sidePanes(gtx layout.Context) layout.Dimensions {
 				if i == w.tab {
 					kind = kindActive
 				}
-				ws = append(ws, w.button(&w.tabs[i], kind, tabNames[i], true).Layout)
+				ws = append(ws, w.button(&w.tabs[i], kind, tabNames[i], true).sized(sizeLabel).Layout)
 			}
 			return layout.Inset{Bottom: 8}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return sideBySide(gtx, 6, ws...)
@@ -46,7 +46,7 @@ func (w *window) sidePanes(gtx layout.Context) layout.Dimensions {
 
 func (w *window) logPane(gtx layout.Context) layout.Dimensions {
 	log := w.snap.Log
-	return panel(gtx, w.pal.Well, w.pal.Border, 10, func(gtx layout.Context) layout.Dimensions {
+	return panel(gtx, w.pal.Well, w.pal.Border, radiusTile, 10, func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min = gtx.Constraints.Max
 		if len(log) == 0 {
 			return valueLabel(w.th, sizeLabel, w.pal.Muted, "The robot's debug text appears here.").Layout(gtx)
@@ -68,7 +68,7 @@ func (w *window) logPane(gtx layout.Context) layout.Dimensions {
 
 func (w *window) framesPane(gtx layout.Context) layout.Dimensions {
 	frames := w.snap.Frames
-	return panel(gtx, w.pal.Well, w.pal.Border, 10, func(gtx layout.Context) layout.Dimensions {
+	return panel(gtx, w.pal.Well, w.pal.Border, radiusTile, 10, func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min = gtx.Constraints.Max
 		if len(frames) == 0 {
 			return valueLabel(w.th, sizeLabel, w.pal.Muted, "Decoded frames appear here.").Layout(gtx)
@@ -86,7 +86,7 @@ func (w *window) framesPane(gtx layout.Context) layout.Dimensions {
 func (w *window) exportPane(gtx layout.Context) layout.Dimensions {
 	snap := w.snap
 	table := snap.Table
-	return panel(gtx, w.pal.Surface, w.pal.Border, 12, func(gtx layout.Context) layout.Dimensions {
+	return panel(gtx, w.pal.Surface, w.pal.Border, radiusPanel, 12, func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min = gtx.Constraints.Max
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -152,7 +152,7 @@ func (w *window) exportPane(gtx layout.Context) layout.Dimensions {
 // and added ones + in the accent.
 func (w *window) diffView(gtx layout.Context) layout.Dimensions {
 	plan := w.exp.plan
-	return panel(gtx, w.pal.Well, w.pal.Border, 8, func(gtx layout.Context) layout.Dimensions {
+	return panel(gtx, w.pal.Well, w.pal.Border, radiusTile, 8, func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min = gtx.Constraints.Max
 		if plan == nil {
 			return valueLabel(w.th, sizeLabel, w.pal.Muted, "The difference from the file on disk appears here.").Layout(gtx)

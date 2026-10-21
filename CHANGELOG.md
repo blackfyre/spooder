@@ -70,6 +70,8 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 - A leg entering its cycle part-way through a phase (entering Walk, a gait change) starts from where its foot is, instead of jumping onto the path (up to 45° in one tick in Bi and Ripple).
 - Foot targets are valid only within the femur and tibia's reach from the femur joint, less 4 mm (295 mm), not 340 mm from the coxa pivot. Strides that would not reach shrink smoothly, for single motions too. At body height 100 they are shorter than before: 50–78% at the default dial.
 
+- The desktop calibrator and the setup portal follow the Blackfyre design system's tokens: its exact colours (with `bf-ok` for the status green and the dark-panel shades in dark mode), 10 px buttons on raised edges (3 px under dark buttons, 2 px with a highlight under light and orange ones), 22 px panels and 14 px cards, the label, kicker and micro letter-spacing, and display titles ending in an orange full stop. The portal also gets 44 px touch targets, numbered section kickers, hairline-outlined panels with the panel shadow, and the accent focus ring. Text on the orange stays ink: the system's white reaches only 3.78:1.
+
 - Telemetry on every link also reports the bridge link: up or down, whether a gamepad is on it, and its frame counts (reserved bytes, no version bump). The desktop calibrator shows it in a Bridge cell, and `mise run monitor --frames` on each telemetry line.
 
 ### Removed
