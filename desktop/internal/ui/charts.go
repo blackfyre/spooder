@@ -309,6 +309,10 @@ func (w *window) plot(gtx layout.Context, i int, c chartSpec, m chartsModel, siz
 	for _, r := range c.refs {
 		dashed(gtx, float32(ax), float32(size.X), y(r.v), faded(w.pal.Muted, 0xC0))
 	}
+	// The held extreme: dashed, in its series' colour.
+	if c.held != nil {
+		dashed(gtx, float32(ax), float32(size.X), y(c.held.v), faded(w.pal.Series[c.held.slot], 0xC0))
+	}
 
 	// The series: 2 px lines, broken at gaps (NaN), decimated per column.
 	cl := clip.Rect{Min: image.Pt(ax, 0), Max: size}.Push(gtx.Ops)
@@ -333,6 +337,9 @@ func (w *window) plot(gtx layout.Context, i int, c chartSpec, m chartsModel, siz
 	// Reference names at the right end, just above their line (below it at
 	// the top), on the surface so neither a series nor the line crosses them.
 	var placed []image.Rectangle
+	if c.held != nil {
+		placed = w.refName(gtx, c.held.name, int(y(c.held.v)), size, placed)
+	}
 	for _, r := range c.refs {
 		placed = w.refName(gtx, r.name, int(y(r.v)), size, placed)
 	}

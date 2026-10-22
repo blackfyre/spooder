@@ -215,7 +215,7 @@ The desktop app in `desktop/` speaks the link protocol on the robot's USB port. 
 5. **Calibrate.** Select a joint with the arrow keys or the pointer; `=`/`-` nudge fine, Shift coarse, `R` flips the direction. A change shows `pending` until the robot's report confirms it; clamped or rejected changes are marked and show the robot's value. The joint moves at 60°/s at most.
    - **4 views** (top bar) opens a second window with the whole robot from the pose: top, front, left and isometric. The body is a schematic plate, and the ground is at the lowest foot. The selected leg is in the accent and limits are ringed. Put it on a second screen to judge a stance, a gait or a gesture while driving or calibrating.
    - The **charts** tab shows, on one time axis, the last 30 s, 2 min or 10 min of:
-     - power: the supply voltage against its limits, and the current and averaged current against the trip and sustained limits;
+     - power: the supply voltage against its limits, and the current and averaged current against the trip and sustained limits, each with its held extreme (`low` voltage, `peak` current: held 3 s, then easing back to the reading);
      - links: frames accepted and rejected on the robot's, the bridge's and the host link;
      - a mode, output and fault timeline;
      - joints: the fastest joint speed per kind against the budget and rated speed, and the selected leg's servo angles;

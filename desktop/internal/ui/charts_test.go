@@ -366,3 +366,92 @@ func TestDecimateKeepsTheNewestAndTheOrder(t *testing.T) {
 		t.Fatalf("peak kept %v, ends at %v", peak, d[len(d)-1].v)
 	}
 }
+
+// tenHz returns points every 0.1 s ending at end (≤ 0): first, then rest.
+func tenHz(from, end float64, first, rest float64) []point {
+	var pts []point
+	for t := from; t <= end+1e-9; t += 0.1 {
+		v := rest
+		if len(pts) == 0 {
+			v = first
+		}
+		pts = append(pts, point{t, v})
+	}
+	return pts
+}
+
+// newestAtNow shifts pts so that the newest is at t = 0.
+func newestAtNow(pts []point) []point {
+	out := make([]point, len(pts))
+	for i, p := range pts {
+		out[i] = point{p.t - pts[len(pts)-1].t, p.v}
+	}
+	return out
+}
+
+// The spec's scenarios, the same numbers as the bridge's test_peak_hold.
+func TestHeldExtreme(t *testing.T) {
+	near := func(got, want float64) bool { return math.Abs(got-want) < 0.01 }
+	// Stand surge: 4.3 A once, then 0.4 A; seen at 2 s, 4 s and 6 s after.
+	for _, c := range []struct{ after, want float64 }{{2, 4.3}, {4, 2.3}, {6, 0.4}} {
+		got, ok := heldExtreme(newestAtNow(tenHz(-10, -10+c.after, 4.3, 0.4)), true, currentFallAps)
+		if !ok || !near(got, c.want) {
+			t.Errorf("%v s after the surge: held %v (%v), want %v", c.after, got, ok, c.want)
+		}
+	}
+	// Supply sag: 5.5 V, then 6.0 V; held 3 s, at 6.0 within a further second.
+	for _, c := range []struct{ after, want float64 }{{2.8, 5.5}, {4.1, 6.0}} {
+		got, ok := heldExtreme(newestAtNow(tenHz(-10, -10+c.after, 5.5, 6.0)), false, voltageRiseVps)
+		if !ok || !near(got, c.want) {
+			t.Errorf("%v s after the sag: held %v (%v), want %v", c.after, got, ok, c.want)
+		}
+	}
+	// A reading rising into the falling peak takes it over and holds anew,
+	// as on the bridge: falling, the peak is 2.1 A when 2.2 A arrives 4.1 s
+	// after the surge; 2 s later the new hold still stands.
+	rising := append(tenHz(-10, -6.0, 4.3, 0.4), point{-5.9, 2.2})
+	if got, ok := heldExtreme(newestAtNow(rising), true, currentFallAps); !ok || !near(got, 2.2) {
+		t.Errorf("rising reading: held %v, want 2.2", got)
+	}
+	later := append(rising, tenHz(-5.8, -3.9, 0.4, 0.4)...)
+	if got, _ := heldExtreme(newestAtNow(later), true, currentFallAps); !near(got, 2.2) {
+		t.Errorf("2 s after the new hold: held %v, want 2.2", got)
+	}
+
+	// No telemetry, or none for longer than a gap: nothing held.
+	if _, ok := heldExtreme(nil, true, currentFallAps); ok {
+		t.Error("held with no samples")
+	}
+	if _, ok := heldExtreme([]point{{-2, 4.3}, {-1.9, 0.4}}, true, currentFallAps); ok {
+		t.Error("held although the newest sample is older than a gap")
+	}
+	// A gap restarts the hold: the old surge is forgotten.
+	gapped := []point{{-1.5, 9}, {-0.3, 0.5}, {-0.2, 0.5}, {-0.1, 0.5}, {0, 0.5}}
+	if got, ok := heldExtreme(gapped, true, currentFallAps); !ok || !near(got, 0.5) {
+		t.Errorf("after a gap: held %v, want 0.5", got)
+	}
+}
+
+func TestChartsShowHeldExtremes(t *testing.T) {
+	w, _, _ := testWindow(t, false)
+	s := w.env.Session
+	s.LinkState(link.State{Status: link.Connected, Port: servo})
+	feedHistory(s, 30)
+	h, _ := s.HistorySince(clock.Add(-2 * time.Minute))
+	m := buildCharts(h, clock, 2*time.Minute, 1)
+	byTitle := map[string]chartSpec{}
+	for _, c := range m.charts {
+		byTitle[c.title] = c
+	}
+	amps, volts := byTitle["Current"], byTitle["Supply"]
+	if amps.held == nil || !strings.HasPrefix(amps.held.name, "peak ") {
+		t.Fatalf("current chart held line: %+v", amps.held)
+	}
+	if volts.held == nil || !strings.HasPrefix(volts.held.name, "low ") {
+		t.Fatalf("supply chart held line: %+v", volts.held)
+	}
+	last := func(c chartSpec) float64 { p := c.series[0].pts; return p[len(p)-1].v }
+	if amps.held.v < last(amps) || volts.held.v > last(volts) {
+		t.Errorf("held beyond the wrong side: peak %v vs %v, low %v vs %v", amps.held.v, last(amps), volts.held.v, last(volts))
+	}
+}

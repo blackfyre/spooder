@@ -68,10 +68,10 @@ All taken against the virtual robot, in the calibrator's dark or light look (fol
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/images/charts-light.png">
-  <img alt="The charts tab: supply voltage with its limits, servo current with the trip and sustained limits, and the frames accepted and rejected on each link" src="docs/images/charts-dark.png">
+  <img alt="The charts tab: supply voltage with its limits and held low, servo current with the trip and sustained limits and held peak, and the frames accepted and rejected on each link" src="docs/images/charts-dark.png">
 </picture>
 
-*The charts tab: ten minutes of supply, current, link and robot-internal history, with CSV export.*
+*The charts tab: ten minutes of supply, current, link and robot-internal history, with the recent peak current and low voltage held for 3 s, and CSV export.*
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/images/estop-light.png">

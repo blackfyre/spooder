@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"math"
 	"time"
 
@@ -61,6 +62,65 @@ type refLine struct {
 	v    float64
 }
 
+// heldLine is a held extreme on its series' chart: the recent highest
+// current or lowest voltage.
+type heldLine struct {
+	name string
+	v    float64
+	slot int
+}
+
+// The held extremes' rule, as on the bridge (core/status/peak_hold): a
+// reading at or beyond the held value takes it at once; it holds holdSeconds
+// from when it was last reached, then moves towards the reading at a set rate.
+const (
+	holdSeconds    = 3.0
+	currentFallAps = 2.0 // A per second
+	voltageRiseVps = 0.5 // V per second
+)
+
+// heldExtreme runs the hold over pts (oldest first) up to now (t = 0), for
+// the highest (max) or lowest value. A gap between samples restarts it, and
+// with no sample for longer than a gap nothing is held.
+func heldExtreme(pts []point, max bool, rate float64) (float64, bool) {
+	var held, reached, last float64
+	present := false
+	towards := func(t, v float64) {
+		from := math.Max(last, reached+holdSeconds)
+		last = t
+		if t <= from {
+			return
+		}
+		if step := rate * (t - from); max {
+			held = math.Max(held-step, v)
+		} else {
+			held = math.Min(held+step, v)
+		}
+	}
+	for i, p := range pts {
+		if math.IsNaN(p.v) || (i > 0 && p.t-pts[i-1].t > sampleGap) {
+			present = false
+			if math.IsNaN(p.v) {
+				continue
+			}
+		}
+		if present {
+			// Until this sample the previous reading stood, as the bridge
+			// sees it between telemetry frames.
+			towards(p.t, pts[i-1].v)
+		}
+		beyond := (max && p.v >= held) || (!max && p.v <= held)
+		if !present || beyond {
+			held, reached, last, present = p.v, p.t, p.t, true
+		}
+	}
+	if !present || pts[len(pts)-1].t < -sampleGap {
+		return 0, false
+	}
+	towards(0, pts[len(pts)-1].v)
+	return held, true
+}
+
 // chartSpec is one chart: a title with its unit, the series on one value
 // axis, the reference lines, and why there is nothing to draw (empty when
 // there is).
@@ -69,6 +129,7 @@ type chartSpec struct {
 	decimals    int
 	series      []series
 	refs        []refLine
+	held        *heldLine // the held extreme, if any
 	missing     string
 	minRange    float64 // the value axis spans at least this much
 	floorZero   bool    // the value axis starts at zero
@@ -120,6 +181,9 @@ func buildCharts(h session.History, now time.Time, window time.Duration, leg int
 		v = append(v, point{rel(s.At, now), float64(s.T.VoltageMv) / 1000})
 	}
 	volts.series = []series{{name: "voltage", slot: 0, pts: v}}
+	if low, ok := heldExtreme(v, false, voltageRiseVps); ok {
+		volts.held = &heldLine{name: fmt.Sprintf("low %.2f V", low), v: low, slot: 0}
+	}
 	if latest != nil {
 		volts.refs = []refLine{
 			{"max", float64(latest.MaxMv) / 1000}, {"min", float64(latest.MinMv) / 1000}, {"brown-out", float64(latest.BrownoutMv) / 1000},
@@ -139,6 +203,9 @@ func buildCharts(h session.History, now time.Time, window time.Duration, leg int
 		avg = append(avg, point{rel(s.At, now), float64(s.D.AverageCurrentMa) / 1000})
 	}
 	amps.series = []series{{name: "current", slot: 0, pts: a}}
+	if peak, ok := heldExtreme(a, true, currentFallAps); ok {
+		amps.held = &heldLine{name: fmt.Sprintf("peak %.2f A", peak), v: peak, slot: 0}
+	}
 	if len(diag) > 0 {
 		amps.series = append(amps.series, series{name: "average", slot: 1, pts: avg})
 		amps.refs = []refLine{{"trip", float64(latest.TripCurrentMa) / 1000}, {"sustained", float64(latest.SustainedCurrentMa) / 1000}}
@@ -310,6 +377,9 @@ func (c chartSpec) valueRange(t0 float64) (lo, hi, step float64) {
 	}
 	for _, r := range c.refs {
 		lo, hi = math.Min(lo, r.v), math.Max(hi, r.v)
+	}
+	if c.held != nil {
+		lo, hi = math.Min(lo, c.held.v), math.Max(hi, c.held.v)
 	}
 	if math.IsInf(lo, 0) {
 		lo, hi = 0, c.minRange
