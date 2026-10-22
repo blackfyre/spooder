@@ -5,7 +5,7 @@ description: Structural rules for the Spooder firmwares (robot on the Pimoroni S
 
 # Spooder firmware shape
 
-Adapted from architecture guidance on modules, explicit state machines, named constants and test boundaries, applied to a single-binary microcontroller firmware. Intended behaviour lives in OpenSpec (`openspec/specs/`); this skill covers structure.
+Adapted from architecture guidance on modules, explicit state machines, named constants, input validation and output encoding, origin checks and polling (for the setup portal), shrink-only baselines for new gates and test boundaries, applied to a single-binary microcontroller firmware. Intended behaviour lives in OpenSpec (`openspec/specs/`); this skill covers structure.
 
 ## Two layers
 
@@ -100,12 +100,12 @@ The board has no pull-ups on GPIO19–21 or 26–28. Check for clashes before cl
 |---|---|---|
 | BTstack / Bluepad32 | 0 | Bluetooth; callbacks into `bridge.cpp` |
 | `robot_link` task, priority 5 | 1 | every 20 ms (`xTaskDelayUntil`): sample the GPIO35 e-stop button, send a command frame, decode telemetry and calibration reports |
-| Arduino `loop()`, priority 1 | 1 | `BP32.update()`, `gamepad_mapping::update`, hand the desired state to the link task, redraw the screen (≤ 4 Hz, changed lines only) |
+| Arduino `loop()`, priority 1 | 1 | `BP32.update()`, `gamepad_mapping::update`, hand the desired state to the link task, feed the power history, link rates and held extremes, redraw the screen (≤ 4 Hz, changed regions only) |
 
 - Shared state between `loop()` and the link task is copied under one spinlock (`portMUX`); nothing else is shared.
 - The screen must never delay command frames: keep drawing in `loop()`, never in the link task.
 - One controller slot (`CONFIG_BLUEPAD32_MAX_DEVICES=1`, plus a refusal in `onConnected`). WiFi is never started in normal operation.
-- Pins: link UART1 TX GPIO27, RX GPIO26; e-stop GPIO35 (input only, board pull-up); display SPI MOSI 19, SCLK 18, CS 5, DC 16, RST 23, backlight 4. GPIO0 (left button) is a strapping pin: it is read only while the logo is shown, for setup mode, never at reset.
+- Pins: link UART1 TX GPIO27, RX GPIO26; e-stop GPIO35 (input only, board pull-up); display SPI MOSI 19, SCLK 18, CS 5, DC 16, RST 23, backlight 4. GPIO0 (left button) is a strapping pin: it is read while the logo is shown (setup mode) and once the status screen is up (`page_button`), never at reset.
 
 ### Setup mode
 
@@ -125,6 +125,20 @@ One radio at a time: setup mode is a boot path of its own and never starts Bluet
 - The portal page (`main/portal_page.h`) is one hand-written HTML file with plain JavaScript and no external resources, under 16 KB (a `static_assert`). It shares no code with the desktop calibrator.
 - The password is made once with `bootloader_random_enable()` and `esp_random()` (WiFi is not running yet) and kept in NVS (`spooder`/`ap_pass`).
 - The Bluepad32 console owns UART0 (the USB bridge); use `Console`, not `Serial`.
+- **Safe methods change nothing**: `GET` handlers and captive-portal probes only read or redirect; every state change is a `POST`. Nothing changes on page load.
+- **Origin check on state-changing requests**: the portal has no cookies or sign-in (the WPA2 password is the authentication), but a `POST` should still be refused with `403` unless its `Origin` (or `Referer`) is `http://192.168.4.1`, failing closed when both are missing. *Not implemented yet*: today the `POST` handlers accept any origin. The risk is small (password-protected access point, no internet), the check is about ten lines.
+- **Polling, not push**: the page polls `GET /api/state`; keep it that way unless a measured freshness need says otherwise.
+
+## Untrusted input and output
+
+Every byte that arrives from outside the board is untrusted: link and USB frames, serial keys, portal requests, gamepad reports.
+
+- **Decode, then validate in `core/`.** `core/protocol` checks framing (version, length, CRC) and discards what fails; the meaning is then checked against allow-lists in core before anything acts on it: enum and index ranges (mode, gait, gesture, joint), calibration guards (`link_receiver`, `joint_calibration::clampJoint`), command ranges (`body::clampCommand`).
+- **Reject, or clamp visibly; never repair silently.** A value outside a defined set (unknown mode, joint index, portal field) is rejected. Clamping is reserved for physical ranges where it is the safety rule (stick deflection, joint travel), and is reported: a clamped calibration set comes back as `CalibrationResult::Clamped`, so the front-end shows what was applied.
+- **Rejections do not echo the input.** Portal handlers answer `400` with a fixed message; the robot's console reports rejections once per event with values it parsed, never raw bytes.
+- **Encode output for its context.** Debug text on the robot's USB port stays printable ASCII (it shares the port with frames). The portal builds JSON from internal values only, and its page sets text with `textContent`, never `innerHTML`. CSV exports and `calibration_defaults.cpp` are written from parsed numbers in a fixed format.
+- **Parse as data.** Frames are fixed little-endian layouts read field by field; portal arguments are parsed to numbers and checked. Nothing untrusted becomes code, a format string or a file path.
+- **Test the boundary.** Host tests show that invalid frames and out-of-range values are rejected or reported clamped (`test_protocol`, `test_link_receiver`, `test_calibration_guards`); add one when a new input appears. *Known gap*: the portal's argument checks (`/api/joint`, `/api/mode`) live in the adapter (`setup_mode.cpp`) and have no host test; moving their parsing into `core/setup` would make them testable.
 
 ## State and constants
 
@@ -146,5 +160,8 @@ One radio at a time: setup mode is a boot path of its own and never starts Bluet
 ## Verification
 
 - **Gates:** `mise run test`; `mise run build` with limits configured, with and without `--serial`; `mise run build-bridge`. No new warnings in `core/` or `firmware/`.
-- **Logic tests** live with `core/`. Each bug fix there gets a regression test that fails without the fix.
+- **Logic tests** live with `core/`. Each bug fix there gets a regression test that fails without the fix, at the boundary where the failure lives (core logic, the protocol, an adapter's mapping), not only end to end.
+- **Place tests at the smallest boundary that proves the behaviour**: rules and state machines in `core/` host tests; wiring across the tick in `test_robot_tick`; the real link and session end to end against the virtual robot (`mise run e2e`), kept to a few journeys.
+- **Deterministic tests:** time is passed in (`nowMs`), never read from a clock in `core/`; no network, no test-order dependence, no shared mutable fixtures between tests.
+- **New gates in existing code**: when a new mandatory check is added that the code does not yet pass (for example `-Werror`, `-Wextra` on the bridge, clang-tidy, `govulncheck`), commit a machine-readable baseline of today's violations next to its configuration, fail on anything not in it, and let it only shrink. Security gates must reach an empty baseline; hygiene gates may keep one. Record the baseline's owner and target in the change that adds it.
 - **Hardware behaviour** is checked with the `spooder-hardware-check` skill.
