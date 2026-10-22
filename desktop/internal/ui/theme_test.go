@@ -45,6 +45,10 @@ func TestPaletteLegibility(t *testing.T) {
 			check("accent text on "+name, p.AccentText, bg, 4.5)
 		}
 		check("text on selection", p.Fg, p.SurfaceAlt, 4.5)
+		check("text on text selection", p.Fg, p.TextSelection, 4.5)
+		// Stray-byte lines are an accent mark; selected, they stay readable.
+		check("accent text on text selection", p.AccentText, p.TextSelection, 3)
+		check("text selection on well", p.TextSelection, p.Well, 1.3)
 		check("text on accent", p.OnAccent, p.Accent, 4.5)
 		for _, k := range []buttonKind{kindNeutral, kindPrimary, kindQuiet, kindActive} {
 			face, fg, _ := p.buttonColours(k)

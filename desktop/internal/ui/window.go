@@ -121,7 +121,8 @@ type window struct {
 	cards  [calib.Joints]widget.Clickable
 	sel    selection
 
-	editorList, logList, framesList, diffList widget.List
+	editorList, diffList widget.List
+	logText, framesText  *textPane // the debug log and the decoded frames
 
 	exp            exportModel
 	checkoutClicks []widget.Clickable
@@ -186,10 +187,7 @@ func newWindow(env Env) (*window, error) {
 	w.charts.window = defaultChartWindow
 	w.charts.list.Axis = layout.Vertical
 	w.editorList.Axis = layout.Vertical
-	w.logList.Axis = layout.Vertical
-	w.logList.ScrollToEnd = true
-	w.framesList.Axis = layout.Vertical
-	w.framesList.ScrollToEnd = true
+	w.logText, w.framesText = newTextPane(), newTextPane()
 	w.diffList.Axis = layout.Vertical
 	w.exp = exportModel{candidates: env.Checkouts, save: func(dir string) error {
 		if env.ConfigDir == "" {
@@ -390,18 +388,23 @@ func (w *window) actionKey(gtx layout.Context, ke key.Event) bool {
 	if act == nil {
 		return false
 	}
-	if w.actionKeys == nil {
-		w.actionKeys = map[key.Name]*keyLatch{}
-	}
-	l := w.actionKeys[ke.Name]
-	if l == nil {
-		l = &keyLatch{}
-		w.actionKeys[ke.Name] = l
-	}
-	if l.press(ke.State) {
+	if w.latch(ke.Name).press(ke.State) {
 		w.say(gtx, act())
 	}
 	return true
+}
+
+// latch is the action key's latch.
+func (w *window) latch(name key.Name) *keyLatch {
+	if w.actionKeys == nil {
+		w.actionKeys = map[key.Name]*keyLatch{}
+	}
+	l := w.actionKeys[name]
+	if l == nil {
+		l = &keyLatch{}
+		w.actionKeys[name] = l
+	}
+	return l
 }
 
 // keyFilters are the window's shortcuts. Tab is taken so that keyboard
@@ -562,6 +565,14 @@ func (w *window) handle(gtx layout.Context) {
 			}
 			continue
 		}
+		if ke.Name == copyKey && ke.Modifiers.Contain(key.ModShortcut) && ke.State == key.Press {
+			// Copy, never the height key (design D4). C's latch takes the
+			// press, so C held on after the modifier's release does not act
+			// either; the release reaches it as for every press.
+			w.latch(ke.Name).press(ke.State)
+			w.copySelection(gtx)
+			continue
+		}
 		if w.driveKey(gtx, ke) || w.actionKey(gtx, ke) {
 			continue
 		}
@@ -669,6 +680,24 @@ func (w *window) handleEditor(gtx layout.Context) {
 			w.sel = selection{joint: j, field: calib.FieldDirection}
 			w.say(gtx, w.env.Session.Nudge(j, calib.FieldDirection, 1, false))
 		}
+	}
+}
+
+// copyKey with the shortcut modifier (Ctrl, or Cmd on macOS) copies the
+// shown text pane's selection.
+const copyKey key.Name = "C"
+
+// copySelection puts the shown text pane's selection on the clipboard.
+func (w *window) copySelection(gtx layout.Context) {
+	var text string
+	switch w.tab {
+	case tabLog:
+		text = w.logText.selectedText(w.logLines())
+	case tabFrames:
+		text = w.framesText.selectedText(w.frameLines())
+	}
+	if text != "" {
+		gtx.Execute(clipboard.WriteCmd{Type: "application/text", Data: io.NopCloser(strings.NewReader(text))})
 	}
 }
 

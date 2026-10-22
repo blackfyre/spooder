@@ -22,6 +22,7 @@ type Palette struct {
 	Border     color.NRGBA // card outlines and rules
 
 	Accent        color.NRGBA // the orange: e-stop, primary actions, selection
+	TextSelection color.NRGBA // selected text in the log and frames panes: the accent over Well
 	AccentPressed color.NRGBA // the accent's raised edge
 	AccentText    color.NRGBA // the accent as text on Bg or Surface
 	OnAccent      color.NRGBA // text on Accent
@@ -104,6 +105,26 @@ var (
 		dark:   true,
 	}
 )
+
+// The text selection's accent opacity over the well, in each mode: as much
+// as keeps the text legible on it.
+const (
+	selectionAlphaLight = 0x40
+	selectionAlphaDark  = 0x59
+)
+
+func init() {
+	lightPalette.TextSelection = over(lightPalette.Accent, selectionAlphaLight, lightPalette.Well)
+	darkPalette.TextSelection = over(darkPalette.Accent, selectionAlphaDark, darkPalette.Well)
+}
+
+// over is top at the given opacity (0–255) over an opaque bottom, opaque.
+func over(top color.NRGBA, alpha uint8, bottom color.NRGBA) color.NRGBA {
+	mix := func(t, b uint8) uint8 {
+		return uint8((int(t)*int(alpha) + int(b)*(255-int(alpha)) + 127) / 255)
+	}
+	return color.NRGBA{R: mix(top.R, bottom.R), G: mix(top.G, bottom.G), B: mix(top.B, bottom.B), A: 0xFF}
+}
 
 // NewPalette returns the Blackfyre palette for the host appearance: light
 // (paper) or dark. The system accent colour is not used; the accent is

@@ -57,12 +57,16 @@ type LogLine struct {
 	At    time.Time
 	Text  string
 	Stray int // 0xA5 bytes outside frames in this line
+	// Seq numbers the session's log lines from 0, so a view keeps its
+	// place when the oldest lines are dropped.
+	Seq uint64
 }
 
 // FrameLine is one decoded frame, for the frames view.
 type FrameLine struct {
 	At   time.Time
 	Text string
+	Seq  uint64 // numbers the frame lines, as LogLine.Seq
 }
 
 // Session is safe for concurrent use: the link calls it from its
@@ -97,6 +101,7 @@ type Session struct {
 	historyVersion              uint64
 	log                         []LogLine
 	frames                      []FrameLine
+	logSeq, frameSeq            uint64 // the next lines' Seq
 	strayLines                  int
 }
 
@@ -177,7 +182,8 @@ func (s *Session) Frame(f protocol.Frame, st link.Stats) {
 			s.history.addPose(now, f.Pose)
 			s.historyVersion++
 		}
-		s.frames = appendCapped(s.frames, FrameLine{At: now, Text: protocol.Summary(f)}, MaxFrameLines)
+		s.frames = appendCapped(s.frames, FrameLine{At: now, Text: protocol.Summary(f), Seq: s.frameSeq}, MaxFrameLines)
+		s.frameSeq++
 		return nil
 	})
 }
@@ -189,7 +195,8 @@ func (s *Session) Line(l link.Line, st link.Stats) {
 		if l.Stray > 0 {
 			s.strayLines++
 		}
-		s.log = appendCapped(s.log, LogLine{At: s.now(), Text: l.Text, Stray: l.Stray}, MaxLogLines)
+		s.log = appendCapped(s.log, LogLine{At: s.now(), Text: l.Text, Stray: l.Stray, Seq: s.logSeq}, MaxLogLines)
+		s.logSeq++
 		return nil
 	})
 }

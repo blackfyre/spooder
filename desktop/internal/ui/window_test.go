@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -682,5 +683,64 @@ func TestQueuedPressAfterFocusLossDoesNotDrive(t *testing.T) {
 	hold(w, router, "W")
 	if c := s.Command(); c.TranslateY != 100 {
 		t.Fatalf("fresh press: %+v", c)
+	}
+}
+
+// Spec "Copy across lines" and "Copy shortcut in control": Ctrl+C (Cmd+C
+// on macOS) copies the shown pane's selection and never lowers the body.
+func TestCopyShortcut(t *testing.T) {
+	w, router, _ := testWindow(t, false)
+	s := standingInControl(t, w, router)
+	press(w, router, "V", 0)
+	height := s.Command().Height
+	for _, l := range []string{"one", "two", "three", "four"} {
+		s.Line(link.Line{Text: l}, link.Stats{})
+	}
+	s.Frame(protocol.Frame{Type: protocol.TypeTelemetry}, link.Stats{})
+	w.tab = tabLog
+	frame(w, router)
+	copied := func() string {
+		t.Helper()
+		_, data, ok := router.WriteClipboard()
+		if !ok {
+			return ""
+		}
+		return string(data)
+	}
+	press(w, router, copyKey, key.ModShortcut)
+	if got := copied(); got != "" || s.Command().Height != height {
+		t.Fatalf("no selection: copied %q, height %d (was %d)", got, s.Command().Height, height)
+	}
+	w.logText.anchor, w.logText.caret, w.logText.anchored = textPos{line: 1, col: 14}, textPos{line: 2, col: 16}, true
+	press(w, router, copyKey, key.ModShortcut)
+	at := w.snap.Log[1].At.Format("15:04:05.000")
+	if got, want := copied(), "two\n"+at+"  th"; got != want {
+		t.Fatalf("copied %q, want %q", got, want)
+	}
+	if s.Command().Height != height {
+		t.Fatalf("the copy changed the height to %d", s.Command().Height)
+	}
+	// The frames pane copies its own selection.
+	w.tab = tabFrames
+	frame(w, router)
+	w.framesText.anchor, w.framesText.caret, w.framesText.anchored = textPos{}, textPos{col: 1000}, true
+	press(w, router, copyKey, key.ModShortcut)
+	if got := copied(); !strings.Contains(got, "telemetry") {
+		t.Fatalf("frames copied %q", got)
+	}
+	// C held on after Ctrl's release repeats without acting: it needs a
+	// fresh press.
+	router.Queue(key.Event{Name: copyKey, Modifiers: key.ModShortcut, State: key.Press})
+	frame(w, router)
+	router.Queue(key.Event{Name: copyKey, State: key.Press})
+	frame(w, router)
+	letGo(w, router, copyKey)
+	if s.Command().Height != height {
+		t.Fatalf("C held after the copy changed the height to %d", s.Command().Height)
+	}
+	// Plain C is still the height key.
+	press(w, router, copyKey, 0)
+	if s.Command().Height >= height {
+		t.Fatalf("C did not lower the height: %d", s.Command().Height)
 	}
 }

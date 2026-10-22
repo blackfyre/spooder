@@ -45,41 +45,50 @@ func (w *window) sidePanes(gtx layout.Context) layout.Dimensions {
 }
 
 func (w *window) logPane(gtx layout.Context) layout.Dimensions {
-	log := w.snap.Log
+	lines := w.logLines()
 	return panel(gtx, w.pal.Well, w.pal.Border, radiusTile, 10, func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min = gtx.Constraints.Max
-		if len(log) == 0 {
+		if lines.n == 0 {
 			return valueLabel(w.th, sizeLabel, w.pal.Muted, "The robot's debug text appears here.").Layout(gtx)
 		}
-		return material.List(w.th, &w.logList).Layout(gtx, len(log), func(gtx layout.Context, i int) layout.Dimensions {
-			l := log[i]
-			c := w.pal.Fg
-			text := l.At.Format("15:04:05.000") + "  " + l.Text
-			if l.Stray > 0 {
-				c = w.pal.AccentText
-				text += fmt.Sprintf("   [%d stray 0xA5]", l.Stray)
-			}
-			lbl := valueLabel(w.th, 12, c, text)
-			lbl.MaxLines = 0
-			return lbl.Layout(gtx)
-		})
+		return w.logText.Layout(gtx, w.th, w.pal.TextSelection, lines)
 	})
 }
 
+// logLines are the debug log's lines as shown: time, text and the stray
+// bytes, those lines in the accent.
+func (w *window) logLines() paneLines {
+	log, fg, accent := w.snap.Log, w.pal.Fg, w.pal.AccentText
+	return paneLines{n: len(log), line: func(i int) paneLine {
+		l := log[i]
+		c := fg
+		text := l.At.Format("15:04:05.000") + "  " + l.Text
+		if l.Stray > 0 {
+			c = accent
+			text += fmt.Sprintf("   [%d stray 0xA5]", l.Stray)
+		}
+		return paneLine{seq: l.Seq, text: text, c: c}
+	}}
+}
+
 func (w *window) framesPane(gtx layout.Context) layout.Dimensions {
-	frames := w.snap.Frames
+	lines := w.frameLines()
 	return panel(gtx, w.pal.Well, w.pal.Border, radiusTile, 10, func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min = gtx.Constraints.Max
-		if len(frames) == 0 {
+		if lines.n == 0 {
 			return valueLabel(w.th, sizeLabel, w.pal.Muted, "Decoded frames appear here.").Layout(gtx)
 		}
-		return material.List(w.th, &w.framesList).Layout(gtx, len(frames), func(gtx layout.Context, i int) layout.Dimensions {
-			f := frames[i]
-			lbl := valueLabel(w.th, 12, w.pal.Fg, f.At.Format("15:04:05.000")+"  "+f.Text)
-			lbl.MaxLines = 0
-			return lbl.Layout(gtx)
-		})
+		return w.framesText.Layout(gtx, w.th, w.pal.TextSelection, lines)
 	})
+}
+
+// frameLines are the decoded frames' lines as shown.
+func (w *window) frameLines() paneLines {
+	frames, fg := w.snap.Frames, w.pal.Fg
+	return paneLines{n: len(frames), line: func(i int) paneLine {
+		f := frames[i]
+		return paneLine{seq: f.Seq, text: f.At.Format("15:04:05.000") + "  " + f.Text, c: fg}
+	}}
 }
 
 // exportPane: the checkout, the difference, write and copy.

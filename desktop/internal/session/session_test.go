@@ -341,7 +341,11 @@ func TestLogAndFrames(t *testing.T) {
 	if len(snap.Log) != MaxLogLines || snap.Log[len(snap.Log)-1].Stray != 1 || snap.StrayLines != 1 || snap.Stats.Stray != 1 {
 		t.Fatalf("log %d stray %d", len(snap.Log), snap.StrayLines)
 	}
-	if len(snap.Frames) != 1 || snap.Frames[0].Text[:9] != "telemetry" {
+	// The lines keep their numbers when the oldest are dropped.
+	if first, last := snap.Log[0].Seq, snap.Log[len(snap.Log)-1].Seq; first != 6 || last != MaxLogLines+5 {
+		t.Fatalf("log numbered %d to %d", first, last)
+	}
+	if len(snap.Frames) != 1 || snap.Frames[0].Text[:9] != "telemetry" || snap.Frames[0].Seq != 0 {
 		t.Fatalf("frames %+v", snap.Frames)
 	}
 }
