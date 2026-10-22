@@ -305,17 +305,20 @@ static float stepTowards(float &value, float target, float maxStep)
   return behind - maxStep;
 }
 
-static const body::BodyState &limitOutput(RobotState &s, uint32_t elapsedMs, bool outputsOn)
+static const body::BodyState &limitOutput(RobotState &s, uint32_t elapsedMs)
 {
   output = s.body;
   float maxStep = s.backstopDegPerS * (elapsedMs / 1000.0f);
   bool heldBack = false;
   for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
   {
-    // With output off the servos' positions are unknown: the first pulse
-    // after it switches on goes straight to the command.
-    if (!outputsOn)
+    // A leg not yet switched on: its servos' positions are unknown, so its
+    // first pulse goes straight to the command.
+    if (leg >= s.legsOn)
+    {
       s.outputKnown[leg] = false;
+      continue;
+    }
     kinematics::JointAngles &out = s.outputAngles[leg];
     const kinematics::JointAngles &target = s.body.angles[leg];
     if (!s.outputKnown[leg])
@@ -479,7 +482,18 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
     body::step(s.body, cmd, now);
     s.previousMotionShare = s.body.motionScale;
     reportRejections(s, hw);
-    hw.applyServos(limitOutput(s, elapsedMs, hw.servosOn()), s.applied);
+    // Output switches on in groups of legs, one group per tick. While it is
+    // off, no leg's servo position is known.
+    if (hw.servosOn())
+      s.legsOn = s.legsOn + SWITCH_ON_LEGS_PER_TICK < kinematics::LEG_COUNT ? s.legsOn + SWITCH_ON_LEGS_PER_TICK
+                                                                             : kinematics::LEG_COUNT;
+    else
+    {
+      s.legsOn = SWITCH_ON_LEGS_PER_TICK;
+      for (bool &known : s.outputKnown)
+        known = false;
+    }
+    hw.applyServos(limitOutput(s, elapsedMs), s.applied, s.legsOn);
   }
 
   hw.showLeds(ledState(s, now, prot, run.runBody, reading.currentA, input.source));

@@ -50,6 +50,7 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 - Coxa offsets are shown from the servo centre (stored value minus 90°) in the portal and the calibrator. The stored values, the link and the export are unchanged.
 - Compiled defaults must let every servo reach the calibration pose: the IK angle there, plus the offset, within 0–180°.
 - The overcurrent trip has two levels. Above the trip current (9 A) it latches only once the current has stayed there for `SPOODER_TRIP_PERSIST_MS` (60 ms), so the surge of all servos starting together passes; above the new ceiling, `SPOODER_CEILING_CURRENT_A` (13 A), one reading still cuts output at once. Limits files need both new constants.
+- Servo output switches on two legs per tick (legs 1–2, then 3–4, then 5–6), so the servos' start surges no longer coincide: the 11.8 A measured with all 18 starting together drops to about a third. Switching off stays immediate.
 
 - The desktop calibrator's top bar puts the ports, Refresh, Connect, the control toggle and the e-stop on one aligned row of equal-height buttons, with the link state beneath.
 - While in control, the desktop calibrator shows its keyboard controls under the mode buttons.

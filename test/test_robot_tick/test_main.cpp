@@ -44,12 +44,14 @@ public:
     events.push_back("stop");
   }
   kinematics::JointAngles out[kinematics::LEG_COUNT] = {}; // the angles last handed over
-  void applyServos(const body::BodyState &b, const joint_calibration::Table &) override
+  int legsOn = 0; // the release count last handed over
+  void applyServos(const body::BodyState &b, const joint_calibration::Table &, int released) override
   {
     for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
-      if (b.legUpdated[leg])
+      if (b.legUpdated[leg] && leg < released)
         out[leg] = b.angles[leg];
     on = !inhibited && b.outputsEnabled;
+    legsOn = released;
     applies++;
     events.push_back("apply");
   }
@@ -351,9 +353,45 @@ void test_first_pulse_after_output_switches_on_is_not_limited()
   for (int i = 0; i < 50 && !board.on; i++)
     tick();
   TEST_ASSERT_TRUE(board.on);
+  ticks(2); // the last legs switch on two ticks later
+  TEST_ASSERT_EQUAL_INT(kinematics::LEG_COUNT, board.legsOn);
   for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
     TEST_ASSERT_FLOAT_WITHIN(0.001f, state.body.angles[leg].femur, board.out[leg].femur);
   TEST_ASSERT_EQUAL_UINT32(held, state.backstopTicks);
+}
+
+void test_output_switches_on_two_legs_per_tick()
+{
+  for (int round = 0; round < 2; round++)
+  {
+    if (round == 0)
+    {
+      // From boot: the supply settles, then the body starts.
+      usb().active = true;
+      usb().connected = true;
+      tick(); // the first frame after a gap only sets the counter baselines
+      request(usb(), RequestedMode::Stand);
+    }
+    else
+    {
+      // And again after output has switched off.
+      request(usb(), RequestedMode::Sleep);
+      for (int i = 0; i < 200 && board.on; i++)
+        tick();
+      TEST_ASSERT_FALSE(board.on);
+      request(usb(), RequestedMode::Stand);
+    }
+    for (int i = 0; i < 200 && !board.on; i++)
+      tick();
+    TEST_ASSERT_TRUE(board.on);
+    TEST_ASSERT_EQUAL_INT(2, board.legsOn);
+    tick();
+    TEST_ASSERT_EQUAL_INT(4, board.legsOn);
+    tick();
+    TEST_ASSERT_EQUAL_INT(6, board.legsOn);
+    tick();
+    TEST_ASSERT_EQUAL_INT(6, board.legsOn);
+  }
 }
 
 void test_walking_up_to_the_default_dial_never_engages_the_backstop()
@@ -884,6 +922,7 @@ int main()
   RUN_TEST(test_backstop_holds_a_fast_command_back);
   RUN_TEST(test_backstop_is_reported_on_its_own_console_line);
   RUN_TEST(test_first_pulse_after_output_switches_on_is_not_limited);
+  RUN_TEST(test_output_switches_on_two_legs_per_tick);
   RUN_TEST(test_walking_up_to_the_default_dial_never_engages_the_backstop);
   RUN_TEST(test_boots_into_stand_on_a_fresh_request);
   RUN_TEST(test_stale_command_never_starts_the_body);

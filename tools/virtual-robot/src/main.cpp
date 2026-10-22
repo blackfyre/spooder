@@ -65,9 +65,9 @@ public:
 
   void setInhibited(bool inhibited) override { servos.inhibited = inhibited; }
   void stopServos() override { servos.stop(); }
-  void applyServos(const body::BodyState &body, const joint_calibration::Table &applied) override
+  void applyServos(const body::BodyState &body, const joint_calibration::Table &applied, int legsOn) override
   {
-    servos.apply(body, applied);
+    servos.apply(body, applied, legsOn);
   }
   bool servosOn() override { return servos.on; }
   const uint16_t *servoPulses() override { return servos.desiredUs; }

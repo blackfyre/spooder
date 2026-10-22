@@ -39,6 +39,9 @@ constexpr uint32_t LOOP_PERIOD_MS = 20;
 // The status line, at most this often (unless asked for).
 constexpr uint32_t STATUS_PERIOD_MS = 1000;
 constexpr int TELEMETRY_EVERY_TICKS = 5; // 100 ms
+// Legs switched on per tick once servo output switches on, so the servos'
+// start surges do not coincide: legs 1-2, then 3-4, then 5-6.
+constexpr int SWITCH_ON_LEGS_PER_TICK = 2;
 // Pose frames (USB only) at the telemetry rate, two ticks after it, so the
 // two never share one tick's USB transmit buffer.
 constexpr int POSE_TICK = 2;
@@ -94,7 +97,8 @@ public:
   // Output off immediately: the body has stopped.
   virtual void stopServos() = 0;
   // One movement step: every joint the body has set, through the applied table.
-  virtual void applyServos(const body::BodyState &body, const joint_calibration::Table &applied) = 0;
+  // Only legs below @p legsOn may produce pulses (switch-on in groups).
+  virtual void applyServos(const body::BodyState &body, const joint_calibration::Table &applied, int legsOn) = 0;
   virtual bool servosOn() = 0;
   // The last pulse set per output, in µs (servo output order; 0 = never set).
   virtual const uint16_t *servoPulses() = 0;
@@ -153,6 +157,9 @@ struct RobotState
   // report.
   kinematics::JointAngles outputAngles[kinematics::LEG_COUNT] = {};
   bool outputKnown[kinematics::LEG_COUNT] = {};
+  // Legs released since servo output switched on (SWITCH_ON_LEGS_PER_TICK
+  // more per tick).
+  int legsOn = 0;
   uint32_t backstopTicks = 0;
   uint32_t backstopReported = 0;
   float backstopWorstDeg = 0;

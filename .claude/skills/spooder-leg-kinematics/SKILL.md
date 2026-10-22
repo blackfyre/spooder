@@ -94,6 +94,7 @@ theta3 = 180 - phi3                      + offset.z   // tibia
   - It writes changed joints with `pulse(i, us, false)` and calls `load()` once, so a step lands in one frame.
   - It never calls `enable()`, which would send a servo with no pulse set to mid-travel.
   - It writes nothing while protection inhibits output.
+  - It switches on in groups: `robot_tick` passes `legsOn`, two more legs per tick from the tick output switches on (`SWITCH_ON_LEGS_PER_TICK`), so the servos' start surges do not coincide. A leg's set outputs are pulsed when it is released; switching off is immediate for all.
 
 ## Servo map and calibration
 

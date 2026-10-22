@@ -34,6 +34,8 @@ static ServoCluster cluster(pio0, 0, servo2040::SERVO_1, OUTPUT_COUNT);
 static uint16_t desiredUs[OUTPUT_COUNT];
 // Legs whose angles the body has solved at least once since power-up.
 static bool legSet[kinematics::LEG_COUNT];
+// Legs switched on since output last switched on (switch-on is in groups).
+static bool legOn[kinematics::LEG_COUNT];
 static bool on = false;
 static bool inhibited = true;
 // Pins are forced low through the GPIO output override while output is off.
@@ -102,10 +104,12 @@ static void switchOff()
   cluster.disable_all(false);
   cluster.load();
   on = false;
+  for (bool &l : legOn)
+    l = false;
   switchedOffAt = get_absolute_time();
 }
 
-void apply(const body::BodyState &body, const joint_calibration::Table &calibration)
+void apply(const body::BodyState &body, const joint_calibration::Table &calibration, int legsOn)
 {
   bool changed[OUTPUT_COUNT] = {};
   for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
@@ -144,16 +148,19 @@ void apply(const body::BodyState &body, const joint_calibration::Table &calibrat
   }
 
   // pulse() also enables a disabled output, so this both switches on and
-  // updates. Outputs the body has never set stay disabled rather than going
-  // to ServoCluster's mid-position.
+  // updates. Outputs the body has never set, and legs not yet released,
+  // stay disabled rather than going to ServoCluster's mid-position.
   bool any = false;
   for (int i = 0; i < OUTPUT_COUNT; i++)
   {
-    if (desiredUs[i] == 0 || (on && !changed[i]))
+    int leg = i / kinematics::JOINTS_PER_LEG;
+    if (desiredUs[i] == 0 || leg >= legsOn || (legOn[leg] && !changed[i]))
       continue;
     cluster.pulse(i, desiredUs[i], false);
     any = true;
   }
+  for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
+    legOn[leg] = leg < legsOn;
   on = true;
   if (any)
     cluster.load();

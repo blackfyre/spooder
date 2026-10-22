@@ -25,9 +25,9 @@ class Board final : public robot_tick::Hardware
 public:
   void setInhibited(bool inhibited) override { servo_output::setInhibited(inhibited); }
   void stopServos() override { servo_output::stop(); }
-  void applyServos(const body::BodyState &body, const joint_calibration::Table &applied) override
+  void applyServos(const body::BodyState &body, const joint_calibration::Table &applied, int legsOn) override
   {
-    servo_output::apply(body, applied);
+    servo_output::apply(body, applied, legsOn);
   }
   bool servosOn() override { return servo_output::outputsOn(); }
   const uint16_t *servoPulses() override { return servo_output::pulses(); }

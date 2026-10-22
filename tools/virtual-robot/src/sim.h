@@ -23,17 +23,23 @@ constexpr float MAX_MOVING_A_PER_SERVO = 0.35f;
 constexpr float DEFAULT_SUPPLY_V = 6.0f;
 
 // servo_output's rules, without pins: inhibited or disabled is off; only
-// joints the body has set get a pulse; on is known after apply().
+// joints the body has set, on released legs, get a pulse; on is known after
+// apply().
 struct Servos
 {
   uint16_t desiredUs[OUTPUT_COUNT] = {};
   bool legSet[kinematics::LEG_COUNT] = {};
   bool on = false;
   bool inhibited = true;
+  int legsOn = 0; // legs released since output switched on
   float movingA = 0; // the moving draw of the last apply, while on (load 1)
 
-  void apply(const body::BodyState &body, const joint_calibration::Table &calibration);
-  void stop() { on = false; }
+  void apply(const body::BodyState &body, const joint_calibration::Table &calibration, int legsOn);
+  void stop()
+  {
+    on = false;
+    legsOn = 0;
+  }
   int powered() const;
 };
 

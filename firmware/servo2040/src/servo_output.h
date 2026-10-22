@@ -24,9 +24,11 @@ void setInhibited(bool inhibited);
  * @brief Applies one movement step: converts every joint the body has set
  * through @p calibration (so a calibration change moves a joint even when
  * its angle did not change) and switches output on or off as the body and
- * protection require. All changes take effect in the same frame.
+ * protection require. Only legs below @p legsOn produce pulses; a leg's
+ * outputs switch on when it first is. All changes take effect in the same
+ * frame.
  */
-void apply(const body::BodyState &body, const joint_calibration::Table &calibration);
+void apply(const body::BodyState &body, const joint_calibration::Table &calibration, int legsOn);
 
 /**
  * @brief Switches output off immediately (the body has stopped). Output comes
