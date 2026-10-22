@@ -341,6 +341,99 @@ void test_long_strides_shrink_to_reach()
   }
 }
 
+// --- static stability ---------------------------------------------------------
+
+// Schematic coxa pivots (the desktop legs pane's and test_gesture's), until the
+// body geometry is measured (add-gestures part two).
+static const Vector2 PIVOTS[LEG_COUNT] = {
+    Vector2(-70, 120), Vector2(-90, 0), Vector2(-70, -120), Vector2(70, -120), Vector2(90, 0), Vector2(70, 120)};
+
+// A leg-frame foot in the body frame (x right, y forward).
+static Vector2 toBody(int leg, Vector3 foot)
+{
+  float a = mountAngleDeg(leg) * (float)M_PI / 180.0f;
+  Vector2 x(cosf(a), sinf(a)), y(sinf(a), -cosf(a));
+  return Vector2(PIVOTS[leg].x + foot.x * x.x + foot.y * y.x, PIVOTS[leg].y + foot.x * x.y + foot.y * y.y);
+}
+
+// How far the body centre (the body frame's origin) lies inside the polygon
+// of the feet on the ground: the smallest distance to an edge, negative
+// outside. A foot more than 1 mm above @p ground is off it; with fewer than
+// three on it there is no polygon.
+static float supportMargin(const Vector3 *feet, float ground)
+{
+  // Anticlockwise around the body: front right, front left, middle left,
+  // rear left, rear right, middle right.
+  const int ORDER[] = {5, 0, 1, 2, 3, 4};
+  Vector2 poly[LEG_COUNT];
+  int n = 0;
+  for (int leg : ORDER)
+    if (feet[leg].z <= ground + 1)
+      poly[n++] = toBody(leg, feet[leg]);
+  if (n < 3)
+    return -1e9f;
+  float margin = 1e9f;
+  for (int i = 0; i < n; i++)
+  {
+    Vector2 a = poly[i], b = poly[(i + 1) % n];
+    float ex = b.x - a.x, ey = b.y - a.y;
+    margin = fminf(margin, (ex * (0 - a.y) - ey * (0 - a.x)) / sqrtf(ex * ex + ey * ey));
+  }
+  return margin;
+}
+
+// The smallest support margin through a walking cycle, every leg at its
+// gait's phase offset, after one cycle that puts the feet on their paths.
+static float worstSupportMargin(const GaitParams &p, const GaitInput &in)
+{
+  const int STEPS = 500;
+  LegCycle cycles[LEG_COUNT];
+  Vector3 feet[LEG_COUNT];
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+  {
+    cycles[leg] = freshCycle();
+    feet[leg] = Vector3(STANCE_DISTANCE, 0, in.distanceFromGround);
+  }
+  float worst = 1e9f;
+  for (int n = 0; n < 2 * STEPS; n++)
+  {
+    for (int leg = 0; leg < LEG_COUNT; leg++)
+    {
+      float t = fmodf(n * CYCLE_POINTS / STEPS + p.phaseOffset[leg], CYCLE_POINTS) / CYCLE_POINTS;
+      feet[leg] = footTarget(leg, t, p, in, cycles[leg], feet[leg]);
+    }
+    if (n >= STEPS)
+      worst = fminf(worst, supportMargin(feet, in.distanceFromGround));
+  }
+  return worst;
+}
+
+void test_walking_keeps_the_body_over_its_support()
+{
+  // Tri, Wave and Quad always have three or more feet down around the body
+  // centre. Ripple, Bi and Hop are not statically stable: Ripple's phases
+  // leave front left, middle right and rear right down at times, a triangle
+  // with the body centre on its diagonal edge; Bi has only two feet down at
+  // times and Hop none. The pivots are schematic until the body geometry is
+  // measured (add-gestures part two), so this guards the gait table's
+  // intent, not the physical margin.
+  const Gait STABLE[] = {Gait::Tri, Gait::Wave, Gait::Quad};
+  const float MARGIN_MM = 20;
+  const Vector2 directions[] = {Vector2(0, 100), Vector2(0, -100), Vector2(100, 0), Vector2(-100, 0), Vector2(70.7f, 70.7f), Vector2()};
+  const float ROTATES[] = {0, -100, -40, 40, 100};
+  const float grounds[] = {-60, -60 - 1.7f * 100}; // body height 0 and 100
+  for (Gait g : STABLE)
+    for (Vector2 d : directions)
+      for (float rotate : ROTATES)
+        for (float ground : grounds)
+        {
+          if (d.magnitude() < 1 && rotate == 0)
+            continue;
+          float margin = worstSupportMargin(params(g), steering(d, rotate, ground));
+          TEST_ASSERT_TRUE_MESSAGE(margin >= MARGIN_MM, "body outside its support");
+        }
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -359,5 +452,6 @@ int main()
   RUN_TEST(test_combined_swing_lifts_to_the_higher_path);
   RUN_TEST(test_single_motions_are_unchanged_by_steering);
   RUN_TEST(test_combined_stroke_stays_within_the_stride_limit_and_reachable);
+  RUN_TEST(test_walking_keeps_the_body_over_its_support);
   return UNITY_END();
 }
