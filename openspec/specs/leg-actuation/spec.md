@@ -66,7 +66,7 @@ All eighteen servo outputs SHALL generate pulses at a 50 Hz frame rate (20 ms pe
 - **THEN** all of the new pulses first appear in the same frame
 
 ### Requirement: Servo output enable and disable
-Servo output SHALL be switchable off for all eighteen outputs together, leaving the joints unpowered. While output is off, a new accepted foot target SHALL switch output back on before its pulses are produced, unless power protection is inhibiting output. While output is inhibited, output SHALL stay off whatever targets are accepted.
+Servo output SHALL be switchable off for all eighteen outputs together, leaving the joints unpowered. While output is off, a new accepted foot target SHALL switch output back on before its pulses are produced, unless power protection is inhibiting output. While output is inhibited, output SHALL stay off whatever targets are accepted. When output switches on, the legs SHALL receive their first pulses in groups of two, one group per control tick, in leg order (legs 1–2, then 3–4, then 5–6); a leg not yet reached SHALL produce no pulse. Once a leg has been switched on, its pulses SHALL follow the body's targets until output switches off.
 
 #### Scenario: Disable outputs
 - **WHEN** servo output is switched off
@@ -74,11 +74,15 @@ Servo output SHALL be switchable off for all eighteen outputs together, leaving 
 
 #### Scenario: Implicit wake
 - **WHEN** servo output is off, power protection is not inhibiting output, and a leg accepts a new foot target
-- **THEN** output is switched on and the leg's pulses are produced
+- **THEN** output is switched on and the leg's pulses are produced, in its group's tick
 
 #### Scenario: Inhibited output stays off
 - **WHEN** power protection is inhibiting output and a leg accepts a new foot target
 - **THEN** no servo output produces a pulse
+
+#### Scenario: Staggered switch-on
+- **WHEN** servo output switches on with every leg's angles set
+- **THEN** legs 1 and 2 produce pulses from that tick, legs 3 and 4 from the next tick and legs 5 and 6 from the tick after, and none before its tick
 
 ### Requirement: Servo profile
 The firmware SHALL be built for one servo profile, chosen by name at build time. The default SHALL be the MG996R. A profile SHALL record the servo's rated no-load speed at its nominal supply voltage and the share of that speed movement may use under load. The joint speed budget is the product of the two. Building for a profile name that is not in the table SHALL fail. The robot SHALL print the profile name and its budget on the USB console on its first control tick. The virtual robot SHALL be built for a profile in the same way.
