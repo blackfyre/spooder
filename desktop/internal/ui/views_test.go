@@ -67,6 +67,54 @@ func TestViewsWindowFollowsThePose(t *testing.T) {
 	}
 }
 
+// Spec "Battery fitted": the window opens without the battery; its button
+// fits it, adding its mass, and removes it again.
+func TestViewsBatteryToggle(t *testing.T) {
+	v, s := testViews(t, false)
+	s.LinkState(link.State{Status: link.Connected, Port: servo})
+	s.Frame(protocol.Frame{Type: protocol.TypePose, Pose: testPose(walkingAngles, true)}, link.Stats{})
+	viewsFrame(v, image.Pt(1100, 900))
+	legs := legview.Body3(legsFor(v.d.snap, selection{}).Pose)
+	mass := func() float64 {
+		g := gravityFor(legs, v.battery)
+		if !g.ok || !g.hasMargin {
+			t.Fatalf("estimate %+v", g)
+		}
+		return g.g.MassG
+	}
+	if v.battery {
+		t.Fatal("the window opened with the battery fitted")
+	}
+	without := mass()
+	for i, want := range []float64{without + legview.BatteryMassG, without} {
+		v.batteryClick.Click()
+		viewsFrame(v, image.Pt(1100, 900))
+		viewsFrame(v, image.Pt(1100, 900))
+		if got := mass(); math.Abs(got-want) > 1e-9 {
+			t.Fatalf("click %d: mass %.1f g, want %.1f", i+1, got, want)
+		}
+	}
+}
+
+// The readout: the centre, the mass and the margin, or why there is none.
+func TestGravityText(t *testing.T) {
+	g := legview.Gravity{Centre: legview.Point3{X: 1.4, Y: -2.6, Z: 5}, MassG: 2160}
+	cases := []struct {
+		s    gravityState
+		want string
+	}{
+		{gravityState{}, "CoG · no estimate"},
+		{gravityState{ok: true, g: g}, "CoG · x 1  y -3  z 5 mm · 2.16 kg · margin unavailable"},
+		{gravityState{ok: true, g: g, margin: 34.2, hasMargin: true}, "CoG · x 1  y -3  z 5 mm · 2.16 kg · margin 34 mm"},
+		{gravityState{ok: true, g: g, margin: -12, hasMargin: true}, "CoG · x 1  y -3  z 5 mm · 2.16 kg · 12 mm outside its support"},
+	}
+	for _, c := range cases {
+		if got := gravityText(c.s); got != c.want {
+			t.Errorf("got %q, want %q", got, c.want)
+		}
+	}
+}
+
 // Spec "Shared scale": the top, front and left views share one scale, and
 // each still holds its whole extent in its cell.
 func TestViewsShareOneScale(t *testing.T) {
@@ -177,6 +225,9 @@ func TestViewsScreenshots(t *testing.T) {
 		s.Frame(protocol.Frame{Type: protocol.TypePose, Pose: testPose(walkingAngles, true)}, link.Stats{})
 		shoot("walking", image.Pt(1100, 900))
 		shoot("walking-min", image.Pt(640, 520))
+		v.battery = true
+		shoot("walking-battery", image.Pt(1100, 900))
+		v.battery = false
 	}
 }
 

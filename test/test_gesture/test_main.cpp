@@ -1,5 +1,6 @@
 #include <unity.h>
 #include <math.h>
+#include "movement/centre_of_gravity.h"
 #include "movement/gait.h"
 #include "movement/gesture.h"
 #include "movement/joint_calibration.h"
@@ -148,12 +149,33 @@ static bool supported(const Vector3 *feet, float marginMm)
   return n == kinematics::LEG_COUNT || insideMargin(poly, n, Vector2()) >= marginMm;
 }
 
+// The smallest support margin of the estimated centre of gravity, with and
+// without the battery.
+static float gravityMargin(const Vector3 *feet)
+{
+  kinematics::JointAngles legs[kinematics::LEG_COUNT];
+  Vector3 body[kinematics::LEG_COUNT];
+  for (int i = 0; i < kinematics::LEG_COUNT; i++)
+  {
+    TEST_ASSERT_TRUE(kinematics::solveLeg(feet[i], Vector3(0, 0, 0), legs[i]));
+    body[i] = centre_of_gravity::toBody(i, feet[i]);
+  }
+  float worst = 1e9f;
+  for (int battery = 0; battery < 2; battery++)
+  {
+    float margin;
+    TEST_ASSERT_TRUE(centre_of_gravity::supportMargin(body, centre_of_gravity::estimate(legs, battery).centre, margin));
+    worst = fminf(worst, margin);
+  }
+  return worst;
+}
+
 void test_lifted_legs_keep_the_body_over_its_support()
 {
   // Sampled through the whole gesture, eased moves and interrupted returns
   // included. The pivots are schematic until the body geometry is measured
-  // (add-gestures part two), so this guards the scripts' intent, not the
-  // physical margin.
+  // (add-gestures part two) and the masses estimated until the robot is
+  // weighed, so this guards the scripts' intent, not the physical margin.
   const float MARGIN_MM = 20;
   const uint32_t STOPS[] = {0, 1200, 1900, 2600};
   for (Gesture g : AVAILABLE)
@@ -172,6 +194,7 @@ void test_lifted_legs_keep_the_body_over_its_support()
             p.stopRequested = true;
           advance(p, 5, standing, feet);
           TEST_ASSERT_TRUE_MESSAGE(supported(feet, MARGIN_MM), "body outside its support");
+          TEST_ASSERT_TRUE_MESSAGE(gravityMargin(feet) >= MARGIN_MM, "centre of gravity outside its support");
         }
       }
 }

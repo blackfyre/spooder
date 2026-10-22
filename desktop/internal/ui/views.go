@@ -2,7 +2,9 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"image"
+	"image/color"
 	"math"
 	"sort"
 	"strconv"
@@ -16,6 +18,7 @@ import (
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/unit"
+	"gioui.org/widget"
 
 	"github.com/blackfyre/spooder/desktop/internal/appearance"
 	"github.com/blackfyre/spooder/desktop/internal/legview"
@@ -30,6 +33,11 @@ type viewsWindow struct {
 	env   Env
 	d     *window // the drawing helpers: theme and palette
 	looks chan appearance.Settings
+
+	// The centre of gravity's battery: fitted or not, off when the window
+	// opens.
+	battery      bool
+	batteryClick widget.Clickable
 }
 
 func newViewsWindow(env Env) (*viewsWindow, error) {
@@ -65,46 +73,143 @@ func (v *viewsWindow) frame(gtx layout.Context) {
 	paint.Fill(gtx.Ops, d.pal.Bg)
 	gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(viewsRefresh)})
 	st := legsFor(d.snap, selection{joint: v.selectedJoint()})
+	if v.batteryClick.Clicked(gtx) {
+		v.battery = !v.battery
+	}
+	var legs [legview.Legs]legview.Leg3
+	var grav gravityState
+	if st.Current {
+		legs = legview.Body3(st.Pose)
+		grav = gravityFor(legs, v.battery)
+	}
 	layout.UniformInset(12).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		gtx.Constraints.Min = gtx.Constraints.Max
-		if !st.Current {
-			return panel(gtx, d.pal.Surface, d.pal.Border, radiusPanel, 16, func(gtx layout.Context) layout.Dimensions {
-				gtx.Constraints.Min = gtx.Constraints.Max
-				return stacked(gtx, 8,
-					tracked(d.th, sizeTitle, d.pal.Muted, "no pose"),
-					wrapped(textLabel(d.th, sizeText, d.pal.Muted, st.Reason)),
-				)
-			})
-		}
-		legs := legview.Body3(st.Pose)
-		// One scale for the three orthographic views: the smallest of
-		// their fits into a quarter of the window.
-		cell := image.Pt((gtx.Constraints.Max.X-gtx.Dp(8))/2, (gtx.Constraints.Max.Y-gtx.Dp(8))/2)
-		scale := orthoScale(cell)
-		draw := func(view legview.View) layout.Widget {
-			return func(gtx layout.Context) layout.Dimensions {
-				gtx.Constraints = layout.Exact(cell)
-				return d.canvas(gtx, func(gtx layout.Context, size image.Point) {
-					vp := fit(legview.ViewBounds(view), size)
-					if view != legview.ViewIsometric {
-						vp = fitAt(legview.ViewBounds(view), size, scale)
-					}
-					d.robotView(gtx, view, vp, size, legs, st)
-				})
-			}
-		}
-		row := func(a, b legview.View) layout.Widget {
-			return func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{}.Layout(gtx,
-					layout.Rigid(draw(a)), layout.Rigid(layout.Spacer{Width: 8}.Layout), layout.Rigid(draw(b)))
-			}
-		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(row(legview.ViewTop, legview.ViewIsometric)),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return v.gravityBar(gtx, grav) }),
 			layout.Rigid(layout.Spacer{Height: 8}.Layout),
-			layout.Rigid(row(legview.ViewFront, legview.ViewLeft)),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { return v.views(gtx, st, legs, grav) }),
 		)
 	})
+}
+
+// views draws the four views, or why there is no pose.
+func (v *viewsWindow) views(gtx layout.Context, st legsState, legs [legview.Legs]legview.Leg3, grav gravityState) layout.Dimensions {
+	d := v.d
+	gtx.Constraints.Min = gtx.Constraints.Max
+	if !st.Current {
+		return panel(gtx, d.pal.Surface, d.pal.Border, radiusPanel, 16, func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints.Min = gtx.Constraints.Max
+			return stacked(gtx, 8,
+				tracked(d.th, sizeTitle, d.pal.Muted, "no pose"),
+				wrapped(textLabel(d.th, sizeText, d.pal.Muted, st.Reason)),
+			)
+		})
+	}
+	// One scale for the three orthographic views: the smallest of
+	// their fits into a quarter of the window.
+	cell := image.Pt((gtx.Constraints.Max.X-gtx.Dp(8))/2, (gtx.Constraints.Max.Y-gtx.Dp(8))/2)
+	scale := orthoScale(cell)
+	draw := func(view legview.View) layout.Widget {
+		return func(gtx layout.Context) layout.Dimensions {
+			gtx.Constraints = layout.Exact(cell)
+			return d.canvas(gtx, func(gtx layout.Context, size image.Point) {
+				vp := fit(legview.ViewBounds(view), size)
+				if view != legview.ViewIsometric {
+					vp = fitAt(legview.ViewBounds(view), size, scale)
+				}
+				d.robotView(gtx, view, vp, size, legs, st, grav)
+			})
+		}
+	}
+	row := func(a, b legview.View) layout.Widget {
+		return func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{}.Layout(gtx,
+				layout.Rigid(draw(a)), layout.Rigid(layout.Spacer{Width: 8}.Layout), layout.Rigid(draw(b)))
+		}
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(row(legview.ViewTop, legview.ViewIsometric)),
+		layout.Rigid(layout.Spacer{Height: 8}.Layout),
+		layout.Rigid(row(legview.ViewFront, legview.ViewLeft)),
+	)
+}
+
+// gravityState is the estimated centre of gravity of a pose and its support.
+type gravityState struct {
+	ok        bool // an estimate: every leg set
+	g         legview.Gravity
+	hull      []legview.Vec2 // nil: fewer than three feet down
+	margin    float64
+	hasMargin bool
+}
+
+func gravityFor(legs [legview.Legs]legview.Leg3, battery bool) gravityState {
+	g, ok := legview.CentreOfGravity(legs, battery)
+	if !ok {
+		return gravityState{}
+	}
+	s := gravityState{ok: true, g: g, hull: legview.SupportHull(legs)}
+	if s.hull != nil {
+		s.margin, s.hasMargin = legview.SupportMargin(s.hull, legview.Vec2{X: g.Centre.X, Y: g.Centre.Y}), true
+	}
+	return s
+}
+
+// Support margins: from marginFineMM the centre is well inside its support
+// (the host tests' margin), from 0 close to an edge, below 0 outside it.
+const marginFineMM = 20.0
+
+// gravityColour marks the margin: fine, warning, or outside.
+func (w *window) gravityColour(s gravityState) color.NRGBA {
+	switch {
+	case !s.hasMargin:
+		return w.pal.Muted
+	case s.margin >= marginFineMM:
+		return w.pal.Green
+	case s.margin >= 0:
+		return w.pal.Yellow
+	}
+	return w.pal.Accent
+}
+
+// gravityText is the readout, short enough for the narrowest window: the
+// estimated centre of gravity (CoG) in the body frame, the mass and
+// the margin.
+func gravityText(s gravityState) string {
+	if !s.ok {
+		return "CoG · no estimate"
+	}
+	c := s.g.Centre
+	text := fmt.Sprintf("CoG · x %.0f  y %.0f  z %.0f mm · %.2f kg · ", c.X, c.Y, c.Z, s.g.MassG/1000)
+	if !s.hasMargin {
+		return text + "margin unavailable"
+	}
+	if s.margin < 0 {
+		return text + fmt.Sprintf("%.0f mm outside its support", -s.margin)
+	}
+	return text + fmt.Sprintf("margin %.0f mm", s.margin)
+}
+
+// gravityBar: the battery toggle and the estimate's readout.
+func (v *viewsWindow) gravityBar(gtx layout.Context, s gravityState) layout.Dimensions {
+	d := v.d
+	kind, label := kindQuiet, "Battery · none"
+	if v.battery {
+		kind, label = kindActive, "Battery · 2S 5000 mAh"
+	}
+	dot := func(gtx layout.Context) layout.Dimensions {
+		size := gtx.Dp(10)
+		if s.ok {
+			disc(gtx, f32.Pt(float32(size)/2, float32(size)/2), float32(size)/2, d.gravityColour(s))
+		}
+		return layout.Dimensions{Size: image.Pt(size, size)}
+	}
+	return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+		layout.Rigid(d.button(&v.batteryClick, kind, label, true).width(170).Layout),
+		layout.Rigid(layout.Spacer{Width: 14}.Layout),
+		layout.Rigid(dot),
+		layout.Rigid(layout.Spacer{Width: 8}.Layout),
+		layout.Rigid(oneLine(valueLabel(d.th, 12, d.pal.Fg, gravityText(s))).Layout),
+	)
 }
 
 // orthoScale is the one scale of the top, front and left views in a cell:
@@ -132,13 +237,18 @@ func projected(view legview.View, vp viewport, p legview.Point3) f32.Point {
 
 // robotView draws one view: the ground, the body plate, the legs far to
 // near, the front marker in the top view, and the caption.
-func (w *window) robotView(gtx layout.Context, view legview.View, vp viewport, size image.Point, legs [legview.Legs]legview.Leg3, st legsState) {
+func (w *window) robotView(gtx layout.Context, view legview.View, vp viewport, size image.Point, legs [legview.Legs]legview.Leg3, st legsState, grav gravityState) {
 	defer w.caption(gtx, legview.ViewNames[view]+" · schematic body")
+	// Drawn after the legs, under the caption: deferred calls run last first.
+	defer w.gravityMark(gtx, view, vp, legs, grav)
 	// The ground, where the lowest foot stands below the body (not with the
 	// feet raised, as on a stand in the calibration pose).
 	ground, haveGround := legview.Ground(legs)
 	if haveGround && ground < -legview.PlateThickness/2 && view != legview.ViewTop {
 		w.groundLine(gtx, view, vp, size, ground)
+	}
+	if view == legview.ViewTop {
+		w.supportPolygon(gtx, vp, grav)
 	}
 
 	anchors := make([]f32.Point, legview.Legs)
@@ -163,6 +273,50 @@ func (w *window) robotView(gtx layout.Context, view legview.View, vp viewport, s
 			w.legRings(gtx, view, vp, legs[step.leg], step.leg, st)
 		}
 	}
+}
+
+// supportPolygon draws the feet's support polygon in the top view, under
+// the body.
+func (w *window) supportPolygon(gtx layout.Context, vp viewport, s gravityState) {
+	if s.hull == nil {
+		return
+	}
+	pts := make([]f32.Point, 0, len(s.hull)+1)
+	for _, q := range s.hull {
+		pts = append(pts, vp.pt(q))
+	}
+	pts = append(pts, pts[0])
+	var p clip.Path
+	p.Begin(gtx.Ops)
+	p.MoveTo(pts[0])
+	for _, q := range pts[1:] {
+		p.LineTo(q)
+	}
+	p.Close()
+	c := w.gravityColour(s)
+	paint.FillShape(gtx.Ops, faded(c, 0x1C), clip.Outline{Path: p.End()}.Op())
+	strokePath(gtx, pts, float32(gtx.Dp(1)), faded(c, 0xC0))
+}
+
+// gravityMark marks the centre of gravity, coloured by its margin: a ringed
+// dot, and in the side views a line down to the ground where it is drawn.
+func (w *window) gravityMark(gtx layout.Context, view legview.View, vp viewport, legs [legview.Legs]legview.Leg3, s gravityState) {
+	if !s.ok {
+		return
+	}
+	c := w.gravityColour(s)
+	at := projected(view, vp, s.g.Centre)
+	if ground, ok := legview.Ground(legs); ok && view != legview.ViewTop && ground < -legview.PlateThickness/2 {
+		foot := legview.Point3{X: s.g.Centre.X, Y: s.g.Centre.Y, Z: ground}
+		down := projected(view, vp, foot)
+		strokePath(gtx, []f32.Point{at, down}, float32(gtx.Dp(1)), c)
+		disc(gtx, down, float32(gtx.Dp(3)), c)
+	}
+	// Ringed in the ink as well, so the light status colours read on paper.
+	disc(gtx, at, float32(gtx.Dp(6)), w.pal.Bg)
+	disc(gtx, at, float32(gtx.Dp(4)), c)
+	ring(gtx, at, float32(gtx.Dp(8)), float32(gtx.Dp(2)), c)
+	ring(gtx, at, float32(gtx.Dp(10)), float32(gtx.Dp(1)), w.pal.Fg)
 }
 
 // What a view draws, in order.
