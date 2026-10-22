@@ -4,6 +4,7 @@
 .vscode/launch.json
 .vscode/ipch
 .codegraph/
+reference_books/
 build/
 .pio-core
 firmware/bridge/managed_components/
