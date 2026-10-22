@@ -9,7 +9,7 @@
 
 using namespace robot_tick;
 
-static const protection::Limits LIMITS = {9.0f, 6.0f, 2000, 5.2f, 200, 4.8f, 6.8f};
+static const protection::Limits LIMITS = {9.0f, 60, 13.0f, 6.0f, 2000, 5.2f, 200, 4.8f, 6.8f};
 
 // --- a recording board -------------------------------------------------------------
 

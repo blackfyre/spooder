@@ -102,7 +102,25 @@ Result step(State &s, const Reading &r, uint32_t nowMs, bool clearRequested, boo
 
   // Trips. Voltage-low faults only apply once the supply has been accepted:
   // before that, a low or absent supply just keeps output off.
-  uint16_t latch = present & (OVERCURRENT | OVERVOLTAGE | SUSTAINED_CURRENT | EMERGENCY_STOP);
+  uint16_t latch = present & (OVERVOLTAGE | SUSTAINED_CURRENT | EMERGENCY_STOP);
+
+  // Overcurrent: at once above the ceiling; above the trip current only once
+  // every reading has been above it for the persistence time, so a start-up
+  // surge caught by one reading passes.
+  if (present & OVERCURRENT)
+  {
+    if (!s.aboveTrip)
+    {
+      s.aboveTrip = true;
+      s.aboveTripSinceMs = nowMs;
+    }
+    if (r.currentA > l.ceilingCurrentA || nowMs - s.aboveTripSinceMs >= l.tripPersistMs)
+      latch |= OVERCURRENT;
+  }
+  else
+  {
+    s.aboveTrip = false;
+  }
   if (s.gateOpen)
   {
     if (present & BROWNOUT)

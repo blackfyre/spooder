@@ -49,6 +49,7 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 - The robot moved from the Arduino Nano RP2040 Connect (PCA9685 servo driver, Bluepad32 on its NINA module) to the Servo 2040, and the gamepad moved from the robot to the bridge.
 - Coxa offsets are shown from the servo centre (stored value minus 90°) in the portal and the calibrator. The stored values, the link and the export are unchanged.
 - Compiled defaults must let every servo reach the calibration pose: the IK angle there, plus the offset, within 0–180°.
+- The overcurrent trip has two levels. Above the trip current (9 A) it latches only once the current has stayed there for `SPOODER_TRIP_PERSIST_MS` (60 ms), so the surge of all servos starting together passes; above the new ceiling, `SPOODER_CEILING_CURRENT_A` (13 A), one reading still cuts output at once. Limits files need both new constants.
 
 - The desktop calibrator's top bar puts the ports, Refresh, Connect, the control toggle and the e-stop on one aligned row of equal-height buttons, with the link state beneath.
 - While in control, the desktop calibrator shows its keyboard controls under the mode buttons.

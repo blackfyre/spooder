@@ -12,7 +12,9 @@
 // sustained limit with measurements from bring-up.
 #pragma once
 
-#define SPOODER_TRIP_CURRENT_A 9.0f        // instant: output off (terminals rated 10 A)
+#define SPOODER_TRIP_CURRENT_A 9.0f        // above this for the persistence time: output off (terminals rated 10 A)
+#define SPOODER_TRIP_PERSIST_MS 60u        // above the trip current this long: output off (the stand surge read 11.8 A once)
+#define SPOODER_CEILING_CURRENT_A 13.0f    // instant: output off
 #define SPOODER_SUSTAINED_CURRENT_A 6.0f   // 2 s average: Sleep; tune from bring-up measurements
 #define SPOODER_SUSTAINED_WINDOW_MS 2000u
 #define SPOODER_MIN_V 5.2f                 // below this for the debounce time: Sleep

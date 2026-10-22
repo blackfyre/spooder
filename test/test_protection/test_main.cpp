@@ -6,6 +6,8 @@ using namespace protection;
 // Representative limits (design D6 example for a regulated 6.0 V supply).
 static const Limits LIMITS = {
     9.0f,  // tripCurrentA
+    60,    // tripPersistMs
+    13.0f, // ceilingCurrentA
     6.0f,  // sustainedCurrentA
     2000,  // sustainedWindowMs
     5.2f,  // minV
@@ -80,19 +82,85 @@ void test_gate_needs_continuous_validity()
 
 // --- 2.2 trips --------------------------------------------------------------
 
-void test_overcurrent_inhibits_on_the_same_step()
+void test_current_above_the_ceiling_inhibits_on_the_same_step()
 {
   powerUp();
   now += 20;
-  last = step(s, Reading{9.5f, 6.0f}, now, false, false);
+  last = step(s, Reading{13.5f, 6.0f}, now, false, false);
   TEST_ASSERT_FALSE(last.allowOutput);
   TEST_ASSERT_TRUE(last.forceSleep);
   TEST_ASSERT_EQUAL_UINT16(OVERCURRENT, last.faults);
   TEST_ASSERT_EQUAL_UINT16(OVERCURRENT, last.newlyLatched);
   // Reported once: not newly latched again on the next step.
   now += 20;
-  last = step(s, Reading{9.5f, 6.0f}, now, false, false);
+  last = step(s, Reading{13.5f, 6.0f}, now, false, false);
   TEST_ASSERT_EQUAL_UINT16(NONE, last.newlyLatched);
+}
+
+void test_one_reading_above_the_trip_current_is_tolerated()
+{
+  // The bench stand surge: all 18 servos starting together read 11.8 A once.
+  powerUp();
+  feed(11.8f, 6.0f, 20);
+  TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
+  TEST_ASSERT_TRUE(last.allowOutput);
+  feed(3.0f, 6.0f, 200);
+  TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
+  TEST_ASSERT_TRUE(last.allowOutput);
+}
+
+void test_a_dip_restarts_the_persistence_time()
+{
+  powerUp();
+  for (int i = 0; i < 5; i++)
+  {
+    feed(12.0f, 6.0f, 60); // three readings: 40 ms of the run, short of 60 ms
+    feed(8.9f, 6.0f, 20);  // one reading at or below the trip current ends it
+  }
+  TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
+  TEST_ASSERT_TRUE(last.allowOutput);
+}
+
+void test_current_above_the_trip_current_for_the_persistence_time_inhibits()
+{
+  powerUp();
+  // Readings at 0, 20 and 40 ms of the run: not yet.
+  feed(9.5f, 6.0f, 60);
+  TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
+  TEST_ASSERT_TRUE(last.allowOutput);
+  // The reading 60 ms after the first latches, on that step.
+  feed(9.5f, 6.0f, 20);
+  TEST_ASSERT_EQUAL_UINT16(OVERCURRENT, last.faults);
+  TEST_ASSERT_EQUAL_UINT16(OVERCURRENT, last.newlyLatched);
+  TEST_ASSERT_FALSE(last.allowOutput);
+}
+
+void test_persistence_is_measured_in_time_not_readings()
+{
+  // At 50 ms ticks the second reading of the run is already 50 ms in, the
+  // third 100 ms: the third latches.
+  powerUp();
+  now += 50;
+  last = step(s, Reading{9.5f, 6.0f}, now, false, false);
+  now += 50;
+  last = step(s, Reading{9.5f, 6.0f}, now, false, false);
+  TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
+  now += 50;
+  last = step(s, Reading{9.5f, 6.0f}, now, false, false);
+  TEST_ASSERT_EQUAL_UINT16(OVERCURRENT, last.faults);
+}
+
+void test_clear_refused_while_above_the_trip_current()
+{
+  powerUp();
+  feed(9.5f, 6.0f, 80);
+  TEST_ASSERT_EQUAL_UINT16(OVERCURRENT, last.faults);
+  feed(0.2f, 6.0f, 20);       // the run ends, not cleared
+  feed(9.5f, 6.0f, 20, true); // a fresh run, far short of the persistence time
+  TEST_ASSERT_EQUAL_UINT16(OVERCURRENT, last.faults);
+  TEST_ASSERT_EQUAL_UINT16(NONE, last.newlyLatched); // kept, not cleared and re-latched
+  feed(0.2f, 6.0f, 20, true);
+  TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
 }
 
 void test_sustained_current_puts_body_to_sleep()
@@ -206,7 +274,7 @@ void test_inhibiting_fault_needs_fresh_settle_after_clear()
 {
   powerUp();
   now += 20;
-  last = step(s, Reading{10.0f, 6.0f}, now, false, false);
+  last = step(s, Reading{14.0f, 6.0f}, now, false, false);
   TEST_ASSERT_FALSE(last.allowOutput);
   feed(0.2f, 6.0f, 20, true); // cleared: current back to normal
   TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
@@ -220,7 +288,7 @@ void test_clear_is_selective()
   powerUp();
   feed(0.5f, 5.0f, 300); // undervoltage latches
   now += 20;
-  last = step(s, Reading{9.5f, 5.0f}, now, false, false); // and an overcurrent spike
+  last = step(s, Reading{13.5f, 5.0f}, now, false, false); // and a spike above the ceiling
   TEST_ASSERT_EQUAL_UINT16(UNDERVOLTAGE | OVERCURRENT, last.faults);
   feed(0.5f, 5.0f, 20, true); // current recovered, voltage did not
   TEST_ASSERT_EQUAL_UINT16(UNDERVOLTAGE, last.faults);
@@ -284,7 +352,12 @@ int main()
   RUN_TEST(test_usb_only_keeps_output_off_without_faults);
   RUN_TEST(test_gate_opens_after_500ms_of_valid_supply);
   RUN_TEST(test_gate_needs_continuous_validity);
-  RUN_TEST(test_overcurrent_inhibits_on_the_same_step);
+  RUN_TEST(test_current_above_the_ceiling_inhibits_on_the_same_step);
+  RUN_TEST(test_one_reading_above_the_trip_current_is_tolerated);
+  RUN_TEST(test_a_dip_restarts_the_persistence_time);
+  RUN_TEST(test_current_above_the_trip_current_for_the_persistence_time_inhibits);
+  RUN_TEST(test_persistence_is_measured_in_time_not_readings);
+  RUN_TEST(test_clear_refused_while_above_the_trip_current);
   RUN_TEST(test_sustained_current_puts_body_to_sleep);
   RUN_TEST(test_short_peak_does_not_trip);
   RUN_TEST(test_sustained_threshold_uses_exactly_the_window);

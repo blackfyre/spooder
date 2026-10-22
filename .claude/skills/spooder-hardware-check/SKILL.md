@@ -137,7 +137,8 @@ Stop at the first stage that misbehaves.
    - Unpowered outputs show no pulse.
 5. **Overcurrent.**
    - Stall the servo by hand, briefly, or set the bench limit to just above the trip current.
-   - Expect output off within 20 ms, and the overcurrent LEDs.
+   - Above `SPOODER_TRIP_CURRENT_A`, expect output off once the current has stayed there for `SPOODER_TRIP_PERSIST_MS` (60 ms: about 80 ms from the rise at worst), and the overcurrent LEDs. A shorter surge, such as all the servos starting together in Stand, does not trip.
+   - Above `SPOODER_CEILING_CURRENT_A` (13 A), a single reading cuts output within 20 ms.
    - Clear with `!` once the current is normal. Nothing moves until you also give a new command (for example `s`), and the supply has been valid for 500 ms. The body then restarts from Initialise.
 6. **One leg, then all 18,** with the robot on a stand, feet off the ground.
    - Boot runs Initialise, then Stand.

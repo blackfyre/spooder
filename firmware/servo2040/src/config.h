@@ -10,7 +10,8 @@
 #include SPOODER_POWER_LIMITS_HEADER
 #endif
 
-#if !defined(SPOODER_TRIP_CURRENT_A) || !defined(SPOODER_SUSTAINED_CURRENT_A) ||       \
+#if !defined(SPOODER_TRIP_CURRENT_A) || !defined(SPOODER_TRIP_PERSIST_MS) ||           \
+    !defined(SPOODER_CEILING_CURRENT_A) || !defined(SPOODER_SUSTAINED_CURRENT_A) ||     \
     !defined(SPOODER_SUSTAINED_WINDOW_MS) || !defined(SPOODER_MIN_V) ||                 \
     !defined(SPOODER_UNDERVOLT_DEBOUNCE_MS) || !defined(SPOODER_BROWNOUT_V) ||          \
     !defined(SPOODER_MAX_V)
@@ -22,6 +23,8 @@ namespace config
 
 constexpr protection::Limits POWER_LIMITS = {
     SPOODER_TRIP_CURRENT_A,
+    SPOODER_TRIP_PERSIST_MS,
+    SPOODER_CEILING_CURRENT_A,
     SPOODER_SUSTAINED_CURRENT_A,
     SPOODER_SUSTAINED_WINDOW_MS,
     SPOODER_MIN_V,
@@ -31,7 +34,9 @@ constexpr protection::Limits POWER_LIMITS = {
 };
 
 static_assert(SPOODER_SUSTAINED_CURRENT_A < SPOODER_TRIP_CURRENT_A, "sustained limit must be below the trip current");
-static_assert(SPOODER_TRIP_CURRENT_A <= 15.0f, "trip current beyond the measurable range");
+static_assert(SPOODER_TRIP_CURRENT_A < SPOODER_CEILING_CURRENT_A, "trip current must be below the ceiling current");
+static_assert(SPOODER_CEILING_CURRENT_A <= 15.0f, "ceiling current beyond the measurable range");
+static_assert(SPOODER_TRIP_PERSIST_MS <= 200u, "trip persistence must be at most 200 ms");
 static_assert(SPOODER_BROWNOUT_V < SPOODER_MIN_V && SPOODER_MIN_V < SPOODER_MAX_V, "voltage limits out of order");
 static_assert(SPOODER_MAX_V <= 11.0f, "the board supports servo supplies up to 11 V");
 static_assert(SPOODER_SUSTAINED_WINDOW_MS % protection::BUCKET_MS == 0 &&

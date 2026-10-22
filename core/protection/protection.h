@@ -11,7 +11,7 @@ namespace protection
 enum Fault : uint16_t
 {
   NONE = 0,
-  OVERCURRENT = 1u << 0,       // current above the trip current: output inhibited
+  OVERCURRENT = 1u << 0,       // above the trip current for its persistence time, or above the ceiling: output inhibited
   SUSTAINED_CURRENT = 1u << 1, // window average above the sustained current: sleep
   UNDERVOLTAGE = 1u << 2,      // below the minimum voltage for the debounce time: sleep
   BROWNOUT = 1u << 3,          // below the brown-out voltage: output inhibited
@@ -32,6 +32,8 @@ constexpr int MAX_BUCKETS = 200; // windows up to 10 s
 struct Limits
 {
   float tripCurrentA;
+  uint32_t tripPersistMs; // the current must stay above tripCurrentA this long to trip
+  float ceilingCurrentA;  // a single reading above this trips at once
   float sustainedCurrentA;
   uint32_t sustainedWindowMs; // multiple of BUCKET_MS, at most MAX_BUCKETS buckets
   float minV;
@@ -66,6 +68,10 @@ struct State
   bool gateOpen;
   bool validRun;
   uint32_t validSinceMs;
+
+  // Overcurrent persistence: an unbroken run of readings above the trip current.
+  bool aboveTrip;
+  uint32_t aboveTripSinceMs;
 
   // Undervoltage debounce.
   bool belowMin;
