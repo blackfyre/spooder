@@ -41,6 +41,7 @@ mise run virtual-robot   # the virtual robot -> build/virtual-robot/virtual-robo
 mise run virtual-robot-run  # run it, USB terminal linked at build/virtual-robot/usb
 mise run desktop-sim      # both: the virtual robot in this terminal, the calibrator on its port
 mise run e2e             # build it, then the desktop end-to-end tests against it
+mise run bridge-screenshots  # render the bridge screen's pages to docs/images/bridge-*.png
 mise run clean
 ```
 
@@ -105,6 +106,7 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
   - `internal/virtualrobot`: runs the virtual robot for tests; `e2e/`: end-to-end tests of the real link and session against it (skipped when it is not built).
   - `internal/ui`: the Gio window in the Blackfyre look, with the charts tab (`charts*.go`: ten minutes of telemetry, diagnostics and pose on one time axis; series colours validated per mode); `internal/ui/fonts`: Archivo and JetBrains Mono with their OFL licences. `internal/appearance` and `internal/winreg` are copied from bopen (MIT, `desktop/LICENSE.bopen`).
 - `tools/virtual-robot/`: the virtual robot, a native C++17 program (CMake, Ninja) running `core/robot/robot_tick` behind a pseudo-terminal that acts as the robot's USB port (frames and debug text as on the board), optionally a second one for the bridge link, or a simulated bridge. Simulated supply and servo current; commands on standard input (`supply V`, `current A|auto`, `load K`, `bridge off|idle|gamepad|clear`, `estop on|off`, `unplug`, `plug`, `step N`, `status`, `quit`); `--help` lists the options (`--link`, `--speed`, `--stepped`, `--bridge-pty`). The desktop calibrator connects with `--port build/virtual-robot/usb`.
+- `tools/bridge-screenshots/`: renders the bridge screen's pages in chosen states to PNGs with the bridge's own `screen_draw` and `core/status` code on the host (LovyanGFX's Linux back end, no panel).
 - `test/`: Unity host tests, one directory per area. `test/golden/` holds the golden files other implementations (the desktop calibrator) test against. They are fixed fixtures: never copy a calibration export over `calibration_defaults.cpp` there; regenerate `protocol_v3.txt` and `leg_pose.txt` only for a deliberate protocol or kinematics change (`SPOODER_WRITE_GOLDEN=1 mise run test`).
 - `openspec/`: specifications (`specs/`) and changes (`changes/`). This is the source of truth for intended behaviour.
 

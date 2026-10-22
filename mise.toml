@@ -120,6 +120,14 @@ run = [
   "cmake --build build/virtual-robot",
 ]
 
+[tasks.bridge-screenshots]
+description = "Render the bridge screen's pages to docs/images/bridge-*.png (tools/bridge-screenshots)"
+run = [
+  "cmake -S tools/bridge-screenshots -B build/bridge-screenshots -G Ninja -DCMAKE_BUILD_TYPE=Release",
+  "cmake --build build/bridge-screenshots",
+  "build/bridge-screenshots/bridge-screenshots docs/images",
+]
+
 [tasks.virtual-robot-run]
 description = "Build and run the virtual robot, its USB port linked at build/virtual-robot/usb"
 depends = ["virtual-robot"]

@@ -80,6 +80,18 @@ All taken against the virtual robot, in the calibrator's dark or light look (fol
 
 *An emergency stop: the fault latches, output turns off, and the debug log records why.*
 
+### The bridge screen
+
+The gamepad bridge's 240×135 screen, rendered on the host by its own drawing code (`mise run bridge-screenshots`). A short press of the left button cycles the pages; the status strip at the bottom shows the e-stop, faults and link state on every page. White ticks hold the recent peak current and lowest voltage for 3 s; a value turns amber when it sets a new high or a deeper sag.
+
+| Drive | Stand surge | Power | Link |
+| --- | --- | --- | --- |
+| ![The drive page: walking in the tri gait, 6.08 V and 1.84 A with bars, ticks holding the recent 4.3 A peak and 5.54 V low, height 60 and speed 44, dynamic stride and steer, output on, no faults](docs/images/bridge-drive.png) | ![The drive page at a stand surge: 5.54 V and 4.30 A in amber, each a new extreme beyond its held tick](docs/images/bridge-surge.png) | ![The power page: the last minute of supply voltage and current as traces, with the sag and surge of a stand, the lowest voltage and the highest current](docs/images/bridge-power.png) | ![The link page: 50 frames per second accepted by the robot and 10 by the bridge, none rejected, telemetry 40 ms old, the bridge as the source, the pad at 80 %](docs/images/bridge-link.png) |
+
+| Fault | Emergency stop | Link lost |
+| --- | --- | --- |
+| ![The drive page after a brown-out: low V and brown-out in the orange status strip, output off](docs/images/bridge-fault.png) | ![The power page with the emergency stop in the orange status strip](docs/images/bridge-estop.png) | ![The drive page with the link lost: no robot values, LINK LOST in the strip](docs/images/bridge-lost.png) |
+
 ## Getting started
 
 [mise](https://mise.jdx.dev) provides every toolchain. The SDKs are pinned git submodules.
