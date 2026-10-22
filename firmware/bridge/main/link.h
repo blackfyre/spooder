@@ -25,6 +25,7 @@ struct Status
 {
   bool telemetryFresh;          // a valid telemetry frame within the timeout
   protocol::Telemetry telemetry; // the newest one (meaningful when fresh)
+  uint32_t telemetryAgeMs;       // since the newest one arrived
   bool emergencyStop;           // the bridge's own e-stop toggle
   uint32_t validFrames;
   uint32_t discardedFrames;

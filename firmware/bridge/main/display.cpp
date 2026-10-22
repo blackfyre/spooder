@@ -1,10 +1,13 @@
 #include "display.h"
 
+#include <stdio.h>
 #include <string.h>
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
 
 #include "logo.h"
+#include "screen_draw.h"
+#include "status/power_history.h"
 #include "status/status_screen.h"
 
 namespace display
@@ -63,6 +66,14 @@ private:
 
 static Panel lcd;
 
+using namespace screen_draw;
+
+// One region at a time is drawn into this sprite, then pushed: no flicker,
+// and the fonts blend against the right ground. Without it (allocation
+// failed), regions are drawn straight to the panel.
+static LGFX_Sprite canvas(&lcd);
+static bool haveCanvas;
+
 enum class Phase
 {
   Logo,
@@ -77,8 +88,7 @@ constexpr int BOOT_LINES = 8;
 static status_screen::Line bootLines[BOOT_LINES];
 static int bootLineCount;
 
-static status_screen::Line shown[status_screen::LINE_COUNT];
-static bool shownFresh;
+static status_screen::Line shown[status_screen::LINE_COUNT]; // setup mode
 static bool firstDraw = true;
 static uint32_t lastDrawMs;
 
@@ -101,11 +111,19 @@ static uint32_t colour(status_screen::Tone t)
   }
 }
 
+static uint32_t rgb(uint32_t c)
+{
+  return lcd.color888(c >> 16, (c >> 8) & 0xff, c & 0xff);
+}
+
+// A start-up log line, in the status screen's palette and label font.
 static void drawLine(int i, const status_screen::Line &l)
 {
   int y = MARGIN_Y + i * LINE_HEIGHT;
-  lcd.fillRect(0, y, lcd.width(), LINE_HEIGHT, TFT_BLACK);
-  lcd.setTextColor(colour(l.tone), TFT_BLACK);
+  lcd.fillRect(0, y, lcd.width(), LINE_HEIGHT, rgb(bf::INK));
+  useFont(lcd, mono12);
+  lcd.setTextDatum(lgfx::top_left);
+  lcd.setTextColor(rgb(toneColour(l.tone)), rgb(bf::INK));
   lcd.drawString(l.text, MARGIN_X, y);
 }
 
@@ -138,7 +156,7 @@ static void drawLogo()
 
 static void drawBootLog()
 {
-  lcd.fillScreen(TFT_BLACK);
+  lcd.fillScreen(rgb(bf::INK));
   for (int i = 0; i < bootLineCount; i++)
     drawLine(i, bootLines[i]);
 }
@@ -155,6 +173,12 @@ static void initPanel()
 void setup()
 {
   initPanel();
+  loadFonts();
+  // Before Bluepad32 starts and takes its share of the heap.
+  canvas.setColorDepth(16);
+  haveCanvas = canvas.createSprite(WIDTH, BODY.h) != nullptr;
+  if (!haveCanvas)
+    printf("display: no memory for the region sprite; drawing straight to the panel\n");
   drawLogo();
   phase = Phase::Logo;
   phaseSinceMs = millis();
@@ -191,9 +215,94 @@ static bool startupDone(uint32_t nowMs, bool emergencyStop)
   return phase == Phase::Status;
 }
 
-void update(uint32_t nowMs, bool gamepadConnected, const gamepad_mapping::Desired &desired,
-            const robot_link::Status &linkStatus)
+// The surface to draw region @p r on (screen_draw fills its ground).
+static lgfx::LovyanGFX &begin(const Region &r)
 {
+  if (haveCanvas)
+    return canvas;
+  lcd.setClipRect(0, r.y, WIDTH, r.h);
+  return lcd;
+}
+
+static void end(const Region &r)
+{
+  if (haveCanvas) // the region's rows are the sprite's first ones
+    lcd.pushImage(0, r.y, WIDTH, r.h, (const lgfx::swap565_t *)canvas.getBuffer());
+  else
+    lcd.clearClipRect();
+}
+
+// The y offset of a region's own coordinates on the drawing surface.
+static int top(const Region &r)
+{
+  return haveCanvas ? 0 : r.y;
+}
+
+// Draws one region through the sprite (or straight to the panel).
+template <typename Draw> static void drawRegion(const Region &r, Draw draw)
+{
+  draw(begin(r));
+  end(r);
+}
+
+// --- what changed --------------------------------------------------------------
+
+static bool same(const status_screen::Text &a, const status_screen::Text &b)
+{
+  return a.tone == b.tone && strcmp(a.text, b.text) == 0;
+}
+
+static bool same(const status_screen::Bar &a, const status_screen::Bar &b)
+{
+  return a.present == b.present && (!a.present || (int)(a.fraction * 1000) == (int)(b.fraction * 1000)) &&
+         a.held == b.held && (!a.held || (int)(a.heldFraction * 1000) == (int)(b.heldFraction * 1000));
+}
+
+static bool same(const status_screen::Header &a, const status_screen::Header &b)
+{
+  return same(a.mode, b.mode) && same(a.gamepad, b.gamepad) && same(a.link, b.link);
+}
+
+static bool same(const status_screen::Strip &a, const status_screen::Strip &b)
+{
+  return a.tone == b.tone && strcmp(a.lines[0], b.lines[0]) == 0 && strcmp(a.lines[1], b.lines[1]) == 0;
+}
+
+static bool same(const status_screen::DriveBody &a, const status_screen::DriveBody &b)
+{
+  return same(a.voltage, b.voltage) && same(a.current, b.current) && same(a.voltageBar, b.voltageBar) &&
+         same(a.currentBar, b.currentBar) && same(a.height, b.height) && same(a.speed, b.speed) &&
+         same(a.heightBar, b.heightBar) && same(a.speedBar, b.speedBar) && same(a.modes, b.modes) &&
+         same(a.output, b.output) && same(a.sensors, b.sensors);
+}
+
+static bool same(const status_screen::LinkBody &a, const status_screen::LinkBody &b)
+{
+  return same(a.robot, b.robot) && same(a.bridge, b.bridge) && same(a.age, b.age) && same(a.source, b.source) &&
+         same(a.gamepad, b.gamepad);
+}
+
+static power_history::History history;
+static status_screen::RateMeter rates;
+static peak_hold::Hold currentPeak, voltageLow;
+static status_screen::View shownView;
+static uint32_t historyMarkShown; // count + next: changes with every sample
+
+void update(uint32_t nowMs, bool gamepadConnected, uint8_t gamepadBattery, page_button::Page page,
+            const gamepad_mapping::Desired &desired, const robot_link::Status &linkStatus)
+{
+  // The history and rates run whatever is shown.
+  power_history::record(history, nowMs, linkStatus.telemetryFresh, linkStatus.telemetry.voltageMv,
+                        linkStatus.telemetry.currentMa);
+  status_screen::updateRates(rates, nowMs, linkStatus.telemetryFresh, linkStatus.telemetry, linkStatus.validFrames,
+                             linkStatus.discardedFrames);
+  peak_hold::update(currentPeak, peak_hold::Extreme::Max, peak_hold::CURRENT_FALL_MA_PER_S,
+                    peak_hold::CURRENT_WARN_MARGIN_MA, nowMs,
+                    linkStatus.telemetryFresh, linkStatus.telemetry.currentMa);
+  peak_hold::update(voltageLow, peak_hold::Extreme::Min, peak_hold::VOLTAGE_RISE_MV_PER_S,
+                    peak_hold::VOLTAGE_WARN_MARGIN_MV, nowMs,
+                    linkStatus.telemetryFresh, linkStatus.telemetry.voltageMv);
+
   if (!startupDone(nowMs, linkStatus.emergencyStop))
     return;
   if (!firstDraw && nowMs - lastDrawMs < REFRESH_MS)
@@ -202,27 +311,53 @@ void update(uint32_t nowMs, bool gamepadConnected, const gamepad_mapping::Desire
 
   status_screen::Inputs in = {};
   in.gamepadConnected = gamepadConnected;
+  in.gamepadBattery = gamepadBattery;
   in.emergencyStop = linkStatus.emergencyStop;
   in.desired = desired;
   in.telemetryFresh = linkStatus.telemetryFresh;
   in.telemetry = linkStatus.telemetry;
-  status_screen::Line lines[status_screen::LINE_COUNT];
-  status_screen::compose(in, lines);
+  in.telemetryAgeMs = linkStatus.telemetryAgeMs;
+  in.rates = rates.rates;
+  in.history = &history;
+  in.currentPeak = currentPeak;
+  in.voltageLow = voltageLow;
+  static status_screen::View view; // too large for loop()'s stack
+  status_screen::composePage(in, page, view);
 
-  // A change of link state redraws everything; otherwise only changed lines.
-  bool full = firstDraw || linkStatus.telemetryFresh != shownFresh;
-  if (full)
-    lcd.fillScreen(TFT_BLACK);
-  for (int i = 0; i < status_screen::LINE_COUNT; i++)
+  bool pageChanged = firstDraw || view.page != shownView.page;
+  if (firstDraw)
+    lcd.fillScreen(lcd.color888(bf::INK >> 16, (bf::INK >> 8) & 0xff, bf::INK & 0xff));
+  if (pageChanged || !same(view.header, shownView.header))
+    drawRegion(HEADER, [&](lgfx::LovyanGFX &g) { drawHeader(g, top(HEADER), view.header); });
+  if (pageChanged || !same(view.strip, shownView.strip))
+    drawRegion(STRIP, [&](lgfx::LovyanGFX &g) { drawStrip(g, top(STRIP), view.strip); });
+  if (pageChanged)
+    drawRegion(MARKER, [&](lgfx::LovyanGFX &g) { drawMarker(g, top(MARKER), view.page); });
+  switch (view.page)
   {
-    if (full || strcmp(lines[i].text, shown[i].text) != 0 || lines[i].tone != shown[i].tone)
-    {
-      drawLine(i, lines[i]);
-      shown[i] = lines[i];
-    }
+  case page_button::Page::Drive:
+    if (pageChanged || !same(view.drive, shownView.drive))
+      drawRegion(BODY, [&](lgfx::LovyanGFX &g) { drawDrive(g, top(BODY), view.drive); });
+    break;
+  case page_button::Page::Power:
+    // The traces move with every new sample.
+    if (pageChanged || (uint32_t)history.count + (uint32_t)history.next != historyMarkShown ||
+        !same(view.power.voltage, shownView.power.voltage) || !same(view.power.current, shownView.power.current))
+      drawRegion(BODY, [&](lgfx::LovyanGFX &g) { drawPower(g, top(BODY), view.power, &history); });
+    historyMarkShown = (uint32_t)history.count + (uint32_t)history.next;
+    break;
+  case page_button::Page::Link:
+    if (pageChanged || !same(view.link, shownView.link))
+      drawRegion(BODY, [&](lgfx::LovyanGFX &g) { drawLink(g, top(BODY), view.link); });
+    break;
   }
-  shownFresh = linkStatus.telemetryFresh;
+  shownView = view;
   firstDraw = false;
+}
+
+bool statusShown()
+{
+  return phase == Phase::Status;
 }
 
 bool showingLogo()

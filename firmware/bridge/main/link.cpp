@@ -202,6 +202,7 @@ Status status()
   portENTER_CRITICAL(&lock);
   uint32_t nowMs = millis();
   s.telemetryFresh = haveTelemetry && nowMs - telemetryAtMs <= TELEMETRY_TIMEOUT_MS;
+  s.telemetryAgeMs = haveTelemetry ? nowMs - telemetryAtMs : 0;
   s.telemetry = telemetry;
   s.emergencyStop = emergencyStop;
   s.validFrames = validFrames;

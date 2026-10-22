@@ -1,14 +1,14 @@
 #include "status_screen.h"
 
+#include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 #include "protection/protection.h"
 
 namespace status_screen
 {
 
 static const char *const BODY_MODES[] = {"Initialise", "Stand", "Walk", "Sleep", "Calibrate", "Perform"};
-static const char *const GESTURES[] = {"none", "say hi", "wiggle", "dance", "attack", "ball"};
-static const char *const GAITS[] = {"Tri", "Wave", "Ripple", "Bi", "Quad", "Hop"};
 
 const char *faultName(uint16_t bit)
 {
@@ -42,33 +42,6 @@ static const char *name(const char *const *names, int count, int i)
   return i >= 0 && i < count ? names[i] : "?";
 }
 
-// Writes the latched faults' names from line `first`, wrapping at
-// LINE_CHARS. The short names keep all six within two lines, so they never
-// reach the sensor line.
-static void writeFaults(uint16_t faults, Line out[LINE_COUNT], int first)
-{
-  int line = first;
-  int used = 0;
-  set(out[line], Tone::Bad, "");
-  for (uint16_t bit = 1; bit != 0; bit <<= 1)
-  {
-    if (!(faults & bit))
-      continue;
-    char word[16];
-    const char *n = faultName(bit);
-    int len = n ? snprintf(word, sizeof(word), "%s", n) : snprintf(word, sizeof(word), "0x%04x", bit);
-    int need = used ? len + 1 : len;
-    if (used + need > LINE_CHARS)
-    {
-      if (line + 1 >= first + 2)
-        return;
-      set(out[++line], Tone::Bad, "");
-      used = 0;
-    }
-    used += snprintf(out[line].text + used, sizeof(out[line].text) - used, "%s%s", used ? " " : "", word);
-  }
-}
-
 // Centidegrees as degrees with one decimal, keeping the sign of -0.x.
 static int formatTenths(char *buf, int size, int16_t centideg)
 {
@@ -76,70 +49,196 @@ static int formatTenths(char *buf, int size, int16_t centideg)
   return snprintf(buf, size, "%s%d.%d", centideg < 0 ? "-" : "", v / 100, v % 100 / 10);
 }
 
-void compose(const Inputs &in, Line out[LINE_COUNT])
-{
-  for (int i = 0; i < LINE_COUNT; i++)
-    set(out[i], Tone::Normal, "");
+static const char *const BODY_MODE_LABELS[] = {"INITIALISE", "STAND", "WALK", "SLEEP", "CALIBRATE", "PERFORM"};
+static const char *const GESTURE_LABELS[] = {"NONE", "SAY HI", "WIGGLE", "DANCE", "ATTACK", "BALL"};
+static const char *const GAIT_LABELS[] = {"TRI", "WAVE", "RIPPLE", "BI", "QUAD", "HOP"};
+// The middle dot, in UTF-8: the screen's fonts carry it.
+#define DOT "\xc2\xb7"
 
-  char buf[64];
-  const char *pad = in.gamepadConnected ? "Pad: connected" : "Pad: none";
-  if (in.emergencyStop)
+// A fault's name on the status strip.
+static const char *stripName(uint16_t bit)
+{
+  switch (bit)
   {
-    snprintf(buf, sizeof(buf), "E-STOP  %s", pad);
-    set(out[0], Tone::Bad, buf);
+  case protection::OVERCURRENT:
+    return "OVERCURRENT";
+  case protection::SUSTAINED_CURRENT:
+    return "OVERLOAD";
+  case protection::UNDERVOLTAGE:
+    return "LOW V";
+  case protection::BROWNOUT:
+    return "BROWN-OUT";
+  case protection::OVERVOLTAGE:
+    return "HIGH V";
+  case protection::EMERGENCY_STOP:
+    return "E-STOP";
+  default:
+    return nullptr;
+  }
+}
+
+int batteryPercent(uint8_t battery)
+{
+  if (battery == 0)
+    return -1;
+  return (battery - 1) * 100 / 254;
+}
+
+static void text(Text &t, Tone tone, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+static void text(Text &t, Tone tone, const char *fmt, ...)
+{
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(t.text, sizeof(t.text), fmt, args);
+  va_end(args);
+  t.tone = tone;
+}
+
+// An absent value: "--" after the label.
+static void none(Text &t, const char *label)
+{
+  text(t, Tone::Muted, "%s%s--", label, *label ? " " : "");
+}
+
+static float fraction(float value, float low, float high)
+{
+  float f = (value - low) / (high - low);
+  return f < 0 ? 0 : (f > 1 ? 1 : f);
+}
+
+// Volts or amps with two decimals, from milli-units.
+static void milli(Text &t, Tone tone, const char *prefix, uint16_t value, const char *unit)
+{
+  text(t, tone, "%s%u.%02u %s", prefix, value / 1000, (value % 1000) / 10, unit);
+}
+
+// Appends @p word to the strip, on the first line while it fits, then on the
+// second; a word that fits neither is cut on the last line. Words are two
+// spaces apart: every fault, the e-stop and the source state fit two lines.
+static void stripAdd(Strip &s, int &line, const char *word)
+{
+  for (; line < STRIP_LINES; line++)
+  {
+    char *l = s.lines[line];
+    int used = (int)strlen(l);
+    int need = used ? used + 2 + (int)strlen(word) : (int)strlen(word);
+    if (need <= STRIP_LINE_CHARS || line == STRIP_LINES - 1)
+    {
+      snprintf(l + used, STRIP_LINE_CHARS + 1 - used, "%s%s", used ? "  " : "", word);
+      return;
+    }
+  }
+}
+
+static void composeStrip(const Inputs &in, Strip &s)
+{
+  int line = 0;
+  bool bad = false, warn = false;
+  const protocol::Telemetry &t = in.telemetry;
+  if (in.emergencyStop || (in.telemetryFresh && (t.faults & protection::EMERGENCY_STOP)))
+  {
+    stripAdd(s, line, "E-STOP");
+    bad = true;
+  }
+  if (in.telemetryFresh)
+  {
+    for (uint16_t bit = 1; bit != 0; bit <<= 1)
+    {
+      if (!(t.faults & bit) || bit == protection::EMERGENCY_STOP)
+        continue;
+      char unknown[8];
+      const char *n = stripName(bit);
+      if (!n)
+      {
+        snprintf(unknown, sizeof(unknown), "0x%04X", bit);
+        n = unknown;
+      }
+      stripAdd(s, line, n);
+      bad = true;
+    }
+    if (t.flags & protocol::TELEMETRY_SOURCE_CONFLICT)
+    {
+      stripAdd(s, line, "SOURCE CONFLICT");
+      bad = true;
+    }
+    else if (t.flags & protocol::TELEMETRY_USB_IN_CONTROL)
+    {
+      stripAdd(s, line, "USB IN CONTROL");
+      warn = true;
+    }
   }
   else
   {
-    set(out[0], in.gamepadConnected ? Tone::Good : Tone::Warn, pad);
+    stripAdd(s, line, "LINK LOST");
+    bad = true;
   }
+  if (!bad && !warn)
+    stripAdd(s, line, "NO FAULTS");
+  s.tone = bad ? Tone::Bad : (warn ? Tone::Warn : Tone::Good);
+}
 
-  const gamepad_mapping::Desired &d = in.desired;
-  // Longest: "H 100 Spd 100 dynamic steer", 27 of LINE_CHARS.
-  snprintf(buf, sizeof(buf), "H %u Spd %u %s %s", d.height, d.speed,
-           d.stride == StrideMode::Fixed ? "fixed" : "dynamic", d.stickMode == gamepad_mapping::StickMode::Crab ? "crab" : "steer");
-  set(out[4], Tone::Normal, buf);
+static void composeHeader(const Inputs &in, Header &h)
+{
+  const protocol::Telemetry &t = in.telemetry;
+  if (!in.telemetryFresh)
+    none(h.mode, "");
+  else if (t.gesture != 0)
+    text(h.mode, Tone::Normal, "PERFORM " DOT " %s", name(GESTURE_LABELS, 6, t.gesture));
+  else
+    text(h.mode, Tone::Normal, "%s " DOT " %s", name(BODY_MODE_LABELS, 6, t.bodyMode), name(GAIT_LABELS, 6, t.gait));
+
+  int battery = batteryPercent(in.gamepadBattery);
+  if (!in.gamepadConnected)
+    text(h.gamepad, Tone::Warn, "NO PAD");
+  else if (battery < 0)
+    text(h.gamepad, Tone::Good, "PAD");
+  else
+    text(h.gamepad, battery < 20 ? Tone::Warn : Tone::Good, "PAD %d%%", battery);
+
+  if (!in.telemetryFresh)
+    text(h.link, Tone::Bad, "LOST");
+  else if (t.flags & protocol::TELEMETRY_SOURCE_CONFLICT)
+    text(h.link, Tone::Bad, "CONFLICT");
+  else if (t.flags & protocol::TELEMETRY_USB_IN_CONTROL)
+    text(h.link, Tone::Warn, "USB");
+  else
+    text(h.link, Tone::Good, "LINK");
+}
+
+static void composeDrive(const Inputs &in, DriveBody &d)
+{
+  const gamepad_mapping::Desired &want = in.desired;
+  text(d.height, Tone::Normal, "H %u", want.height);
+  d.heightBar = {true, fraction(want.height, 0, 100)};
+  text(d.speed, Tone::Normal, "SPD %u", want.speed);
+  d.speedBar = {true, fraction(want.speed, 0, 100)};
+  text(d.modes, Tone::Muted, "%s " DOT " %s", want.stride == StrideMode::Fixed ? "FIXED" : "DYNAMIC",
+       want.stickMode == gamepad_mapping::StickMode::Crab ? "CRAB" : "STEER");
 
   if (!in.telemetryFresh)
   {
-    // Robot values are not current: show none of them.
-    set(out[1], Tone::Bad, "Link: LOST");
-    set(out[2], Tone::Normal, "Body --");
-    set(out[3], Tone::Normal, "Out --  -- V  -- A");
-    set(out[5], Tone::Normal, "Faults: --");
-    return;
+    none(d.voltage, "");
+    none(d.current, "");
+    none(d.output, "OUT");
+    return; // bars absent
   }
-
   const protocol::Telemetry &t = in.telemetry;
-  // Line 1: the link, and which operator source the robot follows.
-  if (t.flags & protocol::TELEMETRY_SOURCE_CONFLICT)
-    set(out[1], Tone::Bad, "Link: ok  CONFLICT with USB");
-  else if (t.flags & protocol::TELEMETRY_USB_IN_CONTROL)
-    set(out[1], Tone::Warn, "Link: ok  USB in control");
-  else
-    set(out[1], Tone::Good, "Link: ok");
-  // Longest: "Body Initialise  Gait Ripple", exactly LINE_CHARS. While a
-  // gesture plays, it replaces the gait: "Body Perform: say hi".
-  if (t.gesture != 0)
-    snprintf(buf, sizeof(buf), "Body Perform: %s", name(GESTURES, 6, t.gesture));
-  else
-    snprintf(buf, sizeof(buf), "Body %s  Gait %s", name(BODY_MODES, 6, t.bodyMode), name(GAITS, 6, t.gait));
-  set(out[2], Tone::Normal, buf);
-  snprintf(buf, sizeof(buf), "Out %s  %u.%02u V  %u.%02u A", t.outputsOn ? "on" : "off", t.voltageMv / 1000,
-           (t.voltageMv % 1000) / 10, t.currentMa / 1000, (t.currentMa % 1000) / 10);
-  set(out[3], t.faults ? Tone::Bad : (t.outputsOn ? Tone::Good : Tone::Normal), buf);
-
-  // Lines 5-6: fault names (all six fit in two lines); line 7: sensors.
-  if (t.faults == 0)
-    set(out[5], Tone::Good, "Faults: none");
-  else
-    writeFaults(t.faults, out, 5);
+  text(d.output, t.outputsOn ? Tone::Good : Tone::Muted, "%s", t.outputsOn ? "OUT ON" : "OUT OFF");
+  // Amber while setting a new low or high beyond the held one.
+  milli(d.voltage, in.voltageLow.present && in.voltageLow.warning ? Tone::Warn : Tone::Normal, "", t.voltageMv, "V");
+  milli(d.current, in.currentPeak.present && in.currentPeak.warning ? Tone::Warn : Tone::Normal, "", t.currentMa, "A");
+  d.voltageBar = {true, fraction(t.voltageMv, BAR_MIN_MV, BAR_MAX_MV), in.voltageLow.present,
+                  fraction(in.voltageLow.value, BAR_MIN_MV, BAR_MAX_MV)};
+  d.currentBar = {true, fraction(t.currentMa, 0, BAR_MAX_MA), in.currentPeak.present,
+                  fraction(in.currentPeak.value, 0, BAR_MAX_MA)};
 
   if (t.sensorsAvailable & (protocol::SENSOR_TOF | protocol::SENSOR_ATTITUDE))
   {
-    // Compact, so the widest values still fit: "ToF 65535mm P-327.6 R-327.6".
+    // Compact, so the widest values still fit: "TOF 65535MM P-327.6 R-327.6".
+    char buf[40];
     int used = 0;
     if (t.sensorsAvailable & protocol::SENSOR_TOF)
-      used += snprintf(buf + used, sizeof(buf) - used, "ToF %umm ", t.tofMm);
+      used += snprintf(buf + used, sizeof(buf) - used, "TOF %uMM ", t.tofMm);
     if (t.sensorsAvailable & protocol::SENSOR_ATTITUDE)
     {
       used += snprintf(buf + used, sizeof(buf) - used, "P");
@@ -147,8 +246,137 @@ void compose(const Inputs &in, Line out[LINE_COUNT])
       used += snprintf(buf + used, sizeof(buf) - used, " R");
       formatTenths(buf + used, sizeof(buf) - used, t.rollCentideg);
     }
-    set(out[7], Tone::Normal, buf);
+    text(d.sensors, Tone::Normal, "%s", buf);
   }
+}
+
+static void composePower(const Inputs &in, PowerBody &p)
+{
+  text(p.note, Tone::Muted, "10 HZ SAMPLES " DOT " 60 S");
+  none(p.voltage, "");
+  none(p.current, "");
+  none(p.minVoltage, "MIN");
+  none(p.maxCurrent, "MAX");
+  p.traceLowMv = BAR_MIN_MV;
+  p.traceHighMv = BAR_MAX_MV;
+  p.traceHighMa = TRACE_MIN_MA;
+  if (!in.history)
+    return;
+  // The newest values only while the link is up: the history records the
+  // loss at its next sample.
+  power_history::Sample newest;
+  if (in.telemetryFresh && power_history::newest(*in.history, newest))
+  {
+    milli(p.voltage, Tone::Normal, "", newest.voltageMv, "V");
+    milli(p.current, Tone::Normal, "", newest.currentMa, "A");
+  }
+  uint16_t minMv, maxMv, maxMa;
+  if (!power_history::extremes(*in.history, minMv, maxMv, maxMa))
+    return;
+  milli(p.minVoltage, Tone::Normal, "MIN ", minMv, "V");
+  milli(p.maxCurrent, Tone::Normal, "MAX ", maxMa, "A");
+  int low = minMv, high = maxMv;
+  if (high - low < TRACE_MIN_SPAN_MV)
+  {
+    // Widen about the middle, kept within the 16-bit range.
+    int mid = (low + high) / 2;
+    low = mid - TRACE_MIN_SPAN_MV / 2;
+    if (low < 0)
+      low = 0;
+    if (low > UINT16_MAX - TRACE_MIN_SPAN_MV)
+      low = UINT16_MAX - TRACE_MIN_SPAN_MV;
+    high = low + TRACE_MIN_SPAN_MV;
+  }
+  p.traceLowMv = (uint16_t)low;
+  p.traceHighMv = (uint16_t)high;
+  p.traceHighMa = maxMa > TRACE_MIN_MA ? maxMa : TRACE_MIN_MA;
+}
+
+static void composeLink(const Inputs &in, LinkBody &l)
+{
+  const Rates &r = in.rates;
+  if (in.telemetryFresh && r.robotValid)
+    text(l.robot, r.robotRejected ? Tone::Warn : Tone::Normal, "ROBOT %u/S REJ %u/S", r.robotAccepted, r.robotRejected);
+  else
+    none(l.robot, "ROBOT");
+  if (r.bridgeValid)
+    text(l.bridge, r.bridgeRejected ? Tone::Warn : Tone::Normal, "BRIDGE %u/S REJ %u/S", r.bridgeAccepted,
+         r.bridgeRejected);
+  else
+    none(l.bridge, "BRIDGE");
+
+  const protocol::Telemetry &t = in.telemetry;
+  if (!in.telemetryFresh)
+  {
+    none(l.age, "AGE");
+    none(l.source, "SOURCE");
+  }
+  else
+  {
+    text(l.age, Tone::Normal, "AGE %lu MS", (unsigned long)in.telemetryAgeMs);
+    if (t.flags & protocol::TELEMETRY_SOURCE_CONFLICT)
+      text(l.source, Tone::Bad, "SOURCE CONFLICT");
+    else if (t.flags & protocol::TELEMETRY_USB_IN_CONTROL)
+      text(l.source, Tone::Warn, "SOURCE USB");
+    else
+      text(l.source, Tone::Good, "SOURCE BRIDGE");
+  }
+
+  int battery = batteryPercent(in.gamepadBattery);
+  if (!in.gamepadConnected)
+    text(l.gamepad, Tone::Warn, "PAD NONE");
+  else if (battery < 0)
+    text(l.gamepad, Tone::Good, "PAD CONNECTED");
+  else
+    text(l.gamepad, battery < 20 ? Tone::Warn : Tone::Good, "PAD CONNECTED %d%%", battery);
+}
+
+void composePage(const Inputs &in, page_button::Page page, View &out)
+{
+  out = View();
+  out.page = page;
+  composeHeader(in, out.header);
+  composeStrip(in, out.strip);
+  switch (page)
+  {
+  case page_button::Page::Drive:
+    composeDrive(in, out.drive);
+    break;
+  case page_button::Page::Power:
+    composePower(in, out.power);
+    break;
+  case page_button::Page::Link:
+    composeLink(in, out.link);
+    break;
+  }
+}
+
+void updateRates(RateMeter &m, uint32_t nowMs, bool telemetryFresh, const protocol::Telemetry &t,
+                 uint32_t bridgeAccepted, uint32_t bridgeRejected)
+{
+  if (m.started)
+  {
+    uint32_t elapsed = nowMs - m.atMs;
+    if (elapsed < RATE_PERIOD_MS)
+      return;
+    m.rates.bridgeValid = true;
+    m.rates.bridgeAccepted = (uint16_t)((bridgeAccepted - m.bridgeAccepted) * 1000u / elapsed);
+    m.rates.bridgeRejected = (uint16_t)((bridgeRejected - m.bridgeRejected) * 1000u / elapsed);
+    // The robot's counters are 16-bit and wrap.
+    m.rates.robotValid = telemetryFresh && m.robotKnown;
+    if (m.rates.robotValid)
+    {
+      m.rates.robotAccepted = (uint16_t)((uint16_t)(t.validFrames - m.robotAccepted) * 1000u / elapsed);
+      m.rates.robotRejected = (uint16_t)((uint16_t)(t.discardedFrames - m.robotRejected) * 1000u / elapsed);
+    }
+  }
+  m.started = true;
+  m.atMs = nowMs;
+  m.bridgeAccepted = bridgeAccepted;
+  m.bridgeRejected = bridgeRejected;
+  m.robotKnown = telemetryFresh;
+  m.robotAccepted = t.validFrames;
+  m.robotRejected = t.discardedFrames;
 }
 
 // Like set(), but cut to SETUP_LINE_CHARS.

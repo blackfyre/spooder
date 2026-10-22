@@ -152,17 +152,20 @@ Stop at the first stage that misbehaves.
 
 Robot on the bench supply with **no servos** until step 4; default (link) robot build.
 
-1. **Bridge alone, on USB.** The screen shows `Pad: none` and `Link: LOST`. The console prints the Bluepad32 banner.
+The status screen has three pages: **drive** (the mode chip, voltage and current with bars, height and speed, stride and stick mode, `OUT ON`/`OUT OFF`; a white tick on the current bar holds the recent peak and on the voltage bar the recent low, for 3 s before easing back; a value turns amber for a second when it sets a new high or a deeper sag), **power** (the last 60 s of voltage and current as 10 Hz traces, with the lowest voltage and highest current) and **link** (frames per second each side accepts and rejects, the telemetry's age, the source the robot follows, the pad and its battery). A short press of the left button (GPIO0) shows the next page; the dots at the bottom mark the page. The header (mode, `PAD`, link state) and the status strip (`NO FAULTS`, or the e-stop, every latched fault, `LINK LOST`, `SOURCE CONFLICT`, `USB IN CONTROL`, filled orange or amber) are on every page.
+
+1. **Bridge alone, on USB.** The header shows `NO PAD` and `LOST`, the strip `LINK LOST`. The console prints the Bluepad32 banner.
 2. **Link on a bench cable.** Wire the three link wires.
-   - Within a second the screen shows `Link: ok`, the robot's body mode, `Out on/off`, supply voltage and current. `Link: ok  USB in control` or `Link: ok  CONFLICT with USB` means a USB host claims control too.
+   - Within a second the header shows `LINK` and the robot's mode, the strip `NO FAULTS`, and the drive page the supply voltage and current and `OUT ON`/`OUT OFF`. `USB IN CONTROL` or `SOURCE CONFLICT` in the strip means a USB host claims control too.
+   - The link page shows about 50 frames per second accepted by the robot and about 10 by the bridge, none rejected.
    - LED 6 on the robot blinks magenta (link up, no gamepad).
-   - Pull the cable: the screen shows `Link: LOST` within about 1 s, and the robot sleeps (LED 6 fast amber).
+   - Pull the cable: the strip shows `LINK LOST` within about 1 s on whichever page is shown, the power traces stop (a gap), and the robot sleeps (LED 6 fast amber).
 3. **Gamepad.** Put the pad in pairing mode (see below).
-   - `Pad: connected`; the robot stands (LED 6 cyan).
+   - The header shows `PAD` (with its battery when the pad reports one); the robot stands (LED 6 cyan). The power page shows the stand's current and the sag it causes.
    - Check every row of the controls table, including the left stick's forward direction (+Y must walk forward).
    - Switch the pad off: the robot sleeps.
 4. **Emergency stop.** Press the bridge's right button (GPIO35).
-   - Screen: `E-STOP`. Robot: all six LEDs steady red, output off within 20 ms (scope a servo pulse line against the bridge's TX line).
+   - Screen: `E-STOP` in the strip, on every page. Robot: all six LEDs steady red, output off within 20 ms (scope a servo pulse line against the bridge's TX line).
    - Press again to release: output stays off. Hold both stick buttons for 1 s to clear, then make a new mode request (`Home`) to move again.
 5. **Timing under load.** With a logic analyser on the link TX, confirm a command frame at least every 20 ms while the screen changes many values.
 6. **All 18 servos,** robot on a stand: walk through the controls again.
@@ -236,7 +239,7 @@ Button names are Bluepad32's (Xbox layout: `a` bottom, `b` right, `x` left, `y` 
 |---|---|
 | Left stick, steer mode (default) | Y walks forward or back; X steers: right turns clockwise, mirrored when reversing (more than 10 % back). 8 % dead zone |
 | Left stick, crab mode | Walk direction and speed, strafing too |
-| `b` | Toggle steer / crab mode (kept across reconnects; the screen shows `steer` or `crab`) |
+| `b` | Toggle steer / crab mode (kept across reconnects; the drive page shows `STEER` or `CRAB`) |
 | Right stick X | Turn (right: clockwise), added in both modes |
 | `Home` (system) | Toggle Stand / Walk |
 | `y` | Toggle Sleep (returns to the previous mode) |

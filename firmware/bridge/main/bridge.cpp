@@ -13,6 +13,7 @@
 #include "gamepad_mapping/rumble.h"
 #include "link.h"
 #include "setup/setup_entry.h"
+#include "status/page_button.h"
 #include "setup_mode.h"
 
 // The mapping's button bits are Bluepad32's.
@@ -34,10 +35,12 @@ static ControllerPtr controller = nullptr;
 static gamepad_mapping::Mapper mapper;
 static rumble::State rumbleState;
 // The left button (GPIO0, active low, board pull-up): held during the logo,
-// it restarts the bridge into setup mode. Never read at reset: GPIO0 is a
-// strapping pin, and holding it then enters the ROM download mode.
+// it restarts the bridge into setup mode; once the status screen is shown, a
+// short press shows the next page. Never read at reset: GPIO0 is a strapping
+// pin, and holding it then enters the ROM download mode.
 constexpr int SETUP_BUTTON_PIN = 0;
 static setup_entry::Hold setupHold;
+static page_button::State pageButton;
 
 static void onConnected(ControllerPtr ctl)
 {
@@ -105,6 +108,10 @@ void loop()
     }
     display::holdLogo(setup_entry::held(setupHold));
   }
+  else if (display::statusShown())
+  {
+    page_button::update(pageButton, digitalRead(SETUP_BUTTON_PIN) == LOW, now);
+  }
 
   gamepad_mapping::PadState pad = readPad();
   gamepad_mapping::Desired desired = gamepad_mapping::update(mapper, pad, now);
@@ -118,7 +125,8 @@ void loop()
   if (r.play && controller != nullptr)
     controller->playDualRumble(0, r.durationMs, r.weak, r.strong);
 
-  display::update(now, pad.connected, desired, link);
+  uint8_t battery = pad.connected ? controller->battery() : 0; // 0: not reported
+  display::update(now, pad.connected, battery, pageButton.page, desired, link);
 
   // Yield so the idle task runs (watchdog) between gamepad updates.
   delay(1);

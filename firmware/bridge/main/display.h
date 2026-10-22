@@ -3,14 +3,17 @@
 
 // Status screen on the T-Display's ST7789 (135×240, used landscape).
 // At power-up: the Spooder logo, then a start-up log, then the status screen
-// (an active emergency stop skips straight to it). update() redraws the
-// status at most every REFRESH_MS and only the lines that changed; the whole
-// screen is cleared only when the link state changes.
+// (an active emergency stop skips straight to it). The status screen has
+// three pages (core/status/status_screen) in the Blackfyre dark palette;
+// update() redraws at most every REFRESH_MS, and only the regions (header,
+// body, status strip, page marker) whose content changed, each drawn off
+// screen in one reusable sprite.
 // In setup mode there is no logo: setupStart() draws the joining QR code on
 // the right, and setupUpdate() keeps the text on the left current.
 #include <stdint.h>
 #include "gamepad_mapping/gamepad_mapping.h"
 #include "link.h"
+#include "status/page_button.h"
 
 namespace display
 {
@@ -29,8 +32,19 @@ void setup();
  */
 void bootMessage(const char *text, bool ok = true);
 
-void update(uint32_t nowMs, bool gamepadConnected, const gamepad_mapping::Desired &desired,
-            const robot_link::Status &linkStatus);
+/**
+ * @brief Records the power history and link rates, and redraws @p page when
+ * due. Call on every loop() pass. @p gamepadBattery is Bluepad32's level
+ * (0 = not reported).
+ */
+void update(uint32_t nowMs, bool gamepadConnected, uint8_t gamepadBattery, page_button::Page page,
+            const gamepad_mapping::Desired &desired, const robot_link::Status &linkStatus);
+
+/**
+ * @brief True once the status screen is shown (the start-up sequence is over):
+ * from then on the left button switches pages.
+ */
+bool statusShown();
 
 /**
  * @brief True while the boot logo is shown (the setup-mode button counts
