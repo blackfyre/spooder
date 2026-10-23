@@ -188,6 +188,14 @@ static const Pose POSES[] = {
                    Vector3(190, 20, -100), Vector3(190, -40, -145)}},
 };
 
+// A value rounding to zero at three decimals, as exactly 0: the sign of a
+// tiny residue differs between compilers and maths libraries, and "-0.000"
+// would make the golden file depend on them.
+static float printable(float v)
+{
+  return fabsf(v) < 0.0005f ? 0.0f : v;
+}
+
 static void buildGolden(Text &t)
 {
   add(t, "%s", HEADER);
@@ -201,12 +209,12 @@ static void buildGolden(Text &t)
       add(t, "%s %d", pose.name, battery);
       for (const JointAngles &a : legs)
         add(t, " %.4f %.4f %.4f", a.coxa, a.femur, a.tibia);
-      add(t, " %.3f %.3f %.3f %.1f", e.centre.x, e.centre.y, e.centre.z, e.massG);
+      add(t, " %.3f %.3f %.3f %.1f", printable(e.centre.x), printable(e.centre.y), printable(e.centre.z), e.massG);
       Vector3 feet[LEG_COUNT];
       feetOf(legs, feet);
       float margin;
       if (supportMargin(feet, e.centre, margin))
-        add(t, " %.3f\n", margin);
+        add(t, " %.3f\n", printable(margin));
       else
         add(t, " none\n");
     }
