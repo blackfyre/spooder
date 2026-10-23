@@ -1,0 +1,7 @@
+# Vulnerabilities the desktop code calls, accepted until fixed (tools/vulncheck.sh).
+# Shrink-only: remove an entry once fixed; add one only in a reviewed commit.
+# All four are in golang.org/x/image v0.26.0 (a Gio dependency), fixed in v0.38.0.
+GO-2026-4815 OOM from malicious IFD offset in golang.org/x/image/tiff
+GO-2026-5032 excessive resource consumption in PackBits decompression in golang.org/x/image/tiff
+GO-2026-5062 no limit on tile sizes in golang.org/x/image/tiff
+GO-2026-5066 panic decoding an image with an out-of-bounds strip offset in golang.org/x/image/tiff

@@ -31,7 +31,8 @@ tier_of() {
     firmware/bridge/scripts/* | platformio.ini | \
     desktop/internal/protocol/* | desktop/internal/link/* | \
     external/* | .gitmodules | mise.toml | desktop/go.mod | desktop/go.sum | \
-    .claude/workflows/* | tools/worktree.sh | tools/risk-tier.sh | .github/* | REVIEW.md)
+    .claude/workflows/* | tools/worktree.sh | tools/risk-tier.sh | tools/vulncheck.sh | desktop/vulncheck-baseline.txt | \
+    .github/* | REVIEW.md)
     echo high ;;
   CLAUDE.md | */CLAUDE.md | .claude/skills/*)
     echo medium ;; # instructions that steer later agents

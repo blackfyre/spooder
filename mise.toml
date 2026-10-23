@@ -1,5 +1,7 @@
 [tools]
 python = "3.13"
+# uv: mise's pipx backend installs PlatformIO through uvx.
+uv = "0.11.15"
 # pyyaml: the pioarduino ESP32 platform (bridge firmware) imports it from
 # PlatformIO's own environment.
 "pipx:platformio" = { version = "6.2.0", uvx_args = "--with pyyaml==6.0.3" }
@@ -97,6 +99,10 @@ run = [
 description = "Open the bridge's Bluepad32 console (BRIDGE_PORT, default /dev/ttyUSB0)"
 env = { PLATFORMIO_CORE_DIR = "{{config_root}}/.pio-core" }
 run = ".pio-core/penv/bin/pio device monitor -d firmware/bridge -p ${BRIDGE_PORT:-/dev/ttyUSB0} -b 115200"
+
+[tasks.vulncheck]
+description = "govulncheck of desktop/ against its shrink-only baseline (tools/vulncheck.sh)"
+run = "tools/vulncheck.sh"
 
 # Delivery worktrees (tools/worktree.sh): .claude/worktrees/<name> on branch
 # deliver/<name>, submodules cloned from this checkout, ready for every gate.

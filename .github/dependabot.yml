@@ -1,0 +1,27 @@
+# Dependabot: monthly version updates for what it can read here, each release
+# at least 7 days old (root CLAUDE.md, "Dependencies are pinned"). Security
+# updates (enabled in the repository settings) come at once, without the
+# cooldown. Not covered, kept by hand: the mise toolchains, the SDK submodules
+# (pinned to release tags; Dependabot would move them to branch heads), the
+# bridge's PlatformIO platform URL and the inline script dependencies.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: /desktop
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      go:
+        patterns: ["*"]

@@ -42,12 +42,15 @@ mise run virtual-robot-run  # run it, USB terminal linked at build/virtual-robot
 mise run desktop-sim      # both: the virtual robot in this terminal, the calibrator on its port
 mise run e2e             # build it, then the desktop end-to-end tests against it
 mise run bridge-screenshots  # render the bridge screen's pages to docs/images/bridge-*.png
+mise run vulncheck       # govulncheck of desktop/ against desktop/vulncheck-baseline.txt (shrink-only)
 mise run worktree-add <name>     # delivery worktree .claude/worktrees/<name> on deliver/<name>, from origin/main
 mise run worktree-remove <name>  # remove it and its local branch
 mise run clean
 ```
 
 **Verification gates:** `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build` and `mise run e2e`. Hardware behaviour can only be checked on the boards (the `spooder-hardware-check` skill).
+
+**CI** (`.github/workflows/ci.yml`) runs the same gates on a clean Ubuntu runner on every push to `main` and `deliver/*` and every pull request, and nightly with `mise run vulncheck`. It is an independent check, not a merge gate: the delivery workflow's own gates decide merges. Actions are pinned to commit SHAs.
 
 **Flash both boards together** when the link protocol changes (`protocol::VERSION`, now 3). A mismatched pair fails safe: each side discards the other's frames, so the link looks lost and the robot sleeps.
 
@@ -66,7 +69,7 @@ mise run clean
 
 - Debug text on the robot's USB port must stay printable ASCII (plus tab, CR, LF): the same port carries binary link frames.
 - Diagrams in Markdown (readme, skills, OpenSpec) are Mermaid code blocks, never ASCII art; the interactive architecture diagrams under `.archify/` are the exception. File-tree listings stay as text.
-- **Dependencies are pinned**: toolchains to exact versions in `mise.toml` (Python to its minor line), SDKs as git submodules at fixed tags, the bridge's PlatformIO platform by release URL, Go modules by the committed `desktop/go.sum`, script dependencies inline (`make_fonts.py`). Never let a build resolve an unpinned version; change pins in a reviewed commit, after reading the upstream changelog, and prefer releases at least 7 days old unless the update is a security fix. Not in place yet: vulnerability scanning (start with `govulncheck` for `desktop/`, adopted through a shrink-only baseline if it finds issues), a monthly update cadence, and SBOMs, which only matter once there are releases.
+- **Dependencies are pinned**: toolchains to exact versions in `mise.toml` (Python to its minor line), SDKs as git submodules at fixed tags, the bridge's PlatformIO platform by release URL, Go modules by the committed `desktop/go.sum`, script dependencies inline (`make_fonts.py`). Never let a build resolve an unpinned version; change pins in a reviewed commit, after reading the upstream changelog, and prefer releases at least 7 days old unless the update is a security fix. Dependabot (`.github/dependabot.yml`) proposes monthly updates of the GitHub Actions and the Go modules, each release at least 7 days old, and security updates at once; the mise toolchains, the SDK submodules (tag pins), the PlatformIO platform and inline script dependencies stay by hand. `govulncheck` runs nightly against a shrink-only baseline (`mise run vulncheck`). Not in place yet: SBOMs, which only matter once there are releases.
 - Record notable changes in `CHANGELOG.md` under **Unreleased** (Keep a Changelog sections), in the same commit as the change.
 - **Reviews** follow `REVIEW.md` (severity, evidence, the nit cap, skipped paths, known bug classes, the security lens, risk tiers). Every finding is answered: fixed, or closed as wrong, intentional or not mattering; pre-existing ones are reported, not fixed in the change. When the same problem is flagged twice, add the rule that prevents it to `REVIEW.md`, a `CLAUDE.md` or a skill.
 - **Delivering changes:** the `deliver-changes` workflow (`.claude/workflows/README.md`).

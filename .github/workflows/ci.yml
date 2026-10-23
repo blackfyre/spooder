@@ -1,0 +1,104 @@
+# Spooder's verification gates on a clean runner: an independent check of what
+# the delivery workflow runs locally (root CLAUDE.md). It does not gate merges.
+# Actions are pinned to commit SHAs; mise pins the toolchains (mise.toml).
+name: CI
+
+on:
+  push:
+    branches: [main, "deliver/**"]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *" # nightly: every gate, and govulncheck
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+
+jobs:
+  host-tests:
+    name: Host tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: 2026.8.11
+      - run: mise run test
+
+  firmware:
+    name: Robot firmware
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: 2026.8.11
+      - run: mise run setup
+      - run: mise run build
+      - run: mise run build --serial
+
+  bridge:
+    name: Bridge firmware
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: 2026.8.11
+      - run: mise run setup
+      # The pioarduino PlatformIO core with ESP-IDF and the Xtensa toolchain,
+      # keyed on the pinned platform and the component lock.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pio-core
+          key: pio-core-${{ runner.os }}-${{ hashFiles('firmware/bridge/platformio.ini', 'firmware/bridge/dependencies.lock') }}
+      - run: mise run build-bridge
+
+  desktop:
+    name: Desktop calibrator
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Gio's cgo build (desktop/CLAUDE.md lists the Fedora names).
+      - run: >-
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          pkg-config libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-dev
+          libx11-xcb-dev libxcursor-dev libxfixes-dev libegl1-mesa-dev libvulkan-dev
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: 2026.8.11
+      - run: mise run desktop-test
+      - run: mise run desktop-build
+      - run: mise run e2e
+
+  vulncheck:
+    name: govulncheck
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: >-
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          pkg-config libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-dev
+          libx11-xcb-dev libxcursor-dev libxfixes-dev libegl1-mesa-dev libvulkan-dev
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
+        with:
+          version: 2026.8.11
+      - run: mise run vulncheck
