@@ -42,6 +42,8 @@ mise run virtual-robot-run  # run it, USB terminal linked at build/virtual-robot
 mise run desktop-sim      # both: the virtual robot in this terminal, the calibrator on its port
 mise run e2e             # build it, then the desktop end-to-end tests against it
 mise run bridge-screenshots  # render the bridge screen's pages to docs/images/bridge-*.png
+mise run worktree-add <name>     # delivery worktree .claude/worktrees/<name> on deliver/<name>, from origin/main
+mise run worktree-remove <name>  # remove it and its local branch
 mise run clean
 ```
 
@@ -129,4 +131,12 @@ SPOODER_POWER_LIMITS=$PWD/firmware/servo2040/src/power_limits.example.h mise run
 - Diagrams in Markdown (readme, skills, OpenSpec) are Mermaid code blocks, never ASCII art; the interactive architecture diagrams under `.archify/` are the exception. File-tree listings stay as text.
 - **Dependencies are pinned**: toolchains to exact versions in `mise.toml` (Python to its minor line), SDKs as git submodules at fixed tags, the bridge's PlatformIO platform by release URL, Go modules by the committed `desktop/go.sum`, script dependencies inline (`make_fonts.py`). Never let a build resolve an unpinned version; change pins in a reviewed commit, after reading the upstream changelog, and prefer releases at least 7 days old unless the update is a security fix. Not in place yet: vulnerability scanning (start with `govulncheck` for `desktop/`, adopted through a shrink-only baseline if it finds issues), a monthly update cadence, and SBOMs, which only matter once there are releases.
 - Record notable changes in `CHANGELOG.md` under **Unreleased** (Keep a Changelog sections), in the same commit as the change.
+- **Delivering changes:** the `deliver-changes` workflow (`.claude/workflows/deliver-changes.js`) takes briefs or existing OpenSpec change names (`args: {items: [...], push?: true}`) and runs each, unattended and in parallel, in its own delivery worktree:
+  - propose the change, and have Codex review the proposal;
+  - apply it task group by task group, with a Codex review of each group;
+  - run the touched areas' gates and a final Codex review against the spec;
+  - update the docs and archive the change (only with no task open; hardware tasks keep it unarchived);
+  - merge, one change at a time: rebase, re-run the gates, fast-forward `main` and push.
+
+  A blocked change keeps its worktree for inspection. Merges need `main` checked out in the primary checkout, and refuse to touch its uncommitted work.
 - A CodeGraph index lives in `.codegraph/` (git-ignored). Refresh it with `codegraph sync` after large changes.
