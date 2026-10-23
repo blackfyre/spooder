@@ -3,7 +3,7 @@ schema: spec-driven
 context: |
   Firmware for a hexapod robot on a Pimoroni Servo 2040 (RP2040), C++ on
   pico-sdk 2.2.0 + pimoroni-pico v1.29.0-2 (pinned submodules in external/),
-  built with CMake via `mise run build` (requires a power_limits.h, see CLAUDE.md).
+  built with CMake via `mise run build` (requires a power_limits.h, see firmware/servo2040/CLAUDE.md).
   Hardware-free logic lives in core/ and is host-tested with Unity via
   `mise run test` (PlatformIO native env); hardware adapters live in
   firmware/servo2040/src/. A second firmware, firmware/bridge/ (TTGO T-Display,
