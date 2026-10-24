@@ -128,6 +128,13 @@ Decided without the user while delivering, and open to change:
 - the pad is sized for the LSM6DSO that `add-body-sensing` reads. An ADXL345 breakout may fit the same bosses mechanically, but no firmware reads it;
 - the Schottky diode is a DO-41 part (such as a 1N5819) inline in heat-shrink, until measured.
 
+From task group 1 (measurements and reference data), also open to change:
+- **Where the constants live:** `hardware/spooder-electronics-mount/measurements.py`, a standard-library module the build script (task 2.1) imports, rather than the top of the build script, so its README test runs without the CAD toolchain. `test_measurements.py` (the README table and the sources) and `reference_check.py` (the reference data against its files, with its dependencies locked by `uv lock --script` and run with `--locked`) run by hand until task 2.1 wires them into `mise run cad`.
+- **Nominal values beyond task 1.0's list,** each in the "Measure before printing" table: the LM2596's hole positions (on the diagonal, 31 × 15 mm apart) and pad inset, the fan's hole diameter and corner wire exit, the LSM6DSO breakout's two M2 holes 15 mm apart, the diode's 20 mm sleeve, and a seated servo plug's 20 mm height with its lead bent back (task 1.1 measures it).
+- **The Servo 2040 drawing:** its 13.60 and 17.40 dimensions run to the centres of the servo header's groups, and its 3.90 to the "+" row, with "−" above it and the signal row below, as the drawing's pads and silk labels show; its 14.00 is the EXT terminal's centre below the top edge. `hardware/pimoroni-servo2040/README.md` reads them differently (column 1 at 13.60, the signal row at 3.90, rows 14.00 deep); that text predates this change and is left for a later fix. Undimensioned positions (J6's row, at 1.50 on average from the bottom edge with its pads staggered, and the EXT terminal's x and pole pitch) are scaled from the drawing and re-checked against its pads.
+- **The wire sides on the Servo 2040** are nominal and listed to check on the board: the EXT terminal's (the board's right edge, from the `spooder-printed-parts` skill; the drawing does not show the terminal's opening) and the sensor header's (the right edge too, the nearest edge clear of other headers; its pins stand vertical).
+- **The T-Display model** has no USB-C connector, and its header pins stand out of the screen face. The holder treats both faces of the header rows as occupied and bears only on the bare spots (`TD_BARE`) of the other face.
+
 ## Open Questions
 
 - **The exact placement** of each part, within the principles above, follows from the measurements in task group 1.

@@ -2,7 +2,7 @@
 
 ## 1. Measurements and reference data
 
-- [ ] 1.0 Build from nominal values until the parts are measured: the SZBK07 at 60 × 54 × 28 mm with its terminals on the two short ends, the LM2596 at 45 × 20 × 14 mm with its holes on the diagonal, a 30 × 30 × 10 mm fan with 24 mm hole spacing, a 20 × 15 mm LSM6DSO breakout, and the Schottky diode as a DO-41 body of 5.2 × 2.7 mm in 6 mm heat-shrink. Each is a named constant, listed in the README's "Measure before printing" table with its source. Verify the table lists each one.
+- [x] 1.0 Build from nominal values until the parts are measured: the SZBK07 at 60 × 54 × 28 mm with its terminals on the two short ends, the LM2596 at 45 × 20 × 14 mm with its holes on the diagonal, a 30 × 30 × 10 mm fan with 24 mm hole spacing, a 20 × 15 mm LSM6DSO breakout, and the Schottky diode as a DO-41 body of 5.2 × 2.7 mm in 6 mm heat-shrink. Each is a named constant, listed in the README's "Measure before printing" table with its source. Verify the table lists each one.
 - [ ] 1.1 Measure the parts (requires the user with calipers):
   - the SZBK07's outline, which ends its terminals are on, and its heatsinks' height;
   - the LM2596's outline, its mounting-hole positions and its pad positions;
@@ -12,7 +12,7 @@
   - a servo plug seated on a header pin, with its lead bent back.
 
   Record them in the README's measurements table. Verify every entry has a value and a source.
-- [ ] 1.2 Collect the reference data from the repository's files:
+- [x] 1.2 Collect the reference data from the repository's files:
   - from the Servo 2040 drawing: the EXT terminal, the sensor header, J6 and the servo header;
   - from the T-Display STEP model: the bare spots on its underside;
   - from the frame top STL: open space and inserts.
