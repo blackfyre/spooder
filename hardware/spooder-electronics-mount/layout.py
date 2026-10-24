@@ -34,12 +34,12 @@ from __future__ import annotations
 
 import math
 
-from build123d import Axis, Location, Plane, Polygon, Solid, extrude
+from build123d import Align, Axis, Cone, Location, Plane, Polygon, Solid, Sphere, extrude
 
 import measurements as M
 from model import (FANS, IMU, J6, LM2596_OUTPUT_ROUTE, SCHOTTKY, SENSOR_HEADER, SERVO_2040, SIDES, SZBK07, AirChannel,
                    Assembly, Box6, Exposure, Fan, Held, ImuPad, Opening, Part, Route, Screw, Support, Terminal, Vent, box,
-                   box6, teardrop, turned)
+                   box6, turned)
 
 UP = (0.0, 0.0, 1.0)
 DOWN = (0.0, 0.0, -1.0)
@@ -1183,7 +1183,7 @@ def cover() -> Part:
     d = GROOVE_DEPTH
     shape = shape - (octagon(BOX_X + 1, BOX_Y + 1, BOX_DIAG + SQRT2, *GROOVE_Z)
                      - octagon(BOX_X - d, BOX_Y - d, BOX_DIAG - d * SQRT2, GROOVE_Z[0] - 1, GROOVE_Z[1] + 1))
-    shape = shape + rails() - rail_pilots() + plates() - panel_lines()
+    shape = shape + rails() + plates() - panel_lines() - dimples()
     for xa, xb in ((SZ_BOX[0], SZ_BOX[0] + SZ_HOLD[0]), (SZ_BOX[1] - SZ_HOLD[0], SZ_BOX[1])):
         for ya, yb in ((SZ_BOX[2], SZ_BOX[2] + SZ_HOLD[1]), (SZ_BOX[3] - SZ_HOLD[1], SZ_BOX[3])):
             shape = shape + box(xa, xb, ya, yb, SZ_BOX[5] + SZ_HOLD_GAP, LID_Z0 + EMBED)
@@ -1237,23 +1237,30 @@ GUARD_S = RAIL_S - RAIL_HEAD / 2 - SLIDE - HOOK_WALL  # the posts' inner edges a
 GUARD_JAW = 3.4  # how far the posts reach past the face's ends, round the rails' heads. Source: chosen, HOOK_WALL past them.
 GUARD_Z0 = RAIL_Z0  # the posts' foot
 GUARD_WRAP = 6.0  # how far it wraps along the side walls. Source: chosen.
+GUARD_WRAP_T = 1.6  # the wraps' thickness: thin skirts that spring aside for the detents. Source: chosen, four perimeters.
 GUARD_WRAP_Z0 = 57.0  # the wraps' foot, above the inlet's grille (55.85). Source: chosen.
 GUARD_CAP_Z0 = 69.0  # the cap's foot, above the outlet's grille (68.45). Source: chosen.
 GUARD_CAP_IN = 4.4  # how far the cap reaches in from the walls, over the chamfer and clear of the cover's screw heads. Source: chosen.
 GUARD_BEVEL = 2.0  # the 45-degree bevel round its top. Source: chosen.
 # The posts' V grooves: 1 mm deep with 45-degree flanks, between ridges
-# centred at these heights, clear of the retaining screw's head. Source: chosen.
-RIDGE_Z = (43.0, 47.0, 57.0, 61.0, 65.0)
+# centred at these heights. Source: chosen.
+RIDGE_Z = (43.0, 47.0, 51.0, 55.0, 59.0, 63.0, 67.0)
 RIDGE_DEPTH = 1.0
-# An M2 x 6 self-tapping screw through one post into its rail keeps the
-# guard on its rails when the robot is turned over or shaken; it comes out
-# from outside to change the guard. The rail's pilot reaches into the
-# cover's wall, leaving this much of it. Source: chosen; the pilot as the
-# IMU's (PILOT_M2_D), the clearance the skill's M2.5 clearance (2.9) less 0.5.
-RETAIN_Z = 52.0
-RETAIN_SCREW = (2.0, 6.0)  # its shank's diameter and length
-RETAIN_CLEAR_D = 2.4
-RETAIN_WALL_LEFT = 0.6
+# A detent keeps the guard on its rails when the robot is turned over or
+# shaken: on each wrap's inner face, a quarter-sphere bump (its flat face up,
+# its round face down) that snaps into a matching dimple in the side wall,
+# DETENT_FIT larger. Sliding the guard down, the bump's round face rides
+# over the wall and the wrap, a thin skirt held along its top and its end
+# at the post, springs aside at its free lower corner, where the bump is;
+# lifted, its flat face catches the dimple's. The flat faces do not cam
+# apart: to change the guard, spring both wraps out (a fingernail or a
+# screwdriver under each) and lift. DETENT_T along the wall from the corner
+# face's end, at DETENT_Z, clear of the plates and the inlet's grille.
+# Source: chosen; test prints (task 7.2) set DETENT_R.
+DETENT_R = 0.7  # the bump's radius: the wrap springs DETENT_R - SLIDE aside
+DETENT_FIT = 0.15
+DETENT_T = 4.5
+DETENT_Z = 59.0
 
 
 def corner_location(k: int) -> Location:
@@ -1307,26 +1314,54 @@ def rails() -> Solid:
     return at_corners(one)
 
 
-def rail_pilots() -> Solid:
-    """The retaining screws' pilots, through each screwed post's rail into the cover's
-    wall: horizontal as the cover prints, so teardrops pointing down (up as
-    printed)."""
-    n0, n1 = -(WALL - RETAIN_WALL_LEFT), RAIL_D + 0.5
-    return at_corners(teardrop(PILOT_M2_D / 2, n1 - n0, -RAIL_S, (n0 + n1) / 2, RETAIN_Z, "y", DOWN))
+def detent_seats() -> list[tuple[tuple[float, float, float], tuple[float, float, float]]]:
+    """The front-right guard's detents: each one's centre (on the wrap's
+    inner face) and the way into the wall, in the robot's frame."""
+    z = DETENT_Z
+    return [((BOX_X + SLIDE, BOX_DIAG - BOX_X - DETENT_T, z), (-1.0, 0.0, 0.0)),  # on the right wall
+            ((BOX_DIAG - BOX_Y - DETENT_T, BOX_Y + SLIDE, z), (0.0, -1.0, 0.0))]  # on the front wall
 
 
-def bumper_screws() -> list[Screw]:
-    """Each guard's retaining screw: the head on the screwed post's outer
-    face, driven in along -n from outside."""
-    found = []
+def quarter_sphere(r: float, centre, inward, top: float, point: bool = False) -> Solid:
+    """A sphere of radius r about `centre`, on the `inward` side of it (and
+    TOUCH outward, to join the face it stands on) and below z `top`. With
+    `point`, a 45-degree cone below it, tangent to it: a teardrop pointing
+    down, so a hollow of this shape prints lid-down (up -z)."""
+    (cx, cy, cz), (ix, iy, _) = centre, inward
+    w = r * SQRT2 + 1.0
+    x0, x1 = (cx - w, cx + TOUCH) if ix < 0 else (cx - w, cx + w)
+    y0, y1 = (cy - w, cy + TOUCH) if iy < 0 else (cy - w, cy + w)
+    shape = Sphere(r).moved(Location(centre))
+    if point:
+        h = r / SQRT2  # from the apex, r * sqrt 2 below the centre, up to the circle where it meets the sphere
+        shape = shape + Cone(0.0, h, h, align=(Align.CENTER, Align.CENTER, Align.MIN)).moved(
+            Location((cx, cy, cz - r * SQRT2)))
+    return shape & box(x0, x1, y0, y1, cz - w, top)
+
+
+def detents() -> Solid:
+    """The front-right guard's bumps."""
+    out = None
+    for c, inward in detent_seats():
+        b = quarter_sphere(DETENT_R, c, inward, c[2])
+        out = b if out is None else out + b
+    return out
+
+
+def dimples() -> Solid:
+    """The dimples in the cover's side walls that the guards' bumps snap
+    into, at all four corners, pointed below as teardrops (the cover prints
+    lid-down)."""
+    one = None
+    for c, inward in detent_seats():
+        d = quarter_sphere(DETENT_R + DETENT_FIT, c, inward, c[2] + DETENT_FIT, point=True)
+        one = d if one is None else one + d
+    first = corner_location(0)
+    out = None
     for k in range(4):
-        a = math.radians((-45.0, 45.0, 135.0, -135.0)[k])
-        cx, cy = (CORNER_CENTRE[0] * (1, -1, -1, 1)[k], CORNER_CENTRE[1] * (1, 1, -1, -1)[k])
-        out = (-math.sin(a), math.cos(a), 0.0)  # n in the robot's frame
-        x = cx - RAIL_S * math.cos(a) + GUARD_T * out[0]
-        y = cy - RAIL_S * math.sin(a) + GUARD_T * out[1]
-        found.append(Screw(f"bumper {k + 1} screw", (x, y, RETAIN_Z), out, shank=RETAIN_SCREW))
-    return found
+        d = one.moved(corner_location(k) * first.inverse())
+        out = d if out is None else out + d
+    return out
 
 
 def grown_octagon(grow: float, z0: float, z1: float) -> Solid:
@@ -1372,7 +1407,7 @@ def bumper() -> Part:
     quarter = box(BOX_DIAG - BOX_Y - GUARD_WRAP, 200.0, BOX_DIAG - BOX_X - GUARD_WRAP, 200.0, GUARD_Z0 - 1.0, z1 + 1.0)
     posts = (outside & corner_box(GUARD_S, CORNER_HALF + GUARD_JAW, 0.0, 2 * GUARD_T, GUARD_Z0 - 1.0)) \
         + (outside & corner_box(-CORNER_HALF - GUARD_JAW, -GUARD_S, 0.0, 2 * GUARD_T, GUARD_Z0 - 1.0))
-    wraps = ((outside - grown_octagon(0.0, GUARD_Z0 - 1.0, z1 + 1.0)) & quarter
+    wraps = ((grown_octagon(SLIDE + GUARD_WRAP_T, GUARD_Z0, z1) - grown_octagon(0.0, GUARD_Z0 - 1.0, z1 + 1.0)) & quarter
              & box(-200.0, 200.0, -200.0, 200.0, GUARD_WRAP_Z0, z1 + 1.0)) \
         - corner_box(-GUARD_S, GUARD_S, -40.0, 40.0, GUARD_Z0 - 1.0)
     cap = (outside - grown_octagon(-GUARD_CAP_IN, GUARD_Z0 - 1.0, z1 + 1.0)) & quarter \
@@ -1381,11 +1416,12 @@ def bumper() -> Part:
     for s0 in (-RAIL_S, RAIL_S):
         slot = xy_prism(rail_profile(s0, SLIDE, -1.0), GUARD_Z0 - 1.0, z1 + 1.0) & below_wedge(SLIDE * SQRT2)
         shape = shape - slot.moved(first)
-    shape = shape - teardrop(RETAIN_CLEAR_D / 2, HOOK_BACK + 2.0, -RAIL_S, GUARD_T - HOOK_BACK / 2, RETAIN_Z,
-                             "y", DOWN).moved(first)
+    bumps = detents()
+    shape = shape + bumps
     copies = tuple(corner_location(k) * first.inverse() for k in (1, 2, 3))
     a = math.radians(-45.0)
-    return Part("bumper", shape, "bumper", DOWN, "yellow", copies=copies, outward=(-math.sin(a), math.cos(a), 0.0))
+    return Part("bumper", shape, "bumper", DOWN, "yellow", copies=copies, outward=(-math.sin(a), math.cos(a), 0.0),
+                detents=bumps)
 
 
 def channel() -> AirChannel:
@@ -1491,7 +1527,7 @@ def screws() -> list[Screw]:
                            after=(SERVO_2040, "cover")))
     for i, (x, y) in enumerate(COVER_SCREWS):
         found.append(Screw(f"cover screw {i + 1}", (x, y, LID_Z1 + BUTTON_HEAD_H), UP))
-    return found + bumper_screws()
+    return found
 
 
 # --------------------------------------------------------------------------- the assembly

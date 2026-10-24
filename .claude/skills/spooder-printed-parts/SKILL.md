@@ -103,8 +103,9 @@ No part may need support.
 | M2 self-tapping into PETG | pilot 1.6 (`PILOT_M2_D`) |
 | Board standoffs | as the stack under the board needs (the Servo 2040's clear the LSM6DSO's pad under it: `S2_STANDOFF`) |
 
-- **Screws that are undone in service go into heat-set inserts.** Self-tapping is for fit-once parts (boards and modules). An exception needs its reason in the change's design: the bumpers' M2 screws are self-tapping because an M2 insert would cut through the rail's 3 mm neck, and a bumper is replaced only when it breaks.
+- **Screws that are undone in service go into heat-set inserts.** Self-tapping is for fit-once parts (boards and modules). An exception needs its reason in the change's design.
 - **Every screw needs a straight driver path,** checked with a Ø4 cylinder above the head.
+- **A part that slides on and must stay on can snap instead of screwing** (the bumpers): a quarter-sphere bump on a springy part of it, flat face against the way off, round face leading, into a dimple DETENT_FIT larger. A dimple in a wall that prints on its side gets a 45° point below as printed (a teardrop in 3D).
 
 ## Assembly and service
 

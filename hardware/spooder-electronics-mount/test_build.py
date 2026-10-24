@@ -632,38 +632,48 @@ class CoverChecks(unittest.TestCase):
         self.assertTrue(fails(f, "something lies above it", "does not lift straight off"), f)
 
 
-def railed_cover() -> Part:
+DETENT = ((24.2, 0.0, 45.0), (-1.0, 0.0, 0.0))  # on the slot's back, into the rail's head
+
+
+def railed_cover(dimple: float = 0.95) -> Part:
     """The test cover with a T rail on its +x wall, a 2 mm neck and a 5 mm
-    head, from z 36 to 49."""
+    head, from z 36 to 49, with a dimple of radius `dimple` in its head."""
     c = cover()
     c.shape = c.shape + box(21.5, 23, -1, 1, 36, 49) + box(23, 24, -2.5, 2.5, 36, 49)
+    c.shape = c.shape - L.quarter_sphere(dimple, *DETENT, DETENT[0][2] + dimple - 0.8)
     return c
 
 
-def rail_bumper(lift: float = 0.0, slide: float = 0.2, top: float = 55.0, role: str = "bumper") -> Part:
+def rail_bumper(lift: float = 0.0, slide: float = 0.2, top: float = 55.0, role: str = "bumper",
+                detent: bool = True) -> Part:
     """A block round the rail, `slide` clear of it and of the wall, its slot
-    closed `slide` over the rail's top."""
+    closed `slide` over the rail's top, with a 0.8 mm detent into the rail's head."""
     slot = box(21, 23 + slide, -1 - slide, 1 + slide, 37, 49 + slide) \
         + box(23 - slide, 24 + slide, -2.5 - slide, 2.5 + slide, 37, 49 + slide)
     shape = box(22 + slide, 26.4, -4.4, 4.4, 38, top) - slot
-    return Part("bumper", shape.moved(Location((0, 0, lift))), role, DOWN, "yellow", outward=(1.0, 0.0, 0.0))
-
-
-RETAINER = Screw("bumper screw", (26.4, 0.0, 45.0), (1.0, 0.0, 0.0), shank=(2.0, 4.0))  # through it into the rail
+    bump = L.quarter_sphere(0.8, *DETENT, DETENT[0][2])
+    if detent:
+        shape = shape + bump
+    at = Location((0, 0, lift))
+    return Part("bumper", shape.moved(at), role, DOWN, "yellow", outward=(1.0, 0.0, 0.0),
+                detents=bump.moved(at) if detent else None)
 
 
 class Bumpers(unittest.TestCase):
-    def asm(self, *parts: Part, screws=(RETAINER,)) -> Assembly:
-        return Assembly(parts=[railed_cover(), *parts], screws=list(screws))
+    def asm(self, *parts: Part, cover: Part | None = None) -> Assembly:
+        return Assembly(parts=[cover or railed_cover(), *parts])
 
     def test_a_bumper_on_its_rail_rests_slides_and_lifts_off(self):
         f = C.check_bumpers(self.asm(rail_bumper()))
         self.assertFalse(fails(f, "bumper:") or fails(f, "bumper copy"), f)
 
-    def test_a_bumper_without_its_screw_or_with_a_short_one_fails(self):
-        self.assertTrue(fails(C.check_bumpers(self.asm(rail_bumper(), screws=())), "bumper: no screw holds it"))
-        short = Screw("bumper screw", (26.4, 0.0, 45.0), (1.0, 0.0, 0.0), shank=(2.0, 2.0))  # ends in the slot
-        self.assertTrue(fails(C.check_bumpers(self.asm(rail_bumper(), screws=(short,))), "bumper: no screw holds it"))
+    def test_a_bumper_without_a_detent_or_with_one_that_does_not_catch_fails(self):
+        f = C.check_bumpers(self.asm(rail_bumper(detent=False)))
+        self.assertTrue(fails(f, "bumper: no detent holds it"), f)
+        f = C.check_bumpers(self.asm(rail_bumper(), cover=railed_cover(dimple=1.5)))  # a dimple far too big
+        self.assertTrue(fails(f, "bumper: lifted 0.5 mm its detents meet no cover"), f)
+        f = C.check_bumpers(self.asm(rail_bumper(), cover=railed_cover(dimple=0.0001)))  # no dimple
+        self.assertTrue(fails(f, "bumper: its detents press into cover"), f)
 
     def test_a_bumper_off_its_stop_fails(self):
         self.assertTrue(fails(C.check_bumpers(self.asm(rail_bumper(lift=2.0))), "nothing stops it"))
@@ -683,9 +693,8 @@ class Bumpers(unittest.TestCase):
         f = C.check_bumpers(self.asm(rail_bumper(top=52.5)))
         self.assertTrue(fails(f, "upwards (their tops)", "past the cover"), f)
         head = Screw("cover screw", (0.0, 0.0, 54.5), UP)
-        f = C.check_bumpers(Assembly(parts=[railed_cover(), rail_bumper()], screws=[head, RETAINER]))
+        f = C.check_bumpers(Assembly(parts=[railed_cover(), rail_bumper()], screws=[head]))
         self.assertTrue(fails(f, "upwards (their tops)", "past the cover screw"), f)
-        self.assertFalse(fails(f, "past the bumper screw"), f)
         screen = Held("t-display", box(-6, 6, -6, 6, 45, 54.5), exposed=(Exposure(UP, (-6, 6, -6, 6, 54.5, 54.5)),))
         f = C.check_bumpers(Assembly(parts=[railed_cover(), rail_bumper()], held=[screen]))
         self.assertTrue(fails(f, "upwards (their tops)", "past the t-display"), f)
@@ -1344,6 +1353,12 @@ class Layout(unittest.TestCase):
         b = self.part("bumper")
         self.assertEqual((b.role, b.colour, b.print_up, len(b.instances())), ("bumper", "yellow", DOWN, 4))
         self.assertEqual(C.check_bumpers(self.asm), [])
+
+    def test_a_bumper_whose_detents_are_missing_fails(self):
+        # Declared, but not on the part: nothing catches.
+        b = self.part("bumper")
+        asm = Assembly(parts=[self.part("cover"), replace(b, shape=b.shape - b.detents)])
+        self.assertTrue(fails(C.check_bumpers(asm), "bumper: its detents are not part of it"))
         self.assertEqual(C.check_overhangs(Assembly(parts=[b])), [])
         top = min(i.bounding_box().max.Z for i in b.instances())
         screen = next(e for h in self.asm.held if h.name == "t-display" for e in h.exposed if e.must_show)
@@ -1400,30 +1415,38 @@ class Layout(unittest.TestCase):
         asm = Assembly(parts=self.asm.parts, held=[h for h in self.asm.held if h.name not in FANS])
         self.assertEqual(C.check_captive(asm), [])
 
-    def test_the_bumpers_are_screwed_to_their_rails(self):
-        screws = [s for s in self.asm.screws if s.name.startswith("bumper")]
-        self.assertEqual(len(screws), 4)
+    def test_the_bumpers_snap_onto_their_rails(self):
+        # No screws: two detents per guard, one on each wrap, each sitting in
+        # its dimple in the cover's side wall.
+        self.assertFalse([s for s in self.asm.screws if s.name.startswith("bumper")])
         b = self.part("bumper")
-        covers = [self.part("cover")]
-        for inst in b.instances():
-            self.assertEqual(sum(C.retains(s, inst, covers) for s in screws), 1)
+        self.assertEqual(len(b.detents.solids()), 2)
+        self.assertLess(C.common(self.part("cover").shape, L.detents()), C.VOLUME_TOL)
+        self.assertGreater(C.common(L.cover_outside(0.0), L.detents()), C.VOLUME_TOL, "they reach into the wall")
+        self.assertEqual(C.check_bumpers(self.asm), [])
+
+    def test_a_bumper_whose_detents_are_missing_fails(self):
+        # Declared, but not on the part: nothing catches.
+        b = self.part("bumper")
+        asm = Assembly(parts=[self.part("cover"), replace(b, shape=b.shape - b.detents)])
+        self.assertTrue(fails(C.check_bumpers(asm), "bumper: its detents are not part of it"))
 
     def test_a_bumper_on_straight_rails_comes_off(self):
         # Its rails' dovetails keep it on: on straight rails it pulls off.
         old = L.RAIL_HEAD
         try:
             L.RAIL_HEAD = L.RAIL_NECK
-            asm = Assembly(parts=[L.cover(), L.bumper()], screws=L.bumper_screws())
+            asm = Assembly(parts=[L.cover(), L.bumper()])
             self.assertTrue(fails(C.check_bumpers(asm), "bumper: one end, pulled up to", "comes off its rail"))
         finally:
             L.RAIL_HEAD = old
 
     def test_a_bumper_held_by_one_rail_fails(self):
-        # The unscrewed post's jaws cut away: the screwed post's dovetail
-        # must not hide that the other end peels off its rail.
+        # One post's jaws cut away: the other post's dovetail must not hide
+        # that this end peels off its rail.
         b = self.part("bumper")
         cut = box(L.RAIL_S - 8, L.RAIL_S + 9, -2, L.RAIL_D + L.SLIDE + 0.01, 39, 72).moved(L.corner_location(0))
-        asm = Assembly(parts=[self.part("cover"), replace(b, shape=b.shape - cut)], screws=L.bumper_screws())
+        asm = Assembly(parts=[self.part("cover"), replace(b, shape=b.shape - cut)])
         f = C.check_bumpers(asm)
         self.assertTrue(fails(f, "bumper: the other end", "comes off its rail"), f)
         self.assertFalse(fails(f, "bumper: one end"), f)

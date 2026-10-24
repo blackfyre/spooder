@@ -70,7 +70,7 @@
 
 - [x] 7.1 Run `mise run cad` and `mise run cad-preview` from a clean checkout. Verify all checks pass, the export test passes, and the images are regenerated. Get a Codex review of physical and assembly problems, and answer every finding.
 - [ ] 7.2 Test prints (requires the user at the printer):
-  - a bumper on a rail section: it slides, holds, and its hollow shell gives and springs back;
+  - a bumper on a rail section: it slides, snaps on and holds on its detents, comes off with a firm pull, and its hollow shell gives and springs back;
   - a deck post with an insert: it holds an M3 screw at hand torque;
   - a fan in its holder;
   - the XT60 holder with the socket: plugged and unplugged ten times, the socket does not move.

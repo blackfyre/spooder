@@ -112,6 +112,9 @@ class Part:
     # A bumper's way off the cover (its first copy's), along which its rails
     # must keep it on.
     outward: Vec3 | None = None
+    # A bumper's detents (its first copy's): bumps that snap into dimples in
+    # the cover, keeping it on its rails; they spring aside to take it off.
+    detents: Shape | None = None
 
     def instances(self) -> list[Shape]:
         return [self.shape] + [self.shape.moved(loc) for loc in self.copies]

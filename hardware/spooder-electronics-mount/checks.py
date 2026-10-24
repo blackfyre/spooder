@@ -140,15 +140,14 @@ BUMPER_STEP = 5.0
 # below the layout's sliding fit (0.2).
 BUMPER_STOP = 0.5
 BUMPER_PLAY = 0.1
+# Lifted this far, a bumper's detents meet the cover: they catch in their
+# dimples. Source: chosen, above the layout's DETENT_FIT (0.15).
+BUMPER_CATCH = 0.5
 # A bumper pulled off the cover (along its `outward`) meets the cover before
 # it has gone this far: its rails keep it on. Source: chosen, beyond the
 # layout's rails (3 mm deep); the pull is sampled every BUMPER_PULL_STEP.
 BUMPER_PULL = 5.0
 BUMPER_PULL_STEP = 0.25
-# A screw's head lies on a part when its centre is this near it, or (for a
-# screw with a shank, whose head centre lies over its hole) within its
-# shank's diameter. Source: chosen.
-SCREW_ON = 0.1
 # A supporting part bears on a held part's underside where it comes within
 # CONTACT_GAP of it, over at least CONTACT_AREA in each bearing region; the
 # held part moved LOCATE sideways meets it. Source: chosen.
@@ -1122,11 +1121,12 @@ def imu_failures(asm: Assembly, imu) -> list[str]:
 def check_bumpers(asm: Assembly) -> list[str]:
     """The bumpers stand BUMPER_PROUD proud of the cover, every held part and
     the cover's screw heads in every horizontal direction and upwards (their
-    tops above the lid and the screen); each is held on its rails by a screw
-    into the cover, rests on its stop on the cover, slides on its rails, and
-    with its screws out lifts off them with the cover in place, meeting
-    nothing; each half of it, pulled off the cover, meets it within
-    BUMPER_PULL (its rails keep it on)."""
+    tops above the lid and the screen); each is held on its rails by
+    detents, which sit clear in their dimples and, lifted BUMPER_CATCH,
+    meet the cover; it rests on its stop on the cover, slides on its rails,
+    and with its detents sprung aside lifts off them with the cover in
+    place, meeting nothing; each half of it, pulled off the cover, meets it
+    within BUMPER_PULL (its rails keep it on)."""
     bumpers = [p for p in asm.parts if p.role == "bumper"]
     if not bumpers:
         return []
@@ -1134,16 +1134,10 @@ def check_bumpers(asm: Assembly) -> list[str]:
     pts = np.concatenate([vertices(s) for p in bumpers for s in p.instances()])
     covers = [p for p in asm.parts if p.role == "cover"]
     cover_names = {c.name for c in covers}
-    instances = [s for p in bumpers for s in p.instances()]
-
-    def on_a_bumper(screw) -> bool:
-        return any(head_on(screw, s) for s in instances)
-
     others = [(c.name, vertices(s)) for c in covers for s in c.solids()]
     others += [(h.name, vertices(h.shape)) for h in asm.held]
-    # The screws driven with the cover on (the cover's own), not the bumpers'.
-    others += [(s.name, np.array([s.head])) for s in asm.screws
-               if not cover_names & set(s.after) and not on_a_bumper(s)]
+    # The screws driven with the cover on (the cover's own).
+    others += [(s.name, np.array([s.head])) for s in asm.screws if not cover_names & set(s.after)]
     dirs = [(math.cos(math.radians(a)), math.sin(math.radians(a)), 0.0) for a in np.arange(0.0, 360.0, BUMPER_STEP)]
     for d in dirs + [(0.0, 0.0, 1.0)]:
         v = np.asarray(d)
@@ -1175,15 +1169,28 @@ def check_bumpers(asm: Assembly) -> list[str]:
                                for d in pulls for s in on):
                         failures.append(f"{label}: {end}, pulled up to {BUMPER_PULL} mm off the cover, meets nothing: "
                                         "it comes off its rail")
-            if covers and not any(retains(sc, inst, covers) for sc in asm.screws):
-                failures.append(f"{label}: no screw holds it on its rails: turned over, it slides off")
-            lowered = inst.moved(Location((0, 0, -BUMPER_STOP)))
+            body = inst
+            if part.detents is None:
+                failures.append(f"{label}: no detent holds it on its rails: turned over, it slides off")
+            else:
+                bumps = part.detents.moved(locs[i])
+                body = inst - bumps
+                hit = next((lb for lb, s in rest if common(bumps, s) > VOLUME_TOL), None)
+                if volume(bumps) - common(inst, bumps) > VOLUME_TOL:
+                    failures.append(f"{label}: its detents are not part of it: turned over, it slides off")
+                elif hit:
+                    failures.append(f"{label}: its detents press into {hit}: they do not sit in dimples")
+                elif on and not any(common(bumps.moved(Location((0, 0, BUMPER_CATCH))), s) > VOLUME_TOL for s in on):
+                    failures.append(f"{label}: lifted {BUMPER_CATCH} mm its detents meet no cover: "
+                                    "turned over, it slides off")
+            lowered = body.moved(Location((0, 0, -BUMPER_STOP)))  # the stop, not its detents
             if covers and not any(common(lowered, s) > VOLUME_TOL for lb, s in rest if base_name(lb) in cover_names):
                 failures.append(f"{label}: lowered {BUMPER_STOP} mm it meets no cover: nothing stops it on its rails")
             for dz in LIFT_STEPS:
-                hit = next((lb for lb, s in rest if common(inst.moved(Location((0, 0, dz))), s) > VOLUME_TOL), None)
+                hit = next((lb for lb, s in rest if common(body.moved(Location((0, 0, dz))), s) > VOLUME_TOL), None)
                 if hit:
-                    failures.append(f"{label}: lifted {dz} mm it meets {hit}: it does not come off with the cover on")
+                    failures.append(f"{label}: lifted {dz} mm (its detents sprung aside) it meets {hit}: "
+                                    "it does not come off with the cover on")
                     break
             for dx, dy in ((BUMPER_PLAY, 0), (-BUMPER_PLAY, 0), (0, BUMPER_PLAY), (0, -BUMPER_PLAY)):
                 hit = next((lb for lb, s in rest if common(inst.moved(Location((dx, dy, 0))), s) > VOLUME_TOL), None)
@@ -1191,21 +1198,6 @@ def check_bumpers(asm: Assembly) -> list[str]:
                     failures.append(f"{label}: moved {fmt((dx, dy))} it meets {hit}: no sliding fit")
                     break
     return failures
-
-
-def head_on(screw, shape: Shape) -> bool:
-    return Vertex(*screw.head).distance_to(shape) <= max(SCREW_ON, screw.shank[0])
-
-
-def retains(screw, inst: Shape, covers) -> bool:
-    """Whether a screw's head lies on the bumper `inst` and its shank reaches
-    from there into the cover."""
-    d, length = screw.shank
-    if length <= 0 or not head_on(screw, inst):
-        return False
-    axis = -np.asarray(screw.axis, dtype=float)
-    shank = cylinder(d / 2, screw.head, tuple(axis), length)
-    return any(common(shank, s) > VOLUME_TOL for c in covers for s in c.solids())
 
 
 def check_captive(asm: Assembly) -> list[str]:
