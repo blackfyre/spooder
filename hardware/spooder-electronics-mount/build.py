@@ -35,7 +35,7 @@ sys.path.insert(0, str(HERE))
 
 from checks import run_checks  # noqa: E402
 from export import export_parts, verify_export  # noqa: E402
-from layout import assembly  # noqa: E402
+from layout import assembly, measurement_failures  # noqa: E402
 from model import Assembly  # noqa: E402
 
 
@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None, outdir: Path = HERE, make: Callable[[], 
     print(f"{len(asm.parts)} parts, {len(asm.held)} held parts, {len(asm.routes)} routes, "
           f"{len(asm.openings)} openings, {len(asm.screws)} screws, "
           f"{'an' if asm.channel else 'no'} air channel")
-    failures = run_checks(asm)
+    failures = measurement_failures() + run_checks(asm)
     if failures:
         print(f"\n{len(failures)} check(s) failed; nothing written:")
         for f in failures:

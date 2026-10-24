@@ -7,6 +7,7 @@ Standard library only. Checks that:
   its line or in the comment block above it (or above its group);
 - the constants whose source is "nominal", or that say they are assumed,
   are exactly MEASURE_BEFORE_PRINTING;
+- each of them is read by layout.py or checks.py, or listed in REFERENCE_ONLY;
 - the README's table lists each of them once, with a source, and lists
   nothing else;
 - its measured column is either "not yet", with the nominal value still in
@@ -80,6 +81,20 @@ class Sources(unittest.TestCase):
         nominal = {n for n, t in constants_with_sources().items() if re.search(r"Source: nominal|assumed", t)}
         self.assertEqual(nominal, set(measurements.MEASURE_BEFORE_PRINTING))
         self.assertEqual(len(measurements.MEASURE_BEFORE_PRINTING), len(set(measurements.MEASURE_BEFORE_PRINTING)))
+
+
+class Used(unittest.TestCase):
+    def test_every_value_to_measure_reaches_the_build(self):
+        # A measured value the build never reads would change nothing when
+        # recorded: each one is read by layout.py (sizing a part, or checked by
+        # measurement_failures()) or checks.py, or recorded as reference only.
+        layout = "".join((HERE / f).read_text(encoding="utf-8") for f in ("layout.py", "checks.py"))
+        self.assertLessEqual(set(measurements.REFERENCE_ONLY), set(measurements.MEASURE_BEFORE_PRINTING))
+        for name in measurements.MEASURE_BEFORE_PRINTING:
+            with self.subTest(name=name):
+                used = re.search(rf"\bM\.{name}\b", layout) is not None
+                self.assertTrue(used or name in measurements.REFERENCE_ONLY, f"the build never reads {name}")
+                self.assertFalse(used and name in measurements.REFERENCE_ONLY, f"{name} is read, not reference only")
 
 
 class ReadmeTable(unittest.TestCase):

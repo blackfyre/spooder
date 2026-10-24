@@ -25,7 +25,7 @@ from contextlib import redirect_stdout
 from dataclasses import replace
 from pathlib import Path
 
-from build123d import Location
+from build123d import Location, Plane, Solid
 
 import build
 import checks as C
@@ -318,6 +318,22 @@ class Overhangs(unittest.TestCase):
         self.assertEqual(self.check(narrow), [])
         self.assertTrue(fails(self.check(wide), "downward face"))
 
+    def test_a_narrow_cantilever_fails_and_a_short_ledge_passes(self):
+        # An arm 2.4 mm wide from a column: narrow enough to bridge, but held
+        # at one end only (the exhaust holders' first lips).
+        column = box(0, 3, 0, 2.4, 0, 12)
+        f = self.check(column + box(-4, 3, 0, 2.4, 8, 10))
+        self.assertTrue(fails(f, "downward face", "a cantilever"), f)
+        # (Its sides are flush with the column's, one face each with it: the
+        # column below them does not hold the arm up.)
+        self.assertEqual(self.check(column + box(-2.5, 3, 0, 2.4, 8, 10)), [])
+
+    def test_a_cantilever_with_a_45_degree_underside_passes(self):
+        from build123d import Polygon, extrude, Plane
+        column = box(0, 3, 0, 2.4, 0, 12)
+        arm = extrude(Plane.XZ * Polygon((0, 8), (-4, 12), (0, 12), align=None), amount=-2.4).solid()
+        self.assertEqual(self.check(column + arm), [])
+
     def test_a_45_degree_chamfer_passes_and_a_steeper_one_fails(self):
         from build123d import Polygon, extrude, Plane
         def wedge(run):  # a profile in xz rising from the bed, overhanging by `run` over 10 mm of height
@@ -410,6 +426,51 @@ class AirChannelCheck(unittest.TestCase):
         asm = Assembly(parts=[block(40, 42, 27, 42, 32, 60, name="grille")], held=[self.SZBK07],
                        channel=self.channel())
         self.assertTrue(fails(C.check_air_channel(asm), "air channel outlet", "grille enters"))
+
+    def grille(self, filled: int = 0) -> tuple[Part, Vent]:
+        """A wall beyond the outlet (x 42..44) with five 2 x 30 slots, 300 mm²
+        open, the first `filled` of them filled in."""
+        wall = box(42, 44, 26, 43, 30, 62)
+        for i in range(5):
+            if i >= filled:
+                wall = wall - box(41, 45, 28 + 3 * i, 30 + 3 * i, 31, 61)
+        return (Part("cover", wall, "cover", DOWN, "black"),
+                Vent("outlet", box(42, 44, 26, 43, 30, 62), 300.0, (1.0, 0.0, 0.0)))
+
+    def test_vents_are_measured_through_the_cover(self):
+        cov, vent = self.grille()
+        asm = Assembly(parts=[cov], held=[self.SZBK07], channel=self.channel(inlet_open_area=300.0), vents=[vent])
+        self.assertEqual(C.check_air_channel(asm), [])
+        cov, vent = self.grille(filled=1)
+        asm = Assembly(parts=[cov], held=[self.SZBK07], channel=self.channel(inlet_open_area=300.0), vents=[vent])
+        f = C.check_air_channel(asm)
+        self.assertTrue(fails(f, "vent outlet", "240 mm² open", "not the 300"), f)
+        self.assertTrue(fails(f, "vent outlet leaves 240", "less than the inlet's 300"), f)
+        vent.across = None
+        self.assertTrue(fails(C.check_air_channel(asm), "vent outlet", "no direction"))
+
+    def test_a_slot_shut_at_any_depth_is_shut(self):
+        # A skin across all five slots, however thin, at either face of the
+        # wall or anywhere between, shuts them.
+        cov, vent = self.grille()
+        self.assertAlmostEqual(C.open_area(vent.shape, [cov.shape], vent.across), 300.0, delta=0.5)
+        for x0, x1 in ((42.0, 42.09), (43.91, 44.0), (42.93, 42.97), (43.3, 43.31)):
+            with self.subTest(skin=(x0, x1)):
+                skin = cov.shape + box(x0, x1, 28, 42, 31, 61)
+                self.assertAlmostEqual(C.open_area(vent.shape, [skin], vent.across), 0.0, delta=0.5)
+        one = cov.shape + box(43, 43.4, 28, 30, 31, 61)
+        self.assertAlmostEqual(C.open_area(vent.shape, [one], vent.across), 240.0, delta=0.5)
+
+    def test_a_throat_between_vertex_depths_is_found(self):
+        # A plug with planar faces whose section turns from 10 x 30 to 30 x 2
+        # through a 2 mm wall: (10 + 20 s)(30 - 28 s) is largest at s = 2/7,
+        # between its vertex depths, leaving 1600 - 345.7 mm² open there.
+        from build123d import Wire
+        ends = [Wire.make_rect(w, h, Plane(origin=(x, 0, 0), x_dir=(0, 1, 0), z_dir=(1, 0, 0)))
+                for x, w, h in ((42, 10, 30), (44, 30, 2))]
+        plug = Solid.make_loft(ends)
+        self.assertAlmostEqual(C.open_area(box(42, 44, -20, 20, -20, 20), [plug], (1.0, 0.0, 0.0)),
+                               1600 - (10 + 40 / 7) * (30 - 8), delta=0.5)
 
     def test_a_fan_is_left_out_of_the_passive_check(self):
         fan = Held("intake fan", box(-40, -30, 28, 41, 32, 56))
@@ -1190,6 +1251,47 @@ class Layout(unittest.TestCase):
             self.assertTrue(fails(C.check_fans(asm), "exhaust fan", "slides 1.0 mm inwards"))
         finally:
             L.EXH_LIP_OVER = old
+
+    def test_the_lid_keeps_the_intake_fan_within_its_lips(self):
+        # Without the cover's block over it, the fan could lift out over its
+        # holder's lips upside down and slide in (the first version).
+        intake = next(h for h in self.asm.held if h.name == FANS[1])
+        self.assertEqual(intake.held_down, L.FAN_HOLD_H)
+        cov = self.part("cover")
+        old = L.INTAKE_HOLD_GAP
+        try:
+            L.INTAKE_HOLD_GAP = L.FAN_HOLD_H + 1.0
+            asm = Assembly(parts=[L.cover()], held=[intake])
+            self.assertTrue(fails(C.check_cover(asm), "intake fan", "lift out over its stops"))
+        finally:
+            L.INTAKE_HOLD_GAP = old
+        self.assertEqual(C.check_cover(Assembly(parts=[cov], held=[intake])), [])
+
+    def test_a_filled_outlet_slot_fails(self):
+        cov = self.part("cover")
+        outlet = next(v for v in self.asm.vents if v.name == "outlet")
+        ov0, _, oz0, oz1 = L.outlet_span()
+        u0, u1 = L.EXH_U1, L.BOX_DIAG / L.SQRT2 + 1
+        plug = turned((u0, u1, ov0, ov0 + L.VENT_SLOT_W, oz0, oz1), L.DIAG)
+        filled = replace(cov, shape=cov.shape + plug)
+        asm = replace(self.asm, parts=[filled if p.name == "cover" else p for p in self.asm.parts])
+        f = C.check_air_channel(asm)
+        self.assertTrue(fails(f, "vent outlet leaves 312", "less than the inlet's 336"), f)
+
+    def test_measurements_the_layout_cannot_take_are_named(self):
+        self.assertEqual(L.measurement_failures(), [])
+        for name, value, words in (("SZBK07_TERMINALS_ON_SHORT_ENDS", False, "lay it out again"),
+                                   ("SZBK07_HEATSINK_TOP", M.SZBK07_SIZE[2] + 1, "must include the heatsinks"),
+                                   ("LM2596_HOLE_D", 2.0, "too small"),
+                                   ("LSM6DSO_HOLE_D", 1.5, "too small"),
+                                   ("SCHOTTKY_BODY", (5.2, M.SCHOTTKY_SLEEVE_D + 0.5), "does not fit")):
+            with self.subTest(name=name):
+                old = getattr(M, name)
+                try:
+                    setattr(M, name, value)
+                    self.assertTrue(fails(L.measurement_failures(), name, words))
+                finally:
+                    setattr(M, name, old)
 
     def test_the_inlays_are_flush_with_the_lid(self):
         # Their top is the lid's, they are INLAY_DEPTH deep, and with the body

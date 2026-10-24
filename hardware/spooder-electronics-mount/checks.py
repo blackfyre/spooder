@@ -16,7 +16,12 @@ import math
 from collections.abc import Iterable
 
 import numpy as np
-from build123d import Compound, GeomType, Location, Plane, Shape, Solid, Vector, Vertex
+from build123d import Compound, Face, GeomType, Location, Plane, Shape, Solid, Vector, Vertex
+from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
+from build123d.topology.kernel import list_shapes
+from OCP.TopExp import TopExp
+from OCP.TopoDS import TopoDS
+from OCP.collections import IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher as EdgeFaceMap
 
 import measurements as M
 from model import (AXES, FANS, IMU, J6, LM2596_OUTPUT_ROUTE, SCHOTTKY, SENSOR_HEADER, SERVO_2040, SZBK07, Assembly,
@@ -42,6 +47,12 @@ OVERHANG_DEG = 45.0
 # A downward planar face at most this wide bridges. Source: the spec's
 # "Printability"; the spooder-printed-parts skill's `BRIDGE`.
 BRIDGE = 3.0
+# A downward face hangs from material at a point on its edge when a
+# neighbouring face passes within ANCHOR_REACH of the point ANCHOR_PROBE
+# below it: a wall or a 45-degree face going down does (0 and 0.21), one
+# rising from the edge does not (0.3). Source: chosen.
+ANCHOR_PROBE = 0.3
+ANCHOR_REACH = 0.25
 # Free space the frame must leave under a tie hole or slot. Source: the spec's
 # "Cable routes"; the skill's `TIE_GAP`.
 TIE_GAP = 1.5
@@ -114,6 +125,9 @@ FAN_VENT_OPEN = 0.25
 # Slices through a junction between boxes in differently turned frames are
 # this thick. Source: chosen.
 SLICE_T = 0.2
+# A vent's open area, measured through the cover, may differ from its
+# declared one by this share (boolean noise). Source: chosen.
+VENT_AREA_TOL = 0.01
 
 # The bumpers stand at least this far proud of the cover, the held parts and
 # the screw heads, in every horizontal direction (every BUMPER_STEP degrees)
@@ -631,15 +645,46 @@ def check_frame_clearance(asm: Assembly, frame: FrameMap | None = None) -> list[
     return failures
 
 
+def edge_faces(shape: Shape) -> EdgeFaceMap:
+    """Each edge of the shape mapped to the faces that share it."""
+    found = EdgeFaceMap()
+    TopExp.MapShapesAndAncestors_s(shape.wrapped, TopAbs_EDGE, TopAbs_FACE, found)
+    return found
+
+
+def anchor_points(face, up: Vector, ancestors, step: float = 0.25) -> np.ndarray:
+    """Points along a downward face's edges where it hangs from material: a
+    neighbouring face carries on below the point (a wall, a column, a 45
+    degree face under it). Where the neighbour rises from the edge instead,
+    the edge is free, so a face held only at one end is a cantilever."""
+    u = np.array([up.X, up.Y, up.Z])
+    found = []
+    for edge in face.edges():
+        if not ancestors.Contains(edge.wrapped):
+            continue
+        others = [Face(TopoDS.Face(w)) for w in list_shapes(ancestors.FindFromKey(edge.wrapped))]
+        others = [f for f in others if not f.is_same(face)]
+        for t in np.linspace(0, 1, max(3, int(edge.length / step) + 1)):
+            p = np.array(tuple(edge.position_at(t)))
+            below = Vertex(*(p - u * ANCHOR_PROBE))
+            if any(below.distance_to(f) < ANCHOR_REACH for f in others):
+                found.append(p)
+    return np.array(found).reshape(-1, 3)
+
+
 def overhang_failures(name: str, shapes: list[Shape], up) -> list[str]:
     """Downward faces steeper than OVERHANG_DEG in the print orientation
-    `up`. A planar one passes on the bed or if at most BRIDGE wide; a curved
-    one never does (a round horizontal hole needs a teardrop)."""
+    `up`. A planar one passes on the bed, or if it is at most BRIDGE wide
+    and no point of it lies more than BRIDGE from where it hangs from
+    material (anchor_points(): a bridge between supports, or a short ledge;
+    not an arm held at one end); a curved one never does (a round horizontal
+    hole needs a teardrop)."""
     u = Vector(up).normalized()
     pts = np.concatenate([vertices(s) for s in shapes])
     bed = float((pts @ np.array([u.X, u.Y, u.Z])).min())
     failures = []
     for shape in shapes:
+        ancestors = edge_faces(shape)
         for face in shape.faces():
             samples = face_samples(face)
             steep = [(p, n) for p, n in samples if n.dot(u) < -COS_OVERHANG - 1e-3]
@@ -651,9 +696,16 @@ def overhang_failures(name: str, shapes: list[Shape], up) -> list[str]:
                     continue  # on the bed
                 edges = Compound(face.edges())
                 width = 2 * max(Vertex(p.X, p.Y, p.Z).distance_to(edges) for p, _ in samples)
-                if width <= BRIDGE + 1e-3:
+                if width > BRIDGE + 1e-3:
+                    failures.append(f"{name}: a downward face {width:.1f} mm wide near {fmt(p0)} needs support")
                     continue
-                failures.append(f"{name}: a downward face {width:.1f} mm wide near {fmt(p0)} needs support")
+                anchors = anchor_points(face, u, ancestors)
+                pts = np.array([tuple(p) for p, _ in samples] + [tuple(v) for v in face.vertices()])
+                reach = (float(np.sqrt(((pts[:, None, :] - anchors[None]) ** 2).sum(-1)).min(axis=1).max())
+                         if len(anchors) else math.inf)
+                if reach > BRIDGE + 1e-3:
+                    failures.append(f"{name}: a downward face near {fmt(p0)} reaches {reach:.1f} mm from what "
+                                    f"it hangs from (at most {BRIDGE}): a cantilever, not a bridge")
             else:
                 failures.append(f"{name}: a curved {face.geom_type.name.lower()} face looks down "
                                 f"more steeply than {OVERHANG_DEG:.0f}° near {fmt(p0)} (a horizontal hole needs a teardrop)")
@@ -739,6 +791,46 @@ def widest_slice(shape: Shape, direction: np.ndarray, n: int = 11) -> float:
     return best
 
 
+def open_area(region: Shape, solids: list[Shape], across) -> float:
+    """The smallest area left open through `region` by the solids, across
+    the direction `across` (a grille's open area through its wall), from
+    exact planar sections. Between two consecutive depths at which the
+    region or the solids in it have a vertex, a section's area through
+    planar faces is a quadratic in the depth: three sections fix it, and its
+    minimum lies at an end or at the quadratic's turning point, where one
+    more section is taken. So no depth where the opening narrows is missed,
+    and a slot shut at any depth, however thin the skin, counts as shut."""
+    d = np.asarray(across, dtype=float)
+    d = d / np.linalg.norm(d)
+    inside = [s & region for s in solids if common(s, region) > 0]
+    pts = vertices(region)
+    along = pts @ d
+    lo, hi = float(along.min()), float(along.max())
+    marks = np.concatenate([along] + [vertices(s) @ d for s in inside])
+    marks = np.unique(np.round(marks[(marks >= lo) & (marks <= hi)], 6))
+    centre = pts.mean(axis=0)
+    centre = centre - d * (centre @ d)
+    size = 2 * float(np.ptp(pts, axis=0).max()) + 10
+
+    def open_at(t: float) -> float:
+        plane = Face.make_rect(size, size, Plane(origin=tuple(centre + d * t), z_dir=tuple(d)))
+        return (sum(f.area for f in (region & plane).faces())
+                - sum(f.area for s in inside for f in (s & plane).faces()))
+
+    eps = 1e-4
+    least = math.inf
+    for a, b in zip(marks[:-1], marks[1:]):
+        if b - a <= 4 * eps:
+            continue
+        ts = np.array([a + eps, (a + b) / 2, b - eps])
+        vals = np.array([open_at(t) for t in ts])
+        least = min(least, float(vals.min()))
+        k2, k1, _ = np.polyfit(ts, vals, 2)
+        if k2 > 1e-9 and a + eps < -k1 / (2 * k2) < b - eps:
+            least = min(least, open_at(-k1 / (2 * k2)))
+    return least
+
+
 def segments(ch) -> list[tuple[Box6, str, float]]:
     """The channel's segments as (box, axis, turn)."""
     return [(s[0], s[1], s[2] if len(s) > 2 else 0.0) for s in ch.segments]
@@ -753,7 +845,9 @@ def channel_solids(ch) -> list[Solid]:
 def check_air_channel(asm: Assembly) -> list[str]:
     """The air channel runs connected from the inlet past the SZBK07 to the
     outlet, no part enters it, and its cross-section, along each segment
-    and at each junction, is nowhere smaller than the inlet's net open area."""
+    and at each junction, is nowhere smaller than the inlet's net open area.
+    Each vent's open area, measured through the cover, is the one it declares
+    and no smaller than the inlet's."""
     ch = asm.channel
     if ch is None:
         return []
@@ -785,6 +879,18 @@ def check_air_channel(asm: Assembly) -> list[str]:
         j = junction(a, b, xa, xb, ta, tb)
         if j < area - 1e-6:
             failures.append(f"air channel: {na} to {nb} passes {j:.0f} mm², less than the inlet's {area:.0f} mm²")
+    covers = [s for p in asm.parts if p.role == "cover" for s in p.solids()]
+    for vent in asm.vents if covers else []:
+        if vent.across is None:
+            failures.append(f"vent {vent.name}: no direction through the wall to measure its open area across")
+            continue
+        measured = open_area(vent.shape, covers, vent.across)
+        if abs(measured - vent.open_area) > VENT_AREA_TOL * vent.open_area:
+            failures.append(f"vent {vent.name}: the cover leaves {measured:.0f} mm² open through it, "
+                            f"not the {vent.open_area:.0f} mm² declared")
+        if measured < area - 1e-6:
+            failures.append(f"air channel: vent {vent.name} leaves {measured:.0f} mm² open, "
+                            f"less than the inlet's {area:.0f} mm²")
     past = next((h for h in asm.held if h.name == ch.past), None)
     if past is None:
         failures.append(f"air channel: no held part '{ch.past}' to pass")

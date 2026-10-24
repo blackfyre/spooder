@@ -261,11 +261,14 @@ class AirChannel:
 class Vent:
     """A grille in the cover: `shape` is the wall region it occupies, which
     the enclosure check treats as closed (a grille keeps fingers and debris
-    out), and `open_area` its net open area."""
+    out), and `open_area` its net open area. `across` is the unit direction
+    out through the wall: the air channel check measures the open area across
+    it from the cover itself."""
 
     name: str
     shape: Shape
     open_area: float
+    across: Vec3 | None = None
 
 
 @dataclass

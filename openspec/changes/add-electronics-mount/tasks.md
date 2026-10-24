@@ -68,7 +68,7 @@
 
 ## 7. Verification
 
-- [ ] 7.1 Run `mise run cad` and `mise run cad-preview` from a clean checkout. Verify all checks pass, the export test passes, and the images are regenerated. Get a Codex review of physical and assembly problems, and answer every finding.
+- [x] 7.1 Run `mise run cad` and `mise run cad-preview` from a clean checkout. Verify all checks pass, the export test passes, and the images are regenerated. Get a Codex review of physical and assembly problems, and answer every finding.
 - [ ] 7.2 Test prints (requires the user at the printer):
   - a bumper on a rail section: it slides, holds and flexes back;
   - a deck post with an insert: it holds an M3 screw at hand torque;

@@ -63,7 +63,7 @@ flowchart LR
 
 No part may need support.
 
-- **The 45° rule:** no face may look down more steeply than 45° unless it can bridge, i.e. it is at most 3 mm wide (`BRIDGE`).
+- **The 45° rule:** no face may look down more steeply than 45° unless it can bridge, i.e. it is at most 3 mm wide (`BRIDGE`) and hangs from material within 3 mm of every point of it. A narrow arm held at one end is a cantilever, not a bridge: give it a 45° underside.
 - **Holes running horizontally as printed are teardrops**, pointed up as printed: `teardrop(r, length, x, y, z, axis, up)`.
   - On a lid-down part, "up" is −z.
   - A hole that is vertical in the robot can be horizontal as printed (the cradle's feet).

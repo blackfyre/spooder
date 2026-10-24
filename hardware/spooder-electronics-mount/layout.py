@@ -337,6 +337,13 @@ EXH_LIP_OVER = 2.0
 # the terminal spans and the air channel. Source: chosen.
 SZ_HOLD_GAP = 0.5
 SZ_HOLD = (6.0, 4.0)
+# The cover's hold-down block under the lid over the intake fan, ending this
+# far above it: less than its holder's lips are tall (FAN_HOLD_H), so the fan
+# cannot lift out over them upside down, and more than the cover's gap to a
+# fan (it carries none). Clear of the air channel by this much inside the
+# fan's inner face. Source: chosen.
+INTAKE_HOLD_GAP = 2.0
+INTAKE_HOLD_IN = 0.5
 # M3 screws down through the lid into heat-set inserts in posts on the deck,
 # at three corners: the front-right one holds the exhaust fan, and no post
 # fits beside it clear of the routes. Source: chosen, each clear of held parts,
@@ -473,6 +480,35 @@ def s2_terminals() -> dict[str, Terminal]:
 def szbk07() -> Held:
     """Held down by the cover: it cannot rise past its lowest stops."""
     return Held(SZBK07, box6(SZ_BOX), held_down=min(STOP_H, RIB_H))
+
+
+# Screw sizes through the bought parts' holes (self-tapping into the white
+# holders: PILOT_M25_D, PILOT_M2_D). Source: the skill, "Fits and fasteners".
+LM2596_SCREW_D = 2.5
+IMU_SCREW_D = 2.0
+
+
+def measurement_failures() -> list[str]:
+    """The measured values (measurements.py) that the layout takes as given
+    but does not size itself from: each one that no longer holds means the
+    layout must be redrawn, not only rebuilt. The build reports them with the
+    checks' failures."""
+    failures = []
+    if not M.SZBK07_TERMINALS_ON_SHORT_ENDS:
+        failures.append("SZBK07_TERMINALS_ON_SHORT_ENDS: the layout puts the SZBK07's terminals on its short "
+                        "ends (sz_terminal) and routes its wires from them; lay it out again for the long ends")
+    if M.SZBK07_HEATSINK_TOP > M.SZBK07_SIZE[2]:
+        failures.append(f"SZBK07_HEATSINK_TOP {M.SZBK07_HEATSINK_TOP} is above its outline's height "
+                        f"{M.SZBK07_SIZE[2]}: SZBK07_SIZE must include the heatsinks")
+    if M.LM2596_HOLE_D < LM2596_SCREW_D:
+        failures.append(f"LM2596_HOLE_D {M.LM2596_HOLE_D} is too small for its M{LM2596_SCREW_D:g} screws")
+    if M.LSM6DSO_HOLE_D < IMU_SCREW_D:
+        failures.append(f"LSM6DSO_HOLE_D {M.LSM6DSO_HOLE_D} is too small for its M{IMU_SCREW_D:g} screws")
+    length, d = M.SCHOTTKY_BODY
+    if d > M.SCHOTTKY_SLEEVE_D or length > M.SCHOTTKY_SLEEVE_LENGTH:
+        failures.append(f"SCHOTTKY_BODY {M.SCHOTTKY_BODY} does not fit its sleeve "
+                        f"(SCHOTTKY_SLEEVE_D {M.SCHOTTKY_SLEEVE_D}, SCHOTTKY_SLEEVE_LENGTH {M.SCHOTTKY_SLEEVE_LENGTH})")
+    return failures
 
 
 def sz_terminal(end: str) -> Terminal:
@@ -859,25 +895,47 @@ def exhaust_holders() -> list[tuple[Part, list[Foot]]]:
     pockets with the fan fitted or not."""
     top = EXH_Z0 - TOUCH
     cz = LID_Z0 - INTAKE_LID_GAP
-    lip = (EXH_U0 - FIT - EXH_LIP_T, EXH_U0 - FIT)
     inside = cavity(TOUCH)
     # Left end: the column and the cheek, which rises past the servo leads'
     # route and there reaches in over the fan's inner face as a lip.
     lf: Foot = (EXH_HOLD_U0[0], EXH_U1, EXH_V1 - FAN_END, EXH_V1 + FIT + FAN_CHEEK, DIAG)
     left = (foot_base(lf, top)
             + turned((EXH_HOLD_U0[0], EXH_U1, EXH_V1 + FIT, EXH_V1 + FIT + FAN_CHEEK, top - 1.0, cz), DIAG)
-            + turned((lip[0], EXH_HOLD_U0[0] + 1.0, EXH_V1 + FIT, EXH_V1 + FIT + FAN_CHEEK, *EXH_LIP_Z[0]), DIAG)
-            + turned((*lip, EXH_V1 - EXH_LIP_OVER, EXH_V1 + FIT + 0.5, *EXH_LIP_Z[0]), DIAG))
+            + exhaust_lip(EXH_HOLD_U0[0], (EXH_V1 + FIT, EXH_V1 + FIT + FAN_CHEEK),
+                          (EXH_V1 - EXH_LIP_OVER, EXH_V1 + FIT + 0.5), EXH_V1 + FIT, -1, EXH_LIP_Z[0]))
     # Right end: the column and the cheek, which reaches in over the fan's
     # inner face above the LM2596's output route, below the T-Display.
     rf: Foot = (EXH_HOLD_U0[1], EXH_U1, EXH_V0 - FIT - FAN_CHEEK, EXH_V0 + FAN_END, DIAG)
     right = (foot_base(rf, top)
              + turned((EXH_HOLD_U0[1], EXH_U1, EXH_V0 - FIT - FAN_CHEEK, EXH_V0 - FIT, top - 1.0, cz), DIAG)
-             + turned((lip[0], EXH_U1, EXH_V0 - FIT - FAN_CHEEK, EXH_V0 - FIT, *EXH_LIP_Z[1]), DIAG)
-             + turned((*lip, EXH_V0 - FIT - 0.5, EXH_V0 + EXH_LIP_OVER, *EXH_LIP_Z[1]), DIAG))
+             + exhaust_lip(EXH_HOLD_U0[1], (EXH_V0 - FIT - FAN_CHEEK, EXH_V0 - FIT),
+                           (EXH_V0 - FIT - 0.5, EXH_V0 + EXH_LIP_OVER), EXH_V0 - FIT, 1, EXH_LIP_Z[1]))
     return [(Part(f"exhaust-fan-holder-{side}", shape & inside, "holder", UP, "white", held_down=POCKET_DEPTH,
                   carries=(FANS[0],)), [foot])
             for side, shape, foot in (("left", left, lf), ("right", right, rf))]
+
+
+def exhaust_lip(cheek_u0: float, arm_v: tuple[float, float], lip_v: tuple[float, float], lip_root: float,
+                toward: int, z: tuple[float, float]) -> Solid:
+    """An exhaust holder's lip, turned into the corner frame: an arm from the
+    cheek (from cheek_u0 outwards along u, across arm_v) in to the lip, which
+    reaches along v (across lip_v, `toward` -1 or +1 from lip_root at the
+    arm) over the fan's inner face, between heights z. As printed upright
+    neither hangs in the air: the arm's underside rises at 45 degrees from
+    the cheek's face at z[0] towards the lip, and the lip's rises further,
+    1 mm per mm along v, from the arm to its tip. (Nothing is added below
+    z[0]: the LM2596's output route and the servo leads' route run there.)"""
+    u0, u1 = EXH_U0 - FIT - EXH_LIP_T, EXH_U0 - FIT
+    z0, z1 = z
+    shape = box(u0, cheek_u0 + 1.0, *arm_v, z0, z1) + box(u0, u1, *lip_v, z0, z1)
+    root = (cheek_u0, lip_root, z0)
+    return (shape & above(root, (1.0, 0.0, 1.0)) & above(root, (1.0, -toward, 1.0))).rotate(Axis.Z, DIAG)
+
+
+def above(origin: tuple[float, float, float], normal: tuple[float, float, float], size: float = 400.0) -> Solid:
+    """The half-space on the `normal` side of the plane through `origin`, as a large box."""
+    plane = Plane(origin=origin, z_dir=normal)
+    return Solid.make_box(size, size, size).moved(Location((-size / 2, -size / 2, 0))).moved(plane.location)
 
 
 # The T-Display's holder (task 5.2): a white portal over the LM2596, printed
@@ -912,9 +970,11 @@ def td_holder() -> tuple[Part, list[Foot]]:
     sx, sy = lm(*M.LM2596_HOLES[0])
     r = LM_BOSS_D / 2 + FIT
     shape = shape - box(xw[0] - 1.0, sx + r, sy - r, sy + r, zf - 1.0, LM_BOX[4] + FIT)
-    # The plate, short of the 5V wire up to the board's pin.
+    # The plate, short of the 5V wire up to the board's pin: the notch for it
+    # runs out through the plate's front end, so nothing hangs beyond it as
+    # printed (up +y).
     shape = shape + box(x0, xw[1], yr[0], pcb[3] + FIT - TOUCH, pz0, pz1)
-    shape = shape - box(x_front[1], xw[1] + 1.0, LM_BOX[3] - TOUCH, LM_BOX[3] + 6.1 + TOUCH, pz0 - 1.0, pz1 + 1.0)
+    shape = shape - box(x_front[1], xw[1] + 1.0, LM_BOX[3] - TOUCH, pcb[3] + FIT + 1.0, pz0 - 1.0, pz1 + 1.0)
     # The rear block, its front face the rear lip.
     shape = shape + box(x0, xw[1], yr[0], pcb[2] - FIT, pz1 - EMBED, top)
     # The pads: their tops FIT inside the bare spots, their rear faces at 45 degrees.
@@ -1005,9 +1065,9 @@ def vents() -> list[Vent]:
     ov0, ov1, oz0, oz1 = outlet_span()
     area_in = VENT_SLOTS * VENT_SLOT_W * VENT_IN_H
     area_out = VENT_SLOTS * VENT_SLOT_W * VENT_OUT_H
-    return [Vent("inlet", box(-BOX_X, -(BOX_X - WALL), iy0, iy1, iz0, iz1), area_in),
+    return [Vent("inlet", box(-BOX_X, -(BOX_X - WALL), iy0, iy1, iz0, iz1), area_in, (-1.0, 0.0, 0.0)),
             Vent("outlet", turned(((BOX_DIAG - WALL * SQRT2) / SQRT2, BOX_DIAG / SQRT2, ov0, ov1, oz0, oz1), DIAG),
-                 area_out)]
+                 area_out, (1 / SQRT2, 1 / SQRT2, 0.0))]
 
 
 def letter(ch: str, x: float, y: float) -> Solid:
@@ -1060,7 +1120,7 @@ def cover() -> Part:
     """The cover: a faceted shell standing on the deck's rim, its top edge
     chamfered, a groove round its walls, the bumpers' rails on its corner faces, the window over the T-Display, the
     vents, the XT60's notch, the screw holes, hold-down blocks over the
-    SZBK07's corners, and the flush inlays. It prints lid-down."""
+    SZBK07's corners and the intake fan, and the flush inlays. It prints lid-down."""
     outer = octagon(BOX_X, BOX_Y, BOX_DIAG, COVER_Z0, LID_Z1)
     outer = outer.chamfer(COVER_CHAMFER, None, top_edges(outer, LID_Z1))
     shape = outer - cavity()
@@ -1071,6 +1131,8 @@ def cover() -> Part:
     for xa, xb in ((SZ_BOX[0], SZ_BOX[0] + SZ_HOLD[0]), (SZ_BOX[1] - SZ_HOLD[0], SZ_BOX[1])):
         for ya, yb in ((SZ_BOX[2], SZ_BOX[2] + SZ_HOLD[1]), (SZ_BOX[3] - SZ_HOLD[1], SZ_BOX[3])):
             shape = shape + box(xa, xb, ya, yb, SZ_BOX[5] + SZ_HOLD_GAP, LID_Z0 + EMBED)
+    shape = shape + (box(-BOX_X, INTAKE_X1 - INTAKE_HOLD_IN, INTAKE_Y0 + FAN_END, INTAKE_Y1 - FAN_END,
+                         INTAKE_Z0 + M.FAN_SIZE[1] + INTAKE_HOLD_GAP, LID_Z0 + EMBED) & cavity(-EMBED))
     shape = shape - window_cutter()
     for x, y in COVER_SCREWS:
         shape = shape - cyl(M3_D / 2, x, y, LID_Z0 - 1, LID_Z1 + 1)
@@ -1370,7 +1432,7 @@ def assembly() -> Assembly:
     t = s2_terminals()
     fans = [exhaust_fan(), intake_fan()]
     held = [szbk07(), servo2040(), lm2596(), t_display(), imu(), xt60(), fuse(), diode()]
-    held += [Held(f.name, f.shape()) for f in fans]
+    held += [Held(f.name, f.shape(), held_down=FAN_HOLD_H) for f in fans]
     holders = [part for part, _ in loose_holders()]
     return Assembly(
         parts=[deck(), spacer(), cover(), bumper(), *holders],

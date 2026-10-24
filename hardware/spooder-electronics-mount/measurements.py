@@ -137,6 +137,12 @@ LM2596_WIRE_HEIGHT = 3.8
 # The constants in this file that are nominal (the ones above, and the two
 # Servo 2040 wire sides below), each listed in the README's "Measure before
 # printing" table. Source: this file.
+# Of those, the ones the build records but does not use: the fans are held
+# by their frames, not screwed through their holes, and their leads are routed
+# by hand (the holders' test print, task 7.2, checks both). Every other one
+# sizes the layout, is read by a check, or is checked by
+# layout.measurement_failures(). Source: this file, layout.py and checks.py.
+REFERENCE_ONLY = ("FAN_HOLE_SPACING", "FAN_HOLE_D", "FAN_WIRE_EXIT_AT_CORNER")
 MEASURE_BEFORE_PRINTING = (
     "SZBK07_SIZE",
     "SZBK07_TERMINALS_ON_SHORT_ENDS",
