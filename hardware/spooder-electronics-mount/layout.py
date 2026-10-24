@@ -19,7 +19,12 @@ The layout follows the wiring (design.md, "Layout follows the wiring"):
   it on a holder (task 5.2), so the screen shows through the lid beside the
   SZBK07 rather than over it;
 - the XT60 faces out of the left wall, recessed so that the battery's plug in
-  it stays inside the legs' keep-clear region.
+  it stays inside the legs' keep-clear region;
+- the cover (task group 4) stands on the deck's rim: an intake fan position
+  low behind a grille in the left wall, an exhaust position high behind a
+  grille in the front-right corner face, the air channel between them over
+  the SZBK07, the window over the T-Display, and three screws down through
+  the lid into posts on the deck.
 
 Sizes come from measurements.py; the numbers here are layout choices, each
 with its reason.
@@ -29,13 +34,15 @@ from __future__ import annotations
 
 import math
 
-from build123d import Location, Solid
+from build123d import Axis, Location, Plane, Polygon, Solid, extrude
 
 import measurements as M
-from model import (IMU, J6, LM2596_OUTPUT_ROUTE, SCHOTTKY, SENSOR_HEADER, SERVO_2040, SIDES, SZBK07, Assembly, Box6, Exposure, Held, ImuPad,
-                   Opening, Part, Route, Screw, Terminal, box, box6)
+from model import (FANS, IMU, J6, LM2596_OUTPUT_ROUTE, SCHOTTKY, SENSOR_HEADER, SERVO_2040, SIDES, SZBK07, AirChannel,
+                   Assembly, Box6, Exposure, Fan, Held, ImuPad, Opening, Part, Route, Screw, Terminal, Vent, box, box6,
+                   turned)
 
 UP = (0.0, 0.0, 1.0)
+DOWN = (0.0, 0.0, -1.0)
 
 # --------------------------------------------------------------------------- the box
 
@@ -140,6 +147,48 @@ S2_TOP = S2_Z0 + M.S2040_HEIGHT  # its tallest component
 S2_HEADER_STRIP_Y = 33.5  # Source: drawing, the signal row (35.56) less a plug's half-length past it.
 
 
+# --------------------------------------------------------------------------- the cover's height
+
+# The front-right corner frame: u along (1, 1)/sqrt 2, out through the
+# front-right corner face, v along (-1, 1)/sqrt 2; a box given in it is
+# placed with `turned(b, 45)`.
+DIAG = 45.0
+SQRT2 = math.sqrt(2)
+# The exhaust fan stands in the front-right corner, its outer face on the
+# limit for held parts (INNER_DIAG), clear of the LM2596's output route in
+# front of the module (OUT_FRONT_Y1) and of the servo leads' route. It
+# overhangs the Servo 2040's front-right corner, so it stands on its holder
+# above the board. Source: chosen (design.md "Assumptions", task group 4).
+EXH_U1 = (BOX_DIAG - INNER * SQRT2) / SQRT2
+EXH_U0 = EXH_U1 - M.FAN_SIZE[2]
+OUT_FRONT_Y1 = 28.6  # the LM2596 output route's front edge, past the diode's tie holes. Source: chosen.
+EXH_V0 = (OUT_FRONT_Y1 + FIT + TOUCH) * SQRT2 - EXH_U0
+EXH_V1 = EXH_V0 + M.FAN_SIZE[0]
+EXH_Z0 = S2_Z1 + 1.0  # 1 mm above the board's top face
+EXH_Z1 = EXH_Z0 + M.FAN_SIZE[1]
+EXH_LIP_Z = ((EXH_Z0 + 19.5, EXH_Z0 + 26.0), (EXH_Z0 + 5.8, EXH_Z0 + 15.5))  # the exhaust's lips (fan_holders)
+# The cover stands on the deck's rim. Its top edge is chamfered at 45
+# degrees, and the inside follows it a wall's thickness in. Source: chosen
+# (design.md "Shape"), small enough to leave the lid flat over the window.
+COVER_Z0 = DECK_Z1 + TOUCH
+COVER_CHAMFER = 3.0
+COVER_INNER_CHAMFER = COVER_CHAMFER - WALL * (2 - SQRT2)
+
+
+def under_chamfer(gap: float) -> float:
+    """How far the inside of the cover's top chamfer comes down at `gap`
+    from the inside of a wall."""
+    return max(0.0, COVER_INNER_CHAMFER - gap)
+
+
+# The lid: its underside FIT above the exhaust fan, the tallest held part,
+# where the inside of the top chamfer comes down over the fan's outer face;
+# as thick as a wall. Source: the skill (FIT, "Walls").
+LID_Z0 = EXH_Z1 + FIT + under_chamfer((BOX_DIAG - WALL * SQRT2) / SQRT2 - EXH_U1)
+LID_T = WALL
+LID_Z1 = LID_Z0 + LID_T
+
+
 def s2(bx: float, by: float) -> tuple[float, float]:
     """A point on the Servo 2040's drawing, in the robot's frame."""
     return S2_X0 + bx, S2_Y0 + by
@@ -163,13 +212,17 @@ def lm(mx: float, my: float) -> tuple[float, float]:
     return LM_X0 + M.LM2596_SIZE[1] - my, LM_Y0 + mx
 
 
-# T-Display above the LM2596, screen up, its long side along y. Its PCB's
-# underside clears a holder plate over the LM2596 (task 5.2) by its tallest
-# underside part. Source: chosen.
+# T-Display above the LM2596, screen up, its long side along y, as high as
+# its header pins allow under the lid, so the screen sits close under its
+# window: its holder (task 5.2) stands over the LM2596, at least a plate
+# thick between the module and the board's tallest underside part.
+# Source: chosen.
 TD_X0 = 36.7
 TD_Y0 = -(M.TD_PCB[3] - M.TD_PCB[2]) / 2
 TD_HOLDER_PLATE = 2.0  # Source: chosen, the holder's plate (task 5.2).
-TD_Z0 = LM_BOX[5] + FIT + TD_HOLDER_PLATE + M.TD_UNDERSIDE_TALLEST + 0.1  # PCB underside
+TD_Z0 = (LID_Z0 - FIT - M.TD_HEADER_PIN_DEPTH  # PCB underside, its header pins under the chamfer by the right wall
+         - under_chamfer(BOX_X - WALL - (TD_X0 - (M.TD_HEADER_ROWS[0][0]))))
+assert TD_Z0 >= LM_BOX[5] + FIT + TD_HOLDER_PLATE + M.TD_UNDERSIDE_TALLEST + 0.1, "no room for the holder's plate"
 
 
 def td(x: float, y: float) -> tuple[float, float]:
@@ -226,6 +279,87 @@ FUSE_BOX = (FUSE_X0, FUSE_X0 + M.FUSE_HOLDER_SIZE[1], FUSE_Y1 - M.FUSE_HOLDER_SI
 # of the module. Source: chosen.
 DIODE_X0 = 39.3
 DIODE_Y = 23.6
+
+# Fan holders (task 4.3; refined in task 5.3): each fan stands in a holder
+# on the deck that supports it under its ends and locates its end faces with
+# cheeks, a snug fit (task 7.2 test-prints one). Source: chosen.
+FAN_CHEEK = 2.4  # Source: the skill ("Walls").
+FAN_END = 3.0  # how far under each end its support reaches. Source: chosen.
+FAN_HOLD_H = 10.0  # the cheeks' and lips' height up the fan. Source: chosen.
+# The intake fan stands on the deck behind a grille in the left wall, low,
+# between the XT60's cradle (whose rear wall locates its front end) and the
+# left-rear corner face. Source: chosen.
+INTAKE_Y1 = XT_BODY[2] - FIT - XT_WALL - FIT
+INTAKE_Y0 = INTAKE_Y1 - M.FAN_SIZE[0]
+INTAKE_X0 = -(INNER_DIAG + INTAKE_Y0)  # its outer face: its rear-outer corner on the corner face's limit
+INTAKE_X1 = INTAKE_X0 + M.FAN_SIZE[2]
+INTAKE_Z0 = DECK_Z1 + TOUCH
+# A low lip outside its foot, under the grille, and lips inside it at its
+# ends, clear of the XT60's tie hole. Source: chosen.
+INTAKE_LIP_H = 1.7
+INTAKE_LIP_X1 = XT_BODY[0] + 9.0 - TIE_L / 2 - FIT  # the XT60's tie (tie_points) less FIT
+INTAKE_LIP_LEN = 4.0
+# The exhaust holder's columns under the fan's ends start this far out along
+# u, clear of the servo leads' route (left) and the LM2596's output route
+# (right). Source: chosen.
+EXH_HOLD_U0 = (56.0, 57.5)
+# Lips over the exhaust fan's inner face at each end keep it from sliding in
+# off its columns (the cover's wall keeps it from sliding out): this thick,
+# reaching this far over the face, at these heights (left, right), above the
+# servo leads' route on the left and between the LM2596's output route and
+# the T-Display on the right. Source: chosen.
+EXH_LIP_T = 1.6
+EXH_LIP_OVER = 2.0
+
+# The cover's hold-down blocks under the lid at the SZBK07's four corners,
+# ending this far above it, less than its ribs are tall (RIB_H): it cannot
+# lift out over its stops. Each block's size along x and y keeps it clear of
+# the terminal spans and the air channel. Source: chosen.
+SZ_HOLD_GAP = 0.5
+SZ_HOLD = (6.0, 4.0)
+# M3 screws down through the lid into heat-set inserts in posts on the deck,
+# at three corners: the front-right one holds the exhaust fan, and no post
+# fits beside it clear of the routes. Source: chosen, each clear of held parts,
+# routes and the air channel.
+COVER_SCREWS = ((-29.8, 53.5), (-38.0, -46.0), (42.0, -40.0))
+M3_INSERT_D = 4.4  # Source: the skill (M3_INSERT, Ø4.4 x 5).
+M3_INSERT_L = 5.0
+POST_D = M3_INSERT_D + 2 * 2.0  # Source: chosen, 2 mm of wall round the insert.
+SCREW_TAIL = 6.0  # M3 clearance below the insert for a screw's tip. Source: chosen (an M3 x 10).
+# Recessed wall detail: a groove round the walls. Source: chosen (design.md "Shape").
+GROOVE_Z = (COVER_Z0 + 7.0, COVER_Z0 + 9.0)
+GROOVE_DEPTH = 0.8
+# Vents: vertical slots through the wall, narrower than a bridge (BRIDGE) so
+# their ends print lid-down; the outlet's taller, to pass the channel's air
+# into the corner. Source: chosen.
+VENT_SLOTS = 7
+VENT_SLOT_W = 2.0
+VENT_PITCH = 4.0
+VENT_IN_H = 24.0
+VENT_OUT_H = 26.0
+VENT_SPAN = (VENT_SLOTS - 1) * VENT_PITCH + VENT_SLOT_W
+# The left wall opens over the battery plug's route, from its foot. Source: FIT, TOUCH.
+XT_NOTCH = (XT_BODY[2] - FIT, XT_BODY[3] + FIT, XT_BODY[5] + TOUCH)
+# Flush inlays in the lid's top: the name and three chevrons pointing
+# forwards, three layers deep, strokes narrower than a bridge so the body's
+# pockets over them print. Source: design.md "Colour through the AMS"; chosen.
+INLAY_DEPTH = 0.6
+NAME = "SPOODER"
+NAME_CENTRE = (-12.0, 0.0)
+NAME_SCALE = 1.0  # letters 6 x 10 with 2 mm strokes
+NAME_ADVANCE = 8.0
+CHEVRONS = ((-12.0, 22.0), (-12.0, 28.0), (-12.0, 34.0))
+CHEVRON_ARM = 8.0
+INLAY_STROKE = 2.0
+# Letters on a 6 x 10 grid, as rectangles (x0, y0, x1, y1). Source: chosen.
+LETTERS = {
+    "S": ((0, 8, 6, 10), (0, 4, 2, 10), (0, 4, 6, 6), (4, 0, 6, 6), (0, 0, 6, 2)),
+    "P": ((0, 0, 2, 10), (0, 8, 6, 10), (4, 4, 6, 10), (0, 4, 6, 6)),
+    "O": ((0, 0, 2, 10), (4, 0, 6, 10), (0, 0, 6, 2), (0, 8, 6, 10)),
+    "D": ((0, 0, 2, 10), (0, 8, 5, 10), (0, 0, 5, 2), (4, 1.5, 6, 8.5)),
+    "E": ((0, 0, 2, 10), (0, 8, 6, 10), (0, 4, 5, 6), (0, 0, 6, 2)),
+    "R": ((0, 0, 2, 10), (0, 8, 6, 10), (4, 4, 6, 10), (0, 4, 6, 6), (3.5, 0, 5.5, 4.5)),
+}
 
 # --------------------------------------------------------------------------- routes
 
@@ -317,7 +451,8 @@ def s2_terminals() -> dict[str, Terminal]:
 
 
 def szbk07() -> Held:
-    return Held(SZBK07, box6(SZ_BOX))
+    """Held down by the cover: it cannot rise past its lowest stops."""
+    return Held(SZBK07, box6(SZ_BOX), held_down=min(STOP_H, RIB_H))
 
 
 def sz_terminal(end: str) -> Terminal:
@@ -364,7 +499,32 @@ def t_display() -> Held:
     exposed = [Exposure(UP, screen)]
     for b in M.TD_BUTTONS:
         exposed.append(Exposure(UP, td_box(*b, t + M.TD_BUTTON_DEPTH, t + M.TD_BUTTON_DEPTH)))
+    # The window shows the board's face between the screen and the buttons too.
+    pcb_top = TD_Z0 + t
+    for x0, x1, y0, y1 in window_rects():
+        exposed.append(Exposure(UP, (x0, x1, y0, y1, pcb_top, pcb_top), must_show=False))
     return Held("t-display", shape, exposed=tuple(exposed))
+
+
+def window_rects() -> list[tuple[float, float, float, float]]:
+    """The window's opening at the lid's underside, as rectangles: the
+    outline of the screen and the buttons beyond its ends, and a notch out to
+    the button beside it (each less than 2 mm from the screen, so one
+    opening; the skill)."""
+    t = M.TD_PCB_THICKNESS
+    screen = td_box(*M.TD_SCREEN, t, t)
+    buttons = [td_box(*b, t, t) for b in M.TD_BUTTONS]
+    ends = [screen] + [b for b in buttons if b[0] < screen[1] and b[1] > screen[0]]
+    main = (min(b[0] for b in ends), max(b[1] for b in ends), min(b[2] for b in ends), max(b[3] for b in ends))
+    rects = [main]
+    for b in buttons:
+        if b in ends:
+            continue
+        if b[0] >= main[1]:
+            rects.append((main[1], b[1], b[2], b[3]))
+        else:
+            rects.append((b[0], main[0], b[2], b[3]))
+    return rects
 
 
 def td_terminal(row: int, name: str, y_range: tuple[float, float] | None = None) -> Terminal:
@@ -429,7 +589,7 @@ def routes(t: dict[str, Terminal]) -> list[Route]:
     lm_in = (COR_X[0], LM_BOX[1], LM_BOX[2] - 4.0, LM_BOX[2] - TOUCH, RZ0, LM_BOX[5])
     # Up to the inner header row, clear of the LM2596's boss beside it.
     td_link = (COR_X[0], td_terminal(1, "x").region[1] + 0.02, *td_terminal(1, "x").region[2:4], RZ0, cz1)
-    out_front = (COR_X[0], LM_BOX[1], LM_BOX[3] + TOUCH, 28.6, RZ0, LM_BOX[5])
+    out_front = (COR_X[0], LM_BOX[1], LM_BOX[3] + TOUCH, OUT_FRONT_Y1, RZ0, LM_BOX[5])
     td_x = td_terminal(0, "x").region
     out_td = (td_x[1] - 6.0, td_x[1] + 0.3, LM_BOX[3] + TOUCH, LM_BOX[3] + 6.1, RZ0, cz1)
     lead_x = (t["servo header"].region[0] - 0.25, t["servo header"].region[1] + 0.25)
@@ -553,7 +713,216 @@ def deck() -> Part:
         shape = shape - box(*o.footprint, z0 - 1, z1 + 1)
     for (x, y), d, top in pilots():
         shape = shape - cyl(d / 2, x, y, top - 5.0, top + 1)
+    for x, y in COVER_SCREWS:  # a heat-set insert in each post's top, and room below it for the screw
+        top = LID_Z0 - TOUCH
+        shape = shape - cyl(M3_INSERT_D / 2, x, y, top - M3_INSERT_L, top + 1)
+        shape = shape - cyl(M3_D / 2, x, y, top - M3_INSERT_L - SCREW_TAIL, top)
     return Part("deck", shape, "deck", UP, "black")
+
+
+def fan_holders() -> list[Solid]:
+    """The fans' holders on the deck. The intake stands on the deck between
+    a low lip outside its foot, lips inside its ends and a cheek at its rear
+    end (the XT60 cradle's rear wall locates its front end). The exhaust
+    stands on two columns under its ends, above the board's corner, with a
+    cheek beyond each end that reaches in over its inner face as a lip; in
+    the corner frame (u, v), turned 45 degrees."""
+    z = DECK_Z1 - EMBED
+    hz = DECK_Z1 + FAN_HOLD_H
+    wall_in = -(BOX_X - WALL) + TOUCH  # the cover's left wall, inside
+    diag_in = BOX_DIAG - WALL * SQRT2  # the cover's corner faces, inside, as |x| + |y|
+    cheek_y = (INTAKE_Y0 - FIT - FAN_CHEEK, INTAKE_Y0 - FIT)
+    found = [
+        box(wall_in, INTAKE_X0 - FIT, INTAKE_Y0, INTAKE_Y1, z, DECK_Z1 + INTAKE_LIP_H),
+        box(INTAKE_X1 + FIT, INTAKE_LIP_X1, INTAKE_Y0, INTAKE_Y0 + INTAKE_LIP_LEN, z, hz),
+        box(INTAKE_X1 + FIT, INTAKE_LIP_X1, INTAKE_Y1 - INTAKE_LIP_LEN, INTAKE_Y1, z, hz),
+        box(-(diag_in - 2 * TOUCH + cheek_y[0]), INTAKE_X1 + FIT, *cheek_y, z, hz),
+    ]
+    top = EXH_Z0 - TOUCH
+    cz = EXH_Z0 + FAN_HOLD_H - 0.5  # below the air channel over the board
+    lip = (EXH_U0 - FIT - EXH_LIP_T, EXH_U0 - FIT)
+    # Left end: the column and the cheek, which rises past the servo leads'
+    # route and there reaches in over the fan's inner face as a lip.
+    left = (turned((EXH_HOLD_U0[0], EXH_U1, EXH_V1 - FAN_END, EXH_V1 + FIT + FAN_CHEEK, z, top), DIAG)
+            + turned((EXH_HOLD_U0[0], EXH_U1, EXH_V1 + FIT, EXH_V1 + FIT + FAN_CHEEK, top - 1.0, EXH_LIP_Z[0][1]), DIAG)
+            + turned((lip[0], EXH_HOLD_U0[0] + 1.0, EXH_V1 + FIT, EXH_V1 + FIT + FAN_CHEEK, *EXH_LIP_Z[0]), DIAG)
+            + turned((*lip, EXH_V1 - EXH_LIP_OVER, EXH_V1 + FIT + 0.5, *EXH_LIP_Z[0]), DIAG))
+    # Right end: the column and the cheek, which reaches in over the fan's
+    # inner face above the LM2596's output route, below the T-Display.
+    right = (turned((EXH_HOLD_U0[1], EXH_U1, EXH_V0 - FIT - FAN_CHEEK, EXH_V0 + FAN_END, z, top), DIAG)
+             + turned((EXH_HOLD_U0[1], EXH_U1, EXH_V0 - FIT - FAN_CHEEK, EXH_V0 - FIT, top - 1.0, cz), DIAG)
+             + turned((lip[0], EXH_U1, EXH_V0 - FIT - FAN_CHEEK, EXH_V0 - FIT, *EXH_LIP_Z[1]), DIAG)
+             + turned((*lip, EXH_V0 - FIT - 0.5, EXH_V0 + EXH_LIP_OVER, *EXH_LIP_Z[1]), DIAG))
+    return found + [left, right]
+
+
+def intake_fan() -> Fan:
+    return Fan(FANS[1], (INTAKE_X0, (INTAKE_Y0 + INTAKE_Y1) / 2, INTAKE_Z0), (-1.0, 0.0, 0.0), exhaust=False,
+               size=M.FAN_SIZE)
+
+
+def exhaust_fan() -> Fan:
+    vc = (EXH_V0 + EXH_V1) / 2
+    return Fan(FANS[0], (*uv(EXH_U1, vc), EXH_Z0), (1 / SQRT2, 1 / SQRT2, 0.0), exhaust=True, size=M.FAN_SIZE)
+
+
+def uv(u: float, v: float) -> tuple[float, float]:
+    """A point in the front-right corner frame, in the robot's frame."""
+    return (u - v) / SQRT2, (u + v) / SQRT2
+
+
+# --------------------------------------------------------------------------- the cover
+
+
+def cavity(margin: float = 0.0) -> Solid:
+    """The space inside the cover, `margin` in from its inside faces, from
+    below the deck up to the lid."""
+    w = WALL + margin
+    inner = octagon(BOX_X - w, BOX_Y - w, BOX_DIAG - w * SQRT2, COVER_Z0 - 10.0, LID_Z0 - margin)
+    return inner.chamfer(COVER_INNER_CHAMFER, None, top_edges(inner, LID_Z0 - margin))
+
+
+def top_edges(solid: Solid, z: float):
+    return [e for e in solid.edges() if abs(e.bounding_box().min.Z - z) < 1e-6 and abs(e.bounding_box().max.Z - z) < 1e-6]
+
+
+def vent_slots(span_c: float, z0: float, z1: float, cut: tuple[float, float], turn: float) -> Solid:
+    """VENT_SLOTS vertical slots centred on span_c along the wall, cut from
+    cut[0] to cut[1] across it, in a frame turned `turn` (x across the wall)."""
+    out = None
+    for i in range(VENT_SLOTS):
+        a = span_c - VENT_SPAN / 2 + i * VENT_PITCH
+        s = turned((cut[0], cut[1], a, a + VENT_SLOT_W, z0, z1), turn)
+        out = s if out is None else out + s
+    return out
+
+
+def inlet_span() -> tuple[float, float, float, float]:
+    """The inlet grille's (y0, y1, z0, z1) on the left wall, centred on the intake fan."""
+    yc, zc = (INTAKE_Y0 + INTAKE_Y1) / 2, INTAKE_Z0 + M.FAN_SIZE[1] / 2
+    return yc - VENT_SPAN / 2, yc + VENT_SPAN / 2, zc - VENT_IN_H / 2, zc + VENT_IN_H / 2
+
+
+def outlet_span() -> tuple[float, float, float, float]:
+    """The outlet grille's (v0, v1, z0, z1) on the front-right corner face, centred on the exhaust fan."""
+    vc, zc = (EXH_V0 + EXH_V1) / 2, EXH_Z0 + M.FAN_SIZE[1] / 2
+    return vc - VENT_SPAN / 2, vc + VENT_SPAN / 2, zc - VENT_OUT_H / 2, zc + VENT_OUT_H / 2
+
+
+def vents() -> list[Vent]:
+    """The grilles, as the wall regions they occupy."""
+    iy0, iy1, iz0, iz1 = inlet_span()
+    ov0, ov1, oz0, oz1 = outlet_span()
+    area_in = VENT_SLOTS * VENT_SLOT_W * VENT_IN_H
+    area_out = VENT_SLOTS * VENT_SLOT_W * VENT_OUT_H
+    return [Vent("inlet", box(-BOX_X, -(BOX_X - WALL), iy0, iy1, iz0, iz1), area_in),
+            Vent("outlet", turned(((BOX_DIAG - WALL * SQRT2) / SQRT2, BOX_DIAG / SQRT2, ov0, ov1, oz0, oz1), DIAG),
+                 area_out)]
+
+
+def letter(ch: str, x: float, y: float) -> Solid:
+    out = None
+    for x0, y0, x1, y1 in LETTERS[ch]:
+        s = box(x + x0 * NAME_SCALE, x + x1 * NAME_SCALE, y + y0 * NAME_SCALE, y + y1 * NAME_SCALE,
+                LID_Z1 - INLAY_DEPTH, LID_Z1)
+        out = s if out is None else out + s
+    return out
+
+
+def inlays():
+    """The name and the chevrons, flush in the lid's top."""
+    width = (len(NAME) - 1) * NAME_ADVANCE + 6 * NAME_SCALE
+    x = NAME_CENTRE[0] - width / 2
+    y = NAME_CENTRE[1] - 5 * NAME_SCALE
+    out = None
+    for i, ch in enumerate(NAME):
+        s = letter(ch, x + i * NAME_ADVANCE, y)
+        out = s if out is None else out + s
+    k = INLAY_STROKE * SQRT2  # a 45-degree stroke's height
+    a = CHEVRON_ARM
+    for cx, cy in CHEVRONS:
+        pts = [(cx - a, cy), (cx, cy + a), (cx + a, cy), (cx + a, cy - k), (cx, cy + a - k), (cx - a, cy - k)]
+        face = Plane.XY.offset(LID_Z1 - INLAY_DEPTH) * Polygon(*pts, align=None)
+        out = out + extrude(face, amount=INLAY_DEPTH, dir=(0, 0, 1)).solid()
+    return out
+
+
+def window_cutter() -> Solid:
+    """The window: its opening at the lid's underside (window_rects), widening
+    at 45 degrees to the top, except at the notch's outer end, which stays
+    straight so the bevel does not run into the top chamfer."""
+    rects = window_rects()
+    (x0, x1, y0, y1), notches = rects[0], rects[1:]
+    pts = [(x0, y0), (x1, y0)]
+    edge = x1
+    for nx0, nx1, ny0, ny1 in sorted(notches, key=lambda r: r[2]):
+        if nx0 >= x1 - 1e-9:
+            pts += [(x1, ny0), (nx1, ny0), (nx1, ny1), (x1, ny1)]
+            edge = max(edge, nx1)
+    pts += [(x1, y1), (x0, y1)]
+    outline = Polygon(*pts, align=None)
+    taper = extrude(Plane.XY.offset(LID_Z0) * outline, amount=LID_T + 0.01, taper=-45)
+    below = extrude(Plane.XY.offset(LID_Z0 - 1.0) * outline, amount=1.0)
+    return (taper + below) & box(-200, edge, -200, 200, 0, 200)
+
+
+def cover() -> Part:
+    """The cover: a faceted shell standing on the deck's rim, its top edge
+    chamfered, a groove round its walls, the window over the T-Display, the
+    vents, the XT60's notch, the screw holes, hold-down blocks over the
+    SZBK07's corners, and the flush inlays. It prints lid-down."""
+    outer = octagon(BOX_X, BOX_Y, BOX_DIAG, COVER_Z0, LID_Z1)
+    outer = outer.chamfer(COVER_CHAMFER, None, top_edges(outer, LID_Z1))
+    shape = outer - cavity()
+    d = GROOVE_DEPTH
+    shape = shape - (octagon(BOX_X + 1, BOX_Y + 1, BOX_DIAG + SQRT2, *GROOVE_Z)
+                     - octagon(BOX_X - d, BOX_Y - d, BOX_DIAG - d * SQRT2, GROOVE_Z[0] - 1, GROOVE_Z[1] + 1))
+    for xa, xb in ((SZ_BOX[0], SZ_BOX[0] + SZ_HOLD[0]), (SZ_BOX[1] - SZ_HOLD[0], SZ_BOX[1])):
+        for ya, yb in ((SZ_BOX[2], SZ_BOX[2] + SZ_HOLD[1]), (SZ_BOX[3] - SZ_HOLD[1], SZ_BOX[3])):
+            shape = shape + box(xa, xb, ya, yb, SZ_BOX[5] + SZ_HOLD_GAP, LID_Z0 + EMBED)
+    shape = shape - window_cutter()
+    for x, y in COVER_SCREWS:
+        shape = shape - cyl(M3_D / 2, x, y, LID_Z0 - 1, LID_Z1 + 1)
+    iy0, iy1, iz0, iz1 = inlet_span()
+    shape = shape - vent_slots(-(iy0 + iy1) / 2, iz0, iz1, (BOX_X - WALL - 1, BOX_X + 1), 180)  # turned to face -x
+    ov0, ov1, oz0, oz1 = outlet_span()
+    shape = shape - vent_slots((ov0 + ov1) / 2, oz0, oz1, (EXH_U1 + 0.1, BOX_DIAG / SQRT2 + 1), DIAG)
+    ny0, ny1, nz1 = XT_NOTCH
+    shape = shape - box(-BOX_X - 1, -(BOX_X - WALL) + 0.5, ny0, ny1, COVER_Z0 - 1, nz1)
+    marks = inlays()
+    return Part("cover", shape - marks, "cover", DOWN, "black", inlays=marks)
+
+
+def channel() -> AirChannel:
+    """The passive air path: from the inlet (the space inside its grille, out
+    to the intake fan's inner face) over the fuse holder, up and across over
+    the SZBK07, forward over the board, right in front of the T-Display, and
+    into the front-right corner to the outlet (the exhaust fan's space behind
+    its grille). Every box keeps FIT + TOUCH from what it passes."""
+    c = FIT + TOUCH
+    iy0, iy1, iz0, iz1 = inlet_span()
+    ov0, ov1, oz0, oz1 = outlet_span()
+    top = LID_Z0 - FIT
+    over_sz = SZ_BOX[5] + c
+    over_board = S2_TOP + c
+    x_hold = SZ_BOX[1] - SZ_HOLD[0] - 0.5  # clear of the hold-down blocks at the SZBK07's right corners
+    y_hold = (SZ_BOX[2] + SZ_HOLD[1] + FIT, SZ_BOX[3] - SZ_HOLD[1] - FIT)
+    td_front = td_box(M.TD_PCB[0], M.TD_PCB[1], M.TD_PCB[2], M.TD_PCB[3], 0, 0)[3]
+    return AirChannel(
+        segments=(
+            ((INTAKE_X1 - 0.2, SZ_BOX[0] - 0.5, -38.0, INTAKE_Y1 - TOUCH, FUSE_BOX[5] + c, top), "x"),  # over the fuse holder
+            ((SZ_BOX[0] - 3.0, x_hold, *y_hold, over_sz, top), "x"),                # over the SZBK07
+            ((-5.0, x_hold, y_hold[0], 0.0, over_sz, top), "y"),                    # turning forward
+            ((-5.0, x_hold, SZ_BOX[3] + 0.5, 47.0, over_board, top), "y"),          # over the board
+            ((-5.0, 40.0, td_front + c, 47.0, over_board, top), "x"),               # in front of the T-Display
+            ((30.0, EXH_U0 + 0.13, -5.0, EXH_V1 - EXH_LIP_OVER - FIT, over_board, top), "x", DIAG),  # into the corner
+        ),
+        inlet=(-(BOX_X - WALL) + TOUCH, INTAKE_X1 + FIT - TOUCH, iy0, iy1, iz0, iz1),
+        outlet=(EXH_U0, EXH_U1 + 0.25, ov0, ov1, oz0, oz1),
+        inlet_open_area=VENT_SLOTS * VENT_SLOT_W * VENT_IN_H,
+        past=SZBK07,
+        outlet_turn=DIAG,
+    )
 
 
 def pilots():
@@ -590,6 +959,12 @@ def features() -> Solid:
         parts.append(box(-INNER_X, bx1 + TOUCH + XT_STOP, ya, yb, z, wz))
     for ya, yb in ((by0 - FIT, XT_CUPS[2] - FIT), (XT_CUPS[3] + FIT, by1 + FIT)):
         parts.append(box(bx1 + TOUCH, bx1 + TOUCH + XT_STOP, ya, yb, z, wz))
+    # The cover's posts, up to just under the lid, and the fans' holders,
+    # each kept inside the cover.
+    inside = cavity(TOUCH)
+    for x, y in COVER_SCREWS:
+        parts.append(cyl(POST_D / 2, x, y, z, LID_Z0 - TOUCH) & inside)
+    parts += [h & inside for h in fan_holders()]
     out = parts[0]
     for p in parts[1:]:
         out = out + p
@@ -624,6 +999,8 @@ def screws() -> list[Screw]:
     for i, (x, y) in enumerate(IMU_BOSSES):
         found.append(Screw(f"lsm6dso screw {i + 1}", (x, y, IMU_BOX[4] + MODULE_PCB_T + 1.2), UP,
                            after=(SERVO_2040, "cover")))
+    for i, (x, y) in enumerate(COVER_SCREWS):
+        found.append(Screw(f"cover screw {i + 1}", (x, y, LID_Z1 + BUTTON_HEAD_H), UP))
     return found
 
 
@@ -632,12 +1009,17 @@ def screws() -> list[Screw]:
 
 def assembly() -> Assembly:
     t = s2_terminals()
+    fans = [exhaust_fan(), intake_fan()]
     held = [szbk07(), servo2040(), lm2596(), t_display(), imu(), xt60(), fuse(), diode()]
+    held += [Held(f.name, f.shape()) for f in fans]
     return Assembly(
-        parts=[deck(), spacer()],
+        parts=[deck(), spacer(), cover()],
         held=held,
         routes=routes(t),
         openings=openings(),
         screws=screws(),
+        channel=channel(),
         imu_pad=ImuPad("deck", IMU_BOSSES, IMU_BOX[4] - TOUCH, IMU_BOSS_D / 2, PILOT_M2_D / 2),
+        vents=vents(),
+        fans=fans,
     )

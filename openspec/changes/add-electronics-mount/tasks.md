@@ -50,10 +50,10 @@
 
 ## 4. Cover
 
-- [ ] 4.1 Model the faceted cover: 45° corner faces, a chamfered top edge, recessed wall detail, and the window over the T-Display's screen and buttons, bevelled at 45°. Verify the overhang check passes lid-down and the screen sits below the lid's top.
-- [ ] 4.2 Add the fastening: M3 screws into heat-set inserts in the deck's posts, with teardrop holes and straight screwdriver paths. Verify the screwdriver-path and overhang checks pass.
-- [ ] 4.3 Add the cooling: an inlet low on one side, an outlet high on the opposite side, the SZBK07 between them, and no lid openings above it. Fit a 30 mm exhaust fan position (blowing out) and an optional 30 mm intake, each in a holder on the deck behind its vent. Verify checks that each fan position seats a fan without collisions, that the cover carries no fan, that the air channel is clear, and that the lid has no opening over the SZBK07.
-- [ ] 4.4 Add the flush yellow inlays on the lid (the name and accents), and export the cover as a 3MF with the body and the inlays as separate parts. Verify the 3MF opens in Bambu Studio with two assignable parts, and the inlays are flush.
+- [x] 4.1 Model the faceted cover: 45° corner faces, a chamfered top edge, recessed wall detail, and the window over the T-Display's screen and buttons, bevelled at 45°. Verify the overhang check passes lid-down and the screen sits below the lid's top.
+- [x] 4.2 Add the fastening: M3 screws into heat-set inserts in the deck's posts, with teardrop holes and straight screwdriver paths. Verify the screwdriver-path and overhang checks pass.
+- [x] 4.3 Add the cooling: an inlet low on one side, an outlet high on the opposite side, the SZBK07 between them, and no lid openings above it. Fit a 30 mm exhaust fan position (blowing out) and an optional 30 mm intake, each in a holder on the deck behind its vent. Verify checks that each fan position seats a fan without collisions, that the cover carries no fan, that the air channel is clear, and that the lid has no opening over the SZBK07.
+- [x] 4.4 Add the flush yellow inlays on the lid (the name and accents), and export the cover as a 3MF with the body and the inlays as separate parts. Verify the 3MF opens in Bambu Studio with two assignable parts, and the inlays are flush.
 
 ## 5. Bumpers and holders
 

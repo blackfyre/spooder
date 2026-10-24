@@ -2,19 +2,21 @@
 
 Each distinct part is written once, in the frame top's coordinates:
 - print/<name>.stl, or print/<name>.3mf for a part with inlays (the cover),
-  holding the body and the inlays as separate objects for the slicer;
+  holding the body and the inlays as two meshes, the parts of one object
+  (one build item), which the slicer assigns to different filaments;
 - step/<name>.step, the body and any inlays together.
 
 Files in print/ and step/ that the build did not write (a renamed or removed
 part) are deleted, so the folders hold exactly the current part set.
 `verify_export()` re-reads what was written: one print file and one STEP
 file per distinct part and nothing else, each STEP's and print file's
-bounding box equal to the built part's, and the deck's insert holes found
-again in its STEP.
+bounding box equal to the built part's, each 3MF one object of two parts,
+and the deck's insert holes found again in its STEP.
 """
 
 from __future__ import annotations
 
+import copy
 import re
 import uuid
 import zipfile
@@ -79,17 +81,38 @@ def export_parts(parts: list[Part], outdir: Path) -> list[Path]:
         if part.inlays is None:
             export_stl(part.shape, target, tolerance=MESH_TOLERANCE, angular_tolerance=MESH_ANGULAR)
         else:
-            mesher = Mesher()
-            for label, shape in (("body", part.shape), ("inlays", part.inlays)):
-                mesher.add_shape(shape, linear_deflection=MESH_TOLERANCE, angular_deflection=MESH_ANGULAR,
-                                 part_number=f"{part.name} {label}")
-            mesher.write(str(target))
+            write_3mf(part, target)
             normalise_3mf(target, part.name)
         written.append(target)
         step = outdir / STEP_DIR / f"{part.name}{STEP_SUFFIX}"
         export_step(cad_shape(part), step, timestamp=STEP_TIMESTAMP)
         written.append(step)
     return written
+
+
+def write_3mf(part: Part, target: Path) -> None:
+    """The body and the inlays, each one mesh (the inlays' pieces together),
+    as the two parts of one object, the file's one build item."""
+    mesher = Mesher()
+    model, identity = mesher.model, mesher.wrapper.GetIdentityTransform()
+    obj = model.AddComponentsObject()
+    obj.SetName(part.name)
+    for label, shape in (("body", part.shape), ("inlays", part.inlays)):
+        verts, tris = Mesher._mesh_shape(copy.deepcopy(shape), MESH_TOLERANCE, MESH_ANGULAR)
+        mesh = model.AddMeshObject()
+        mesh.SetGeometry(*Mesher._create_3mf_mesh(verts, tris))
+        mesh.SetName(f"{part.name} {label}")
+        if not mesh.IsValid():
+            raise RuntimeError(f"{part.name} {label}: invalid 3MF mesh")
+        obj.AddComponent(mesh, identity)
+    model.AddBuildItem(obj, identity)
+    mesher.write(str(target))
+
+
+def model_xml(path: Path) -> str:
+    with zipfile.ZipFile(path) as z:
+        name = next(n for n in z.namelist() if n.endswith(".model"))
+        return z.read(name).decode()
 
 
 def normalise_3mf(path: Path, name: str) -> None:
@@ -153,7 +176,12 @@ def verify_export(parts: list[Part], outdir: Path) -> list[str]:
         else:
             meshes = Mesher().read(str(target))
             if len(meshes) != 2:
-                failures.append(f"export: {target.name} holds {len(meshes)} objects, not the body and the inlays")
+                failures.append(f"export: {target.name} holds {len(meshes)} meshes, not the body and the inlays")
             elif bbox_differs(Compound(meshes).bounding_box(), built, BBOX_TOL):
                 failures.append(f"export: {target.name}'s bounding box is not the built part's")
+            xml = model_xml(target)
+            items, components = len(re.findall(r"<item\b", xml)), len(re.findall(r"<component\b", xml))
+            if (items, components) != (1, 2):
+                failures.append(f"export: {target.name} has {items} build item(s) and {components} component(s), "
+                                "not one object of two parts")
     return failures

@@ -15,7 +15,8 @@ position. An `Assembly` is what `build.py` generates and what the checks in
   must open onto free space on the frame top below it;
 - `Screw`: a screw's head and the outward direction a screwdriver comes from;
 - `AirChannel`: the passive air path from the inlet past the SZBK07 to the
-  outlet.
+  outlet;
+- `Vent`: a grille in the cover, and `Fan`: a fan position behind one.
 
 Boxes are given as (x0, x1, y0, y1, z0, z1).
 """
@@ -25,7 +26,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from build123d import Circle, Location, Plane, Polygon, Shape, Solid, Vector, extrude
+from build123d import Axis, Circle, Location, Plane, Polygon, Shape, Solid, Vector, extrude
 
 Vec3 = tuple[float, float, float]
 
@@ -60,6 +61,14 @@ def box(x0: float, x1: float, y0: float, y1: float, z0: float, z1: float) -> Sol
 
 def box6(b: Box6) -> Solid:
     return box(*b)
+
+
+def turned(b: Box6, turn: float = 0.0) -> Solid:
+    """A box given in a frame turned `turn` degrees about the vertical axis
+    through the origin (its x axis along (cos turn, sin turn)), in the frame
+    top's coordinates."""
+    s = box6(b)
+    return s if not turn else s.rotate(Axis.Z, turn)
 
 
 AXES = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
@@ -127,6 +136,9 @@ class Held:
     shape: Shape
     exposed: tuple[Exposure, ...] = ()
     route: str | None = None
+    # The height of the stops that locate it sideways: the cover must come
+    # nearer above it than this, so it cannot lift out over them (the SZBK07).
+    held_down: float = 0.0
 
 
 @dataclass
@@ -199,17 +211,63 @@ class Screw:
 @dataclass
 class AirChannel:
     """The passive air path: boxes in order from the inlet to the outlet,
-    each with the axis air flows along in it; the free space just inside the
-    inlet's and the outlet's grilles, as boxes; the inlet's net open area
-    (its grille's openings, not its outline); the held part the channel must
-    pass (the SZBK07). The fans (`FANS`) are left out of the check, which is
-    of the passive case."""
+    each with the axis air flows along in it, and optionally the angle (in
+    degrees, about the vertical) its frame is turned by (`turned()`), for a
+    run towards a corner face; the free space just inside the inlet's and the
+    outlet's grilles, as boxes, each in a frame turned by `inlet_turn` and
+    `outlet_turn`; the inlet's net open area (its grille's openings, not its
+    outline); the held part the channel must pass (the SZBK07). Air leaves
+    through the outlet along `outlet_axis`, by default the last segment's
+    axis. The fans (`FANS`) are left out of the check, which is of the
+    passive case."""
 
-    segments: tuple[tuple[Box6, str], ...]
+    segments: tuple[tuple, ...]  # (Box6, axis) or (Box6, axis, turn)
     inlet: Box6
     outlet: Box6
     inlet_open_area: float
     past: str
+    inlet_turn: float = 0.0
+    outlet_turn: float = 0.0
+    outlet_axis: str | None = None
+
+
+@dataclass
+class Vent:
+    """A grille in the cover: `shape` is the wall region it occupies, which
+    the enclosure check treats as closed (a grille keeps fingers and debris
+    out), and `open_area` its net open area."""
+
+    name: str
+    shape: Shape
+    open_area: float
+
+
+@dataclass
+class Fan:
+    """A fan position: the held part `name` (one of `FANS`), a box `size`
+    (width, height, thickness) in its own frame, with x across its width, y
+    from its inner face (-thickness) to its outer face (0), towards its vent,
+    and z up from its underside. `origin` is the bottom centre of its outer
+    face, `outward` the horizontal unit direction from it to its vent; an
+    exhaust fan blows outwards, an intake inwards."""
+
+    name: str
+    origin: Vec3
+    outward: Vec3
+    exhaust: bool
+    size: Vec3 = (30.0, 30.0, 10.0)
+
+    def plane(self) -> Plane:
+        o = Vector(self.outward).normalized()
+        return Plane(origin=self.origin, x_dir=o.cross(Vector(0, 0, 1)), z_dir=(0, 0, 1))
+
+    def local(self, x0: float, x1: float, y0: float, y1: float, z0: float, z1: float) -> Solid:
+        """A box in the fan's frame, in the frame top's coordinates."""
+        return box(x0, x1, y0, y1, z0, z1).moved(self.plane().location)
+
+    def shape(self) -> Solid:
+        w, h, t = self.size
+        return self.local(-w / 2, w / 2, -t, 0, 0, h)
 
 
 @dataclass
@@ -233,3 +291,5 @@ class Assembly:
     screws: list[Screw] = field(default_factory=list)
     channel: AirChannel | None = None
     imu_pad: ImuPad | None = None
+    vents: list[Vent] = field(default_factory=list)
+    fans: list[Fan] = field(default_factory=list)

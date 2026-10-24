@@ -16,11 +16,11 @@ import math
 from collections.abc import Iterable
 
 import numpy as np
-from build123d import Compound, GeomType, Plane, Shape, Solid, Vector, Vertex
+from build123d import Compound, GeomType, Location, Plane, Shape, Solid, Vector, Vertex
 
 import measurements as M
-from model import (FANS, IMU, J6, LM2596_OUTPUT_ROUTE, SCHOTTKY, SENSOR_HEADER, SERVO_2040, SZBK07, Assembly, Box6,
-                   Terminal, box, box6)
+from model import (AXES, FANS, IMU, J6, LM2596_OUTPUT_ROUTE, SCHOTTKY, SENSOR_HEADER, SERVO_2040, SZBK07, Assembly,
+                   Box6, Terminal, box, box6, turned)
 
 # Leg keep-clear radius about the body's centre. Source: design.md "Context":
 # nothing on the legs comes nearer than r 81.8 above the frame top, less a
@@ -81,6 +81,39 @@ WIRE_CLEARANCE = 0.2
 # Surface samples are spaced about this far apart. Source: chosen, finer than
 # the narrowest feature the checks look for (a 3 mm bridge).
 SAMPLE_STEP = 1.5
+# The lid must have no opening above these held parts. Source: the spec's
+# "Cooling" (the SZBK07's heatsinks are live).
+CLOSED_OVER = (SZBK07,)
+# Rays up from the closed-over part's top are this far apart. Source: chosen,
+# finer than a 2 mm slot.
+CLOSED_STEP = 1.0
+# The cover is lifted by each of these (mm) and must meet nothing on the way:
+# it lifts straight off. Source: the spec's "Access and service"; the steps
+# are chosen to reach past the cover's height.
+LIFT_STEPS = (0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 40.0, 80.0)
+# A fan is supported at each end when a part (not the cover) lies within this
+# below its underside, under the last FAN_END of its width; it is located at
+# each end when a part lies within FAN_LOCATE beyond its end face. Source:
+# chosen, the skill's FIT with margin.
+FAN_SEAT_GAP = 0.4
+FAN_END = 3.0
+FAN_LOCATE = 0.8
+# Moved this far across its width or inwards, a fan meets a part other than
+# the cover (its holder); moved outwards, it meets a part or the cover's wall.
+# Source: chosen, beyond the skill's FIT.
+FAN_PLAY = 1.0
+# The cover may come no nearer a fan than this: it carries no fan. Source:
+# chosen, well below the skill's FIT, which the layout keeps (a box grown by
+# it reaches FAN_COVER_GAP x sqrt 2 into a chamfer at its edges).
+FAN_COVER_GAP = 0.1
+# At least this share of rays from a fan's outer face, out along its axis,
+# must pass the cover through its vent. Source: chosen, a grille of 2 mm
+# slots at a 4 mm pitch over most of the fan's face passes about 0.4.
+FAN_VENT_OPEN = 0.25
+
+# Slices through a junction between boxes in differently turned frames are
+# this thick. Source: chosen.
+SLICE_T = 0.2
 
 COS_OVERHANG = math.cos(math.radians(OVERHANG_DEG))
 RAY_DIRECTIONS = ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1))
@@ -322,15 +355,21 @@ def check_overlaps(asm: Assembly) -> list[str]:
 
 
 def check_enclosure(asm: Assembly) -> list[str]:
-    """Every held part is enclosed by the cover: rays from its surface along
-    ±x, ±y and +z all meet the cover, except from its exposed regions in
-    their direction, which (when they must show) meet nothing of it."""
+    """Every held part is enclosed by the mount: rays from its surface along
+    ±x, ±y and +z all meet the cover, a vent's grille, another printed part or
+    another held part (not a fan, which is optional), except from its exposed
+    regions in their direction, which (when they must show) meet nothing of
+    the cover."""
     covers = [p for p in asm.parts if p.role == "cover"]
     if not covers or not asm.held:
         return []
     tris = triangles(s for c in covers for s in c.solids())
+    fixed = [tris, triangles(s for p in asm.parts if p.role != "cover" for s in p.solids()),
+             triangles(v.shape for v in asm.vents)]
+    others = {h.name: triangles([h.shape]) for h in asm.held if h.name not in FANS}
     failures = []
     for held in asm.held:
+        blockers = np.concatenate(fixed + [t for n, t in others.items() if n != held.name])
         open_dirs: dict[tuple, list] = {}
         shown: dict[int, int] = {}
         for face in held.shape.faces():
@@ -340,13 +379,13 @@ def check_enclosure(asm: Assembly) -> list[str]:
                         continue
                     exp = next((k for k, e in enumerate(held.exposed)
                                 if tuple(e.direction) == d and in_box(p, e.region)), None)
-                    hit = bool(ray_hits(np.array([[p.X, p.Y, p.Z]]), d, tris)[0])
+                    origin = np.array([[p.X, p.Y, p.Z]])
                     if exp is not None:
                         if held.exposed[exp].must_show:
                             shown[exp] = shown.get(exp, 0) + 1
-                            if hit:
+                            if ray_hits(origin, d, tris)[0]:
                                 open_dirs.setdefault(("covered", d), []).append(p)
-                    elif not hit:
+                    elif not ray_hits(origin, d, blockers)[0]:
                         open_dirs.setdefault(("open", d), []).append(p)
         for (kind, d), pts in open_dirs.items():
             where = "".join(f"{'+-'[c < 0]}{'xyz'[i]}" for i, c in enumerate(d) if c)
@@ -599,13 +638,57 @@ def overlap_box(a: Box6, b: Box6) -> Box6 | None:
     return o
 
 
-def junction(a: Box6, b: Box6, axis_a: str, axis_b: str) -> float:
+def flow(axis: str, turn: float) -> np.ndarray:
+    """The unit direction of a flow along `axis` in a frame turned `turn`
+    degrees about the vertical."""
+    v = np.array(AXES[axis])
+    c, s = math.cos(math.radians(turn)), math.sin(math.radians(turn))
+    return np.array([c * v[0] - s * v[1], s * v[0] + c * v[1], v[2]])
+
+
+def junction(a: Box6, b: Box6, axis_a: str, axis_b: str, turn_a: float = 0.0, turn_b: float = 0.0) -> float:
     """The area air passes through from box a into box b: the smaller of
-    their shared region's cross-sections across each one's flow."""
-    o = overlap_box(a, b)
-    if o is None:
+    their shared region's cross-sections across each one's flow. Boxes in
+    the same frame may meet face to face; boxes in frames turned differently
+    must overlap, and the shared region's cross-section across a flow is its
+    widest section across that flow, as it is for a box."""
+    if abs(turn_a - turn_b) < 1e-9:
+        o = overlap_box(a, b)
+        if o is None:
+            return 0.0
+        return min(cross_section(o, axis_a), cross_section(o, axis_b))
+    shared = turned(a, turn_a) & turned(b, turn_b)
+    if volume(shared) <= VOLUME_TOL:
         return 0.0
-    return min(cross_section(o, axis_a), cross_section(o, axis_b))
+    return min(widest_slice(shared, flow(axis, turn)) for axis, turn in ((axis_a, turn_a), (axis_b, turn_b)))
+
+
+def widest_slice(shape: Shape, direction: np.ndarray, n: int = 11) -> float:
+    """The largest area of the shape's sections across `direction`, from n
+    slices SLICE_T thick spread along it (for a box, every section's area)."""
+    pts = vertices(shape)
+    d = np.asarray(direction, dtype=float)
+    along = pts @ d
+    centre = pts.mean(axis=0)
+    centre = centre - d * (centre @ d)
+    size = 2 * float(np.ptp(pts, axis=0).max()) + 10
+    best = 0.0
+    for t in np.linspace(along.min() + SLICE_T, along.max() - SLICE_T, n):
+        plane = Plane(origin=tuple(centre + d * t), z_dir=tuple(d))
+        slab = Solid.make_box(size, size, SLICE_T).moved(Location((-size / 2, -size / 2, -SLICE_T / 2)))
+        best = max(best, volume(shape & slab.moved(plane.location)) / SLICE_T)
+    return best
+
+
+def segments(ch) -> list[tuple[Box6, str, float]]:
+    """The channel's segments as (box, axis, turn)."""
+    return [(s[0], s[1], s[2] if len(s) > 2 else 0.0) for s in ch.segments]
+
+
+def channel_solids(ch) -> list[Solid]:
+    """The channel's inlet, segments and outlet as solids (for the preview)."""
+    return ([turned(ch.inlet, ch.inlet_turn)] + [turned(b, t) for b, _, t in segments(ch)]
+            + [turned(ch.outlet, ch.outlet_turn)])
 
 
 def check_air_channel(asm: Assembly) -> list[str]:
@@ -617,39 +700,158 @@ def check_air_channel(asm: Assembly) -> list[str]:
         return []
     failures = []
     area = ch.inlet_open_area
-    if area <= 0 or not ch.segments:
+    segs = segments(ch)
+    if area <= 0 or not segs:
         return ["air channel: no inlet area or no segments"]
-    for i, (b, axis) in enumerate(ch.segments):
+    for i, (b, axis, _) in enumerate(segs):
         if cross_section(b, axis) < area - 1e-6:
             failures.append(f"air channel segment {i + 1}: cross-section {cross_section(b, axis):.0f} mm², "
                             f"smaller than the inlet's {area:.0f} mm²")
-    regions = [("inlet", ch.inlet)] + [(f"segment {i + 1}", b) for i, (b, _) in enumerate(ch.segments)]
-    regions.append(("outlet", ch.outlet))
+    regions = [("inlet", turned(ch.inlet, ch.inlet_turn))]
+    regions += [(f"segment {i + 1}", turned(b, t)) for i, (b, _, t) in enumerate(segs)]
+    regions.append(("outlet", turned(ch.outlet, ch.outlet_turn)))
     solids = list(labelled_solids(Assembly(parts=asm.parts)))
     solids += [(h.name, h.shape) for h in asm.held if h.name not in FANS]
-    for name, b in regions:
-        region = box6(b)
+    for name, region in regions:
         for label, shape in solids:
             v = common(shape, region)
             if v > VOLUME_TOL:
                 failures.append(f"air channel {name}: {label} enters it ({v:.2f} mm³)")
-    joins = [("inlet", ch.inlet, ch.segments[0][1], ch.segments[0][0], ch.segments[0][1], "segment 1")]
-    for i in range(len(ch.segments) - 1):
-        (a, xa), (b, xb) = ch.segments[i], ch.segments[i + 1]
-        joins.append((f"segment {i + 1}", a, xa, b, xb, f"segment {i + 2}"))
-    last, xl = ch.segments[-1]
-    joins.append((f"segment {len(ch.segments)}", last, xl, ch.outlet, xl, "outlet"))
-    for na, a, xa, b, xb, nb in joins:
-        j = junction(a, b, xa, xb)
+    first, last = segs[0], segs[-1]
+    joins = [("inlet", (ch.inlet, first[1], ch.inlet_turn), first, "segment 1")]
+    for i in range(len(segs) - 1):
+        joins.append((f"segment {i + 1}", segs[i], segs[i + 1], f"segment {i + 2}"))
+    joins.append((f"segment {len(segs)}", last, (ch.outlet, ch.outlet_axis or last[1], ch.outlet_turn), "outlet"))
+    for na, (a, xa, ta), (b, xb, tb), nb in joins:
+        j = junction(a, b, xa, xb, ta, tb)
         if j < area - 1e-6:
             failures.append(f"air channel: {na} to {nb} passes {j:.0f} mm², less than the inlet's {area:.0f} mm²")
     past = next((h for h in asm.held if h.name == ch.past), None)
     if past is None:
         failures.append(f"air channel: no held part '{ch.past}' to pass")
     else:
-        gap = min(box6(b).distance_to(past.shape) for b, _ in ch.segments)
+        gap = min(turned(b, t).distance_to(past.shape) for b, _, t in segs)
         if gap > AIR_PAST:
             failures.append(f"air channel: passes {ch.past} no nearer than {gap:.1f} mm (needs {AIR_PAST})")
+    return failures
+
+
+def check_fans(asm: Assembly) -> list[str]:
+    """Each fan position seats a fan behind its vent: the fan is supported
+    at both ends and located at both end faces by parts other than the cover,
+    which comes no nearer than FAN_COVER_GAP (it carries no fan); moved
+    FAN_PLAY across its width or inwards it meets its holder, and outwards
+    its holder or the cover's wall; rays from
+    its outer face out along its axis pass the cover through a vent; an
+    exhaust faces out of the box and an intake into it. A part set with an
+    air channel has an exhaust position. Collisions are the overlap check's."""
+    failures = []
+    if asm.channel is not None and not any(f.exhaust for f in asm.fans):
+        failures.append("fans: no exhaust fan position at the outlet")
+    if not asm.fans:
+        return failures
+    held = {h.name: h for h in asm.held}
+    covers = [s for p in asm.parts if p.role == "cover" for s in p.solids()]
+    supports = [s for p in asm.parts if p.role != "cover" for s in p.instances()]
+    cover_tris = triangles(covers)
+    for fan in asm.fans:
+        if fan.name not in FANS:
+            failures.append(f"{fan.name}: not a fan position ({', '.join(FANS)})")
+        h = held.get(fan.name)
+        if h is None:
+            failures.append(f"{fan.name}: no held fan in its position")
+        elif outside(fan.shape(), h.shape) > VOLUME_TOL or outside(h.shape, fan.shape()) > VOLUME_TOL:
+            failures.append(f"{fan.name}: the held fan is not in its position")
+        w, ht, t = fan.size
+        for end, sign in (("one end", -1), ("the other end", 1)):
+            x0, x1 = sorted((sign * w / 2, sign * (w / 2 - FAN_END)))
+            under = fan.local(x0, x1, -t, 0, -FAN_SEAT_GAP, -0.01)
+            if not any(common(s, under) > VOLUME_TOL for s in supports):
+                failures.append(f"{fan.name}: nothing supports {end} from below")
+            x0, x1 = sorted((sign * (w / 2 + 0.01), sign * (w / 2 + FAN_LOCATE)))
+            beyond = fan.local(x0, x1, -t, 0, 0, ht / 2)
+            if not any(common(s, beyond) > VOLUME_TOL for s in supports):
+                failures.append(f"{fan.name}: nothing locates {end}")
+        pl = fan.plane()
+        for what, (dx, dy), within in (("across its width", (1, 0), supports), ("across its width", (-1, 0), supports),
+                                       ("inwards", (0, -1), supports), ("outwards", (0, 1), supports + covers)):
+            step = pl.x_dir * (dx * FAN_PLAY) + pl.y_dir * (dy * FAN_PLAY)
+            moved = fan.shape().moved(Location(tuple(step)))
+            if not any(common(s, moved) > VOLUME_TOL for s in within):
+                failures.append(f"{fan.name}: it slides {FAN_PLAY} mm {what} without meeting its holder"
+                                + (" or the cover" if dy > 0 else ""))
+        near = fan.local(-w / 2 - FAN_COVER_GAP, w / 2 + FAN_COVER_GAP, -t - FAN_COVER_GAP, FAN_COVER_GAP,
+                         -FAN_COVER_GAP, ht + FAN_COVER_GAP)
+        if any(common(s, near) > VOLUME_TOL for s in covers):
+            failures.append(f"{fan.name}: the cover comes within {FAN_COVER_GAP} mm of it (the cover carries no fan)")
+        out = np.array(tuple(Vector(fan.outward).normalized()))
+        pts = np.array([tuple(pl.from_local_coords((x, -0.01, z)))
+                        for x in np.linspace(-w / 2 + 2, w / 2 - 2, 13) for z in np.linspace(2, ht - 2, 13)])
+        share = 1.0 - ray_hits(pts, out, cover_tris).mean() if len(cover_tris) else 1.0
+        if covers and share < FAN_VENT_OPEN:
+            failures.append(f"{fan.name}: only {share:.0%} of its face sees out through the cover "
+                            f"(needs {FAN_VENT_OPEN:.0%}): no vent in front of it")
+        facing = out[0] * fan.origin[0] + out[1] * fan.origin[1]
+        if facing <= 0:
+            failures.append(f"{fan.name}: its vent side faces into the box, not out of it")
+    return failures
+
+
+def check_cover(asm: Assembly) -> list[str]:
+    """The cover: every screen that must show sits below its top; it comes
+    nearer above each held-down part than that part's stops are tall; its lid
+    has no opening above the parts in CLOSED_OVER; and it lifts straight off:
+    nothing lies above any face of it that looks up (rays up from them), and
+    raised by each of LIFT_STEPS it overlaps nothing."""
+    covers = [p for p in asm.parts if p.role == "cover"]
+    failures = []
+    for cover in covers:
+        solids = cover.solids()
+        top = max(s.bounding_box().max.Z for s in solids)
+        for h in asm.held:
+            for e in h.exposed:
+                if e.must_show and tuple(e.direction) == (0, 0, 1) and e.region[5] > top - 1e-6:
+                    failures.append(f"{h.name}: its exposed face at z {e.region[5]:.2f} is not below "
+                                    f"the {cover.name}'s top at z {top:.2f}")
+            if h.held_down > 0:
+                b = bbox6(h.shape)
+                probe = box(b[0], b[1], b[2], b[3], b[5], b[5] + h.held_down)
+                if sum(common(s, probe) for s in solids) <= VOLUME_TOL:
+                    failures.append(f"{h.name}: the {cover.name} leaves {h.held_down} mm or more above it, "
+                                    f"so it can lift out over its stops")
+        tris = triangles(solids)
+        for name in CLOSED_OVER:
+            h = next((x for x in asm.held if x.name == name), None)
+            if h is None:
+                continue
+            b = bbox6(h.shape)
+            xs = np.arange(b[0] + CLOSED_STEP / 2, b[1], CLOSED_STEP)
+            ys = np.arange(b[2] + CLOSED_STEP / 2, b[3], CLOSED_STEP)
+            pts = np.array([(x, y, b[5] + 0.01) for x in xs for y in ys])
+            open_ = ~ray_hits(pts, (0, 0, 1), tris)
+            if open_.any():
+                failures.append(f"{cover.name}: an opening in it above the {name} "
+                                f"({int(open_.sum())} points, first at {fmt(pts[open_][0])})")
+        others = [(label, shape) for label, shape in labelled_solids(asm)
+                  if label.split(" copy ")[0].removesuffix(" inlays") != cover.name]
+        # Lifting it, every face of it that looks up sweeps the space above:
+        # nothing may lie there. Rays up from those faces meet nothing else.
+        above = triangles(shape for _, shape in others)
+        ups = np.array([(p.X, p.Y, p.Z) for s in solids for face in s.faces()
+                        for p, n in face_samples(face) if n.Z > 1e-3])
+        if len(ups) and len(above):
+            hit = ray_hits(ups, (0, 0, 1), above)
+            if hit.any():
+                failures.append(f"{cover.name}: something lies above it ({int(hit.sum())} points, first over "
+                                f"{fmt(ups[hit][0])}): it does not lift straight off")
+        for d in LIFT_STEPS:
+            lifted = [s.moved(Location((0, 0, d))) for s in solids]
+            hit = next(((label, v) for label, shape in others
+                        for v in [sum(common(m, shape) for m in lifted)] if v > VOLUME_TOL), None)
+            if hit:
+                failures.append(f"{cover.name}: lifted {d} mm, it meets {hit[0]} ({hit[1]:.2f} mm³): "
+                                "it does not lift straight off")
+                break
     return failures
 
 
@@ -766,5 +968,7 @@ def run_checks(asm: Assembly, frame: FrameMap | None = None) -> list[str]:
     failures += check_overhangs(asm)
     failures += check_screwdriver_paths(asm)
     failures += check_air_channel(asm)
+    failures += check_fans(asm)
+    failures += check_cover(asm)
     return failures
 

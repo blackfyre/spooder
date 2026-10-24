@@ -1,5 +1,5 @@
 """Tests of the mount's checks, the build, the export and the layout (tasks
-2.1 to 3.3).
+2.1 to 4.4).
 
     uv run --locked --quiet --script hardware/spooder-electronics-mount/build.py --test
 
@@ -27,10 +27,10 @@ from build123d import Location
 import build
 import checks as C
 import measurements as M
-from export import export_parts, verify_export
+from export import export_parts, model_xml, verify_export
 import layout as L
-from model import (IMU, LM2596_OUTPUT_ROUTE, SCHOTTKY, SERVO_2040, SZBK07, AirChannel, Assembly, Exposure, Held, ImuPad,
-                   Opening, Part, Route, Screw, Terminal, box, teardrop)
+from model import (FANS, IMU, LM2596_OUTPUT_ROUTE, SCHOTTKY, SERVO_2040, SZBK07, AirChannel, Assembly, Exposure, Fan, Held,
+                   ImuPad, Opening, Part, Route, Screw, Terminal, Vent, box, teardrop, turned)
 
 UP = (0.0, 0.0, 1.0)
 DOWN = (0.0, 0.0, -1.0)
@@ -196,6 +196,21 @@ class Enclosure(unittest.TestCase):
         nowhere = Exposure((1, 0, 0), (-30, -25, -1, 1, 30, 40))
         asm = Assembly(parts=[cover()], held=[Held("xt60", box(-10, 10, -10, 10, 31, 35), exposed=(nowhere,))])
         self.assertTrue(fails(C.check_enclosure(asm), "xt60", "nothing of it faces"))
+
+    def test_a_grille_counts_as_closed(self):
+        board = Held("board", box(-10, 10, -10, 10, 31, 35))
+        grille = box(-5, 5, -5, 5, 49, 53)
+        asm = Assembly(parts=[cover(hole=(-5, 5, -5, 5))], held=[board])
+        self.assertTrue(fails(C.check_enclosure(asm), "board", "towards +z"))
+        asm.vents = [Vent("lid grille", grille, 50.0)]
+        self.assertEqual(C.check_enclosure(asm), [])
+
+    def test_another_held_part_shields_it_but_a_fan_does_not(self):
+        board = Held("board", box(-4, 4, -4, 4, 31, 35))
+        asm = Assembly(parts=[cover(hole=(-5, 5, -5, 5))], held=[board, Held("t-display", box(-6, 6, -6, 6, 40, 42))])
+        self.assertFalse(fails(C.check_enclosure(asm), "board"))
+        asm.held[1] = Held(FANS[0], box(-6, 6, -6, 6, 40, 42))
+        self.assertTrue(fails(C.check_enclosure(asm), "board", "towards +z"))
 
     def test_held_parts_without_a_cover_are_not_checked(self):
         self.assertEqual(C.check_enclosure(Assembly(held=[Held("board", box(0, 1, 0, 1, 30, 31))])), [])
@@ -408,10 +423,148 @@ class AirChannelCheck(unittest.TestCase):
         f = C.check_air_channel(Assembly(held=[self.SZBK07, board], channel=self.channel()))
         self.assertTrue(fails(f, "segment 1", "fan board enters"), f)
 
+    def test_a_turned_segment_passes_into_a_corner(self):
+        # A run along x, then one turned 45 degrees out to a corner outlet.
+        sz = Held("szbk07", box(-30, 0, -30, -10.5, 30, 58))
+        ch = AirChannel(segments=(((-20, 20, -10, 30, 30, 50), "x"), ((14, 40, -10, 10, 30, 50), "x", 45.0)),
+                        inlet=(-22, -20, -10, 30, 30, 50), outlet=(40, 42, -10, 10, 30, 50), inlet_open_area=380.0,
+                        past="szbk07", outlet_turn=45.0)
+        self.assertEqual(C.check_air_channel(Assembly(held=[sz], channel=ch)), [])
+        # Turned off to one side, it barely meets the run along x.
+        ch.segments = (ch.segments[0], ((14, 40, 20, 40, 30, 50), "x", 45.0))
+        ch.outlet = (40, 42, 20, 40, 30, 50)
+        f = C.check_air_channel(Assembly(held=[sz], channel=ch))
+        self.assertTrue(fails(f, "segment 1 to segment 2"), f)
+
+    def test_the_widest_slice_of_a_box_is_its_cross_section(self):
+        import numpy as np
+
+        b = (0, 10, 0, 20, 0, 30)
+        self.assertAlmostEqual(C.widest_slice(box(*b), np.array([1.0, 0, 0])), C.cross_section(b, "x"), delta=1.0)
+        self.assertAlmostEqual(C.widest_slice(box(*b), np.array([0, 1.0, 0])), C.cross_section(b, "y"), delta=1.0)
+
     def test_a_channel_away_from_the_szbk07_fails(self):
         far = Held("szbk07", box(-30, 30, -27, 20, 30, 58))
         f = C.check_air_channel(Assembly(held=[far], channel=self.channel()))
         self.assertTrue(fails(f, "passes szbk07 no nearer"), f)
+
+
+def fan_at(x: float, exhaust: bool = True) -> Fan:
+    """A fan facing +x with its outer face at x, its underside at z 30."""
+    return Fan(FANS[0] if exhaust else FANS[1], (x, 0.0, 30.0), (1.0, 0.0, 0.0), exhaust)
+
+
+def fan_holder(x: float, name: str = "holder", lip: bool = True) -> Part:
+    """A plate under the fan at x, with a cheek beyond each end and a lip
+    inside its foot."""
+    shape = box(x - 10, x, -16, 16, 28, 30) + box(x - 10, x, 15.3, 17.3, 28, 35) + box(x - 10, x, -17.3, -15.3, 28, 35)
+    if lip:
+        shape = shape + box(x - 12, x - 10.3, -16, 16, 28, 33)
+    return Part(name, shape, "holder", UP, "white")
+
+
+def grilled_cover(x: float, slots: bool = True) -> Part:
+    """A box wall at x, beyond the fan, with slots in front of it."""
+    shape = box(-30, x + 2.4, -30, 30, 28, 64) - box(-28, x, -28, 28, 27, 62)
+    if slots:
+        for i in range(7):
+            shape = shape - box(x - 1, x + 3, -13 + 4 * i, -11 + 4 * i, 32, 58)
+    return Part("cover", shape, "cover", DOWN, "black")
+
+
+class Fans(unittest.TestCase):
+    def asm(self, holder=True, cover_=True, slots=True, fan=None, x=20.0) -> Assembly:
+        fan = fan or fan_at(x)
+        parts = ([fan_holder(x)] if holder else []) + ([grilled_cover(x + 0.3, slots)] if cover_ else [])
+        return Assembly(parts=parts, held=[Held(fan.name, fan.shape())], fans=[fan])
+
+    def test_a_seated_fan_behind_its_grille_passes(self):
+        self.assertEqual(C.check_fans(self.asm()), [])
+
+    def test_a_fan_without_its_holder_fails(self):
+        f = C.check_fans(self.asm(holder=False))
+        self.assertTrue(fails(f, "nothing supports one end") and fails(f, "nothing locates the other end"), f)
+
+    def test_a_fan_free_to_slide_fails(self):
+        asm = self.asm()
+        asm.parts[0] = fan_holder(20.0, lip=False)
+        f = C.check_fans(asm)
+        self.assertTrue(fails(f, "slides 1.0 mm inwards"), f)
+        self.assertFalse(fails(f, "outwards"), f)
+        f = C.check_fans(self.asm(cover_=False))
+        self.assertTrue(fails(f, "slides 1.0 mm outwards"), f)
+
+    def test_a_fan_without_a_vent_fails(self):
+        self.assertTrue(fails(C.check_fans(self.asm(slots=False)), "no vent in front of it"))
+
+    def test_a_fan_carried_by_the_cover_fails(self):
+        asm = self.asm(holder=False)
+        asm.parts[0].shape = asm.parts[0].shape + fan_holder(20.0).shape  # the holder made part of the cover
+        f = C.check_fans(asm)
+        self.assertTrue(fails(f, "the cover carries no fan"), f)
+        self.assertTrue(fails(f, "nothing supports"), f)
+
+    def test_an_exhaust_facing_into_the_box_fails(self):
+        fan = Fan(FANS[0], (-20.0, 0.0, 30.0), (1.0, 0.0, 0.0), True)
+        self.assertTrue(fails(C.check_fans(Assembly(held=[Held(fan.name, fan.shape())], fans=[fan])), "faces into the box"))
+
+    def test_a_held_fan_out_of_its_position_fails(self):
+        asm = self.asm()
+        asm.held[0] = Held(FANS[0], fan_at(18.0).shape())
+        self.assertTrue(fails(C.check_fans(asm), "not in its position"))
+
+    def test_a_channel_needs_an_exhaust_position(self):
+        ch = AirChannel(segments=(((0, 10, 0, 10, 30, 40), "x"),), inlet=(-1, 0, 0, 10, 30, 40),
+                        outlet=(10, 11, 0, 10, 30, 40), inlet_open_area=10.0, past=SZBK07)
+        self.assertTrue(fails(C.check_fans(Assembly(channel=ch)), "no exhaust fan position"))
+        intake = fan_at(20.0, exhaust=False)
+        self.assertTrue(fails(C.check_fans(Assembly(channel=ch, fans=[intake])), "no exhaust fan position"))
+
+
+class CoverChecks(unittest.TestCase):
+    SZ = Held(SZBK07, box(-15, 15, -20, 0, 31, 48), held_down=3.0)  # 2 mm under the lid
+
+    def test_a_closed_cover_passes(self):
+        self.assertEqual(C.check_cover(Assembly(parts=[cover()], held=[self.SZ])), [])
+
+    def test_a_screen_above_the_lid_s_top_fails(self):
+        screen = Exposure(UP, (-6, 6, -6, 6, 53, 53))
+        td = Held("t-display", box(-6, 6, -6, 6, 50, 53), exposed=(screen,))
+        self.assertTrue(fails(C.check_cover(Assembly(parts=[cover(window=(-6, 6, -6, 6))], held=[td])),
+                              "not below the cover's top"))
+        low = Held("t-display", box(-6, 6, -6, 6, 45, 49), exposed=(Exposure(UP, (-6, 6, -6, 6, 49, 49)),))
+        self.assertEqual(C.check_cover(Assembly(parts=[cover(window=(-6, 6, -6, 6))], held=[low])), [])
+
+    def test_a_held_down_part_with_room_to_lift_fails(self):
+        high = Held(SZBK07, box(-15, 15, -20, 0, 31, 40), held_down=3.0)  # 10 mm under the lid
+        self.assertTrue(fails(C.check_cover(Assembly(parts=[cover()], held=[high])), "lift out over its stops"))
+        ribbed = cover()
+        ribbed.shape = ribbed.shape + box(-15, -10, -20, -15, 41, 50.5)
+        self.assertEqual(C.check_cover(Assembly(parts=[ribbed], held=[high])), [])
+
+    def test_an_opening_over_the_szbk07_fails(self):
+        asm = Assembly(parts=[cover(hole=(-5, -3, -10, -8))], held=[self.SZ])
+        self.assertTrue(fails(C.check_cover(asm), "an opening in it above the szbk07"))
+
+    def test_a_cover_that_hooks_under_a_part_fails_to_lift_off(self):
+        # A hook on the cover under a ledge on the deck: clear in place, caught when lifted.
+        hooked = cover()
+        hooked.shape = hooked.shape + box(10, 20, 5, 9, 33, 35) + box(19, 20, 5, 9, 35, 50.5)
+        deck_ = Part("deck", box(-22, 22, -32, 32, 27, 30) + box(5, 8, 5, 9, 30, 40) + box(5, 15, 5, 9, 38, 40),
+                     "deck", UP, "black")
+        self.assertLess(C.common(hooked.shape, deck_.shape), C.VOLUME_TOL)
+        f = C.check_cover(Assembly(parts=[deck_, hooked], held=[self.SZ]))
+        self.assertTrue(fails(f, "does not lift straight off", "deck"), f)
+        self.assertEqual(C.check_cover(Assembly(parts=[deck_, cover()], held=[self.SZ])), [])
+
+    def test_a_catch_between_the_lift_steps_fails(self):
+        # The ledge 2.6 mm over the hook: lifting 2 mm clears it, 5 mm passes it.
+        hooked = cover()
+        hooked.shape = hooked.shape + box(10, 20, 5, 9, 33, 35) + box(19, 20, 5, 9, 35, 50.5)
+        deck_ = Part("deck", box(-22, 22, -32, 32, 27, 30) + box(5, 8, 5, 9, 30, 37.9) + box(5, 15, 5, 9, 37.6, 37.9),
+                     "deck", UP, "black")
+        f = C.check_cover(Assembly(parts=[deck_, hooked], held=[self.SZ]))
+        self.assertTrue(fails(f, "something lies above it", "does not lift straight off"), f)
 
 
 class Build(unittest.TestCase):
@@ -477,6 +630,25 @@ class Export(unittest.TestCase):
             parts[1].shape = box(-3, 3, 60, 66, 30, 41)
             f = verify_export(parts, out)
             self.assertTrue(fails(f, "bumper.step's bounding box"), f)
+
+    def test_the_cover_is_one_object_of_two_parts(self):
+        from build123d import Mesher
+
+        parts = fixture_parts()
+        cov = parts[2]
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            export_parts(parts, out)
+            xml = model_xml(out / "print" / "cover.3mf")
+            self.assertEqual(xml.count("<item "), 1, "one build item")
+            self.assertEqual(xml.count("<component "), 2, "the body and the inlays as its parts")
+            # Written as two separate objects (build123d's default), it fails.
+            mesher = Mesher()
+            for shape in (cov.shape, cov.inlays):
+                mesher.add_shape(shape)
+            mesher.write(str(out / "print" / "cover.3mf"))
+            f = verify_export(parts, out)
+            self.assertTrue(fails(f, "cover.3mf", "not one object of two parts"), f)
 
     def test_a_deck_without_its_holes_fails_on_reread(self):
         parts = [deck(holes=M.FRAME_INSERTS[:7])]
@@ -669,15 +841,16 @@ class Layout(unittest.TestCase):
         self.assertEqual(C.run_checks(self.asm), [])
 
     def test_the_part_set(self):
-        self.assertEqual(sorted(p.name for p in self.asm.parts), ["deck", "spacer"])
+        self.assertEqual(sorted(p.name for p in self.asm.parts), ["cover", "deck", "spacer"])
         self.assertEqual(sorted(h.name for h in self.asm.held),
                          sorted(["szbk07", "servo 2040", "lm2596", "t-display", "lsm6dso", "xt60", "fuse holder",
-                                 SCHOTTKY]))
+                                 SCHOTTKY, *FANS]))
         self.assertEqual(len(self.asm.parts[1].instances()), 4, "a spacer at each floor insert")
 
     def test_held_parts_and_routes_lie_inside_the_cover(self):
         for h in self.asm.held:
-            self.assertTrue(L.interior_ok(C.bbox6(h.shape)), h.name)
+            for x, y, _ in C.vertices(h.shape):
+                self.assertTrue(L.interior_ok((x, x, y, y, 0, 0)), f"{h.name} at ({x:.2f}, {y:.2f})")
         for r in self.asm.routes:
             if r.cover_off or r.name == "battery plug":
                 continue
@@ -728,6 +901,78 @@ class Layout(unittest.TestCase):
         self.assertEqual(len(ties), 2)
         for o in ties:
             self.assertTrue(bb[0] <= o.footprint[0] and o.footprint[1] <= bb[1], "under the diode's length")
+
+    def part(self, name: str) -> Part:
+        return next(p for p in self.asm.parts if p.name == name)
+
+    def test_the_cover_prints_lid_down_and_its_screen_sits_below_its_top(self):
+        cov = self.part("cover")
+        self.assertEqual(cov.print_up, (0.0, 0.0, -1.0))
+        self.assertEqual(C.check_overhangs(Assembly(parts=[cov])), [])
+        top = cov.shape.bounding_box().max.Z
+        screen = next(e for h in self.asm.held if h.name == "t-display" for e in h.exposed if e.must_show)
+        self.assertLess(screen.region[5], top - L.LID_T, "the screen sits below the lid")
+        self.assertEqual(C.check_cover(self.asm), [])
+
+    def test_the_lid_is_closed_over_the_szbk07_and_holds_it_down(self):
+        sz = next(h for h in self.asm.held if h.name == SZBK07)
+        b = C.bbox6(sz.shape)
+        lid = box(b[0], b[1], b[2], b[3], L.LID_Z0, L.LID_Z1)
+        cov = self.part("cover")
+        self.assertAlmostEqual(C.common(cov.shape, lid) + C.common(cov.inlays, lid), C.volume(lid), delta=0.5)
+        self.assertGreaterEqual(sz.held_down, 3.0)
+        gap = min(f.bounding_box().min.Z for f in (cov.shape & box(*b[:4], b[5], L.LID_Z0)).solids()) - b[5]
+        self.assertLess(gap, sz.held_down, "the hold-down blocks come nearer than its stops are tall")
+
+    def test_the_cover_is_screwed_into_inserts_in_the_deck_s_posts(self):
+        deck_, cov = self.part("deck").shape, self.part("cover").shape
+        screws = [s for s in self.asm.screws if s.name.startswith("cover screw")]
+        self.assertGreaterEqual(len(screws), 3)
+        for s in screws:
+            x, y, _ = s.head
+            self.assertEqual(s.axis, UP)
+            hole = C.cylinder(L.M3_D / 2 - 0.05, (x, y, L.LID_Z0 - 0.5), (0, 0, 1), L.LID_T + 1)
+            self.assertLess(C.common(cov, hole), C.VOLUME_TOL, "a clear hole through the lid")
+            insert = C.cylinder(L.M3_INSERT_D / 2 - 0.05, (x, y, L.LID_Z0 - L.M3_INSERT_L), (0, 0, 1), L.M3_INSERT_L - 0.1)
+            self.assertLess(C.common(deck_, insert), C.VOLUME_TOL, "an insert hole in the post")
+            wall = C.cylinder(L.POST_D / 2 - 0.3, (x, y, L.LID_Z0 - 2), (0, 0, 1), 1) - C.cylinder(
+                L.M3_INSERT_D / 2 + 0.05, (x, y, L.LID_Z0 - 3), (0, 0, 1), 3)
+            self.assertGreater(C.common(deck_, wall), 0.9 * C.volume(wall), "a post round the insert")
+
+    def test_the_fans_and_the_vents(self):
+        exhaust, intake = (next(f for f in self.asm.fans if f.exhaust == e) for e in (True, False))
+        self.assertEqual(C.check_fans(self.asm), [])
+        self.assertLess(intake.origin[2] + intake.size[1] / 2, exhaust.origin[2] + exhaust.size[1] / 2,
+                        "the inlet is low and the outlet high")
+        self.assertLess(intake.outward[0] * exhaust.outward[0], 0, "on opposite sides")
+        inlet = next(v for v in self.asm.vents if v.name == "inlet")
+        self.assertEqual(self.asm.channel.inlet_open_area, inlet.open_area)
+        sz = C.bbox6(next(h for h in self.asm.held if h.name == SZBK07).shape)
+        self.assertTrue(intake.origin[0] < sz[0] and sz[1] < exhaust.origin[0], "the SZBK07 between them")
+        self.assertEqual(C.check_air_channel(self.asm), [])
+
+    def test_without_its_lips_the_exhaust_fan_slides_in(self):
+        # The lips' first version (cheeks only) let the fan slide in off its
+        # columns; the slide check catches it.
+        old = L.EXH_LIP_OVER
+        try:
+            L.EXH_LIP_OVER = -(L.FIT + 0.4)  # the lips end beyond the fan's ends
+            asm = Assembly(parts=[L.deck()], held=[h for h in self.asm.held if h.name in FANS], fans=self.asm.fans)
+            self.assertTrue(fails(C.check_fans(asm), "exhaust fan", "slides 1.0 mm inwards"))
+        finally:
+            L.EXH_LIP_OVER = old
+
+    def test_the_inlays_are_flush_with_the_lid(self):
+        # Their top is the lid's, they are INLAY_DEPTH deep, and with the body
+        # they fill the lid's top layer over them without gap or overlap.
+        cov = self.part("cover")
+        bi, bb = cov.inlays.bounding_box(), cov.shape.bounding_box()
+        self.assertAlmostEqual(bi.max.Z, bb.max.Z, places=6)
+        self.assertAlmostEqual(bi.max.Z - bi.min.Z, L.INLAY_DEPTH, places=6)
+        self.assertGreater(len(cov.inlays.solids()), len(L.NAME), "the letters and the chevrons")
+        self.assertLess(C.common(cov.shape, cov.inlays), C.VOLUME_TOL)
+        layer = box(bi.min.X, bi.max.X, bi.min.Y, bi.max.Y, bi.min.Z, bi.max.Z)
+        self.assertAlmostEqual(C.common(cov.shape, layer) + C.common(cov.inlays, layer), C.volume(layer), delta=0.05)
 
     def test_the_xt60_is_held_against_plugging_and_unplugging(self):
         # Pushed in (+x), its body meets the cradle's back stops; pulled out,

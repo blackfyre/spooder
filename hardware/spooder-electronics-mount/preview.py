@@ -16,8 +16,11 @@
 `mise run cad-preview` runs it. Its dependencies are locked in
 preview.py.lock (`uv lock --script`). It builds the part set as build.py
 does, without checking or exporting it, and draws:
-- images/assembly.png, the open assembly from above and in front;
-- images/top.png, from straight above, with the legs' keep-clear region.
+- images/assembly.png, the open assembly (without the cover) from above and
+  in front;
+- images/top.png, the open assembly from straight above, with the legs'
+  keep-clear region;
+- images/closed.png, the assembly with the cover on, from above and in front.
 
 Printed parts are drawn in their colours, held parts in blue, the reserved
 routes and the air channel in translucent yellow, and the frame top in grey.
@@ -44,15 +47,16 @@ sys.path.insert(0, str(HERE))
 
 import measurements as M  # noqa: E402
 from build import build  # noqa: E402
-from checks import KEEP_CLEAR_R, KEEP_CLEAR_TAB, triangles  # noqa: E402
-from model import Assembly, box6  # noqa: E402
+from checks import KEEP_CLEAR_R, KEEP_CLEAR_TAB, channel_solids, triangles  # noqa: E402
+from model import Assembly  # noqa: E402
 from reference_check import FRAME_STL  # noqa: E402
 
 COLOURS = {"black": (0.17, 0.17, 0.17, 1.0), "yellow": (0.95, 0.76, 0.0, 1.0), "white": (0.91, 0.91, 0.91, 1.0)}
 HELD = (0.23, 0.49, 0.85, 1.0)
 ZONE = (0.95, 0.83, 0.23, 0.30)
 FRAME = (0.69, 0.69, 0.69, 1.0)
-VIEWS = {"assembly": (35, -60), "top": (90, -90)}
+# name: (elevation, azimuth, with the cover)
+VIEWS = {"assembly": (35, -60, False), "top": (90, -90, False), "closed": (35, -60, True)}
 LIGHT = np.array([0.3, -0.5, 0.8]) / np.linalg.norm([0.3, -0.5, 0.8])
 
 
@@ -66,10 +70,12 @@ def shaded(tris: np.ndarray, colour) -> np.ndarray:
     return c
 
 
-def scene(asm: Assembly):
+def scene(asm: Assembly, closed: bool):
     frame = trimesh.load(FRAME_STL)
     groups = [(frame.triangles, FRAME)]
     for part in asm.parts:
+        if part.role == "cover" and not closed:
+            continue
         colour = COLOURS.get(part.colour, COLOURS["white"])
         groups.append((triangles(part.instances()), colour))
         if part.inlays is not None:
@@ -78,8 +84,8 @@ def scene(asm: Assembly):
         groups.append((triangles([held.shape]), HELD))
     zones = [r.shape for r in asm.routes]
     if asm.channel is not None:
-        zones += [box6(b) for b, _ in asm.channel.segments]
-    if zones:
+        zones += channel_solids(asm.channel)
+    if zones and not closed:
         groups.append((triangles(zones), ZONE))
     tris = np.concatenate([t for t, _ in groups if len(t)])
     colours = np.concatenate([shaded(t, c) for t, c in groups if len(t)])
@@ -101,13 +107,13 @@ def keep_clear_outline() -> np.ndarray:
 
 
 def render(asm: Assembly, outdir: Path) -> list[Path]:
-    tris, colours = scene(asm)
-    lo, hi = tris.reshape(-1, 3).min(axis=0), tris.reshape(-1, 3).max(axis=0)
-    centre, half = (lo + hi) / 2, (hi - lo).max() / 2
     outline = keep_clear_outline()
     outdir.mkdir(parents=True, exist_ok=True)
     written = []
-    for name, (elev, azim) in VIEWS.items():
+    for name, (elev, azim, closed) in VIEWS.items():
+        tris, colours = scene(asm, closed)
+        lo, hi = tris.reshape(-1, 3).min(axis=0), tris.reshape(-1, 3).max(axis=0)
+        centre, half = (lo + hi) / 2, (hi - lo).max() / 2
         fig = plt.figure(figsize=(8, 8), dpi=100)
         ax = fig.add_subplot(projection="3d", proj_type="ortho", computed_zorder=False)
         ax.add_collection3d(Poly3DCollection(tris, facecolors=colours, edgecolors="none", linewidths=0))
