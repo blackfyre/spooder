@@ -20,7 +20,8 @@ does, without checking or exporting it, and draws:
   in front;
 - images/top.png, the open assembly from straight above, with the legs'
   keep-clear region;
-- images/closed.png, the assembly with the cover on, from above and in front.
+- images/closed.png, the assembly with the cover and its bumpers on, from
+  above and in front.
 
 Printed parts are drawn in their colours, held parts in blue, the reserved
 routes and the air channel in translucent yellow, and the frame top in grey.
@@ -74,7 +75,7 @@ def scene(asm: Assembly, closed: bool):
     frame = trimesh.load(FRAME_STL)
     groups = [(frame.triangles, FRAME)]
     for part in asm.parts:
-        if part.role == "cover" and not closed:
+        if part.role in ("cover", "bumper") and not closed:  # the bumpers ride on the cover
             continue
         colour = COLOURS.get(part.colour, COLOURS["white"])
         groups.append((triangles(part.instances()), colour))

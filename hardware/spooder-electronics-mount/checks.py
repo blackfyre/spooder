@@ -115,6 +115,28 @@ FAN_VENT_OPEN = 0.25
 # this thick. Source: chosen.
 SLICE_T = 0.2
 
+# The bumpers stand at least this far proud of the cover, the held parts and
+# the screw heads, in every horizontal direction (every BUMPER_STEP degrees)
+# and upwards: a flat obstacle or floor meets them first. Source: the spec's
+# "Protection"; chosen.
+BUMPER_PROUD = 1.0
+BUMPER_STEP = 5.0
+# Lowered this far, a bumper meets the cover (its stop on the rails); moved
+# BUMPER_PLAY sideways, it meets nothing (it slides on them). Source: chosen,
+# below the layout's sliding fit (0.2).
+BUMPER_STOP = 0.5
+BUMPER_PLAY = 0.1
+# A screw's head lies on a part when its centre is this near it, or (for a
+# screw with a shank, whose head centre lies over its hole) within its
+# shank's diameter. Source: chosen.
+SCREW_ON = 0.1
+# A supporting part bears on a held part's underside where it comes within
+# CONTACT_GAP of it, over at least CONTACT_AREA in each bearing region; the
+# held part moved LOCATE sideways meets it. Source: chosen.
+CONTACT_GAP = 0.1
+CONTACT_AREA = 2.0
+LOCATE = 1.0
+
 COS_OVERHANG = math.cos(math.radians(OVERHANG_DEG))
 RAY_DIRECTIONS = ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1))
 
@@ -208,6 +230,31 @@ def ray_hits(origins: np.ndarray, direction, tris: np.ndarray) -> np.ndarray:
     return hit
 
 
+def ray_distances(origins: np.ndarray, direction, tris: np.ndarray) -> np.ndarray:
+    """For each origin, how far along `direction` a ray goes before it meets
+    a triangle (inf if it meets none; 0 if it starts on one, a contact)."""
+    out = np.full(len(origins), np.inf)
+    if len(tris) == 0 or len(origins) == 0:
+        return out
+    d = np.asarray(direction, dtype=float)
+    v0, e1, e2 = tris[:, 0], tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0]
+    p = np.cross(d, e2)
+    det = np.einsum("ij,ij->i", e1, p)
+    ok = np.abs(det) > 1e-12
+    v0, e1, e2, p, det = v0[ok], e1[ok], e2[ok], p[ok], det[ok]
+    inv = 1.0 / det
+    for i in range(0, len(origins), 64):
+        o = origins[i:i + 64, None, :]
+        s = o - v0[None]
+        u = np.einsum("nij,ij->ni", s, p) * inv
+        q = np.cross(s, e1[None])
+        v = np.einsum("j,nij->ni", d, q) * inv
+        t = np.einsum("ij,nij->ni", e2, q) * inv
+        inside = (u >= -1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9) & (t > -1e-6)
+        out[i:i + 64] = np.where(inside, np.maximum(t, 0.0), np.inf).min(axis=1)
+    return out
+
+
 def labelled_solids(asm: Assembly):
     """(label, shape) for every printed copy, its inlays and every held part."""
     for part in asm.parts:
@@ -217,6 +264,11 @@ def labelled_solids(asm: Assembly):
             yield f"{part.name} inlays", part.inlays
     for held in asm.held:
         yield held.name, held.shape
+
+
+def base_name(label: str) -> str:
+    """The part's name in a label from labelled_solids()."""
+    return label.split(" copy ")[0].removesuffix(" inlays")
 
 
 def fmt(p) -> str:
@@ -417,7 +469,7 @@ def check_routes(asm: Assembly) -> list[str]:
     covers = {p.name for p in asm.parts if p.role == "cover"}
     for route in asm.routes:
         for label, shape in labelled_solids(asm):
-            if route.cover_off and label.split(" copy ")[0].removesuffix(" inlays") in covers:
+            if route.cover_off and base_name(label) in covers:
                 continue
             held = inline.get(label)
             if held is not None and label == SCHOTTKY and held.route == route.name == LM2596_OUTPUT_ROUTE:
@@ -617,7 +669,7 @@ def check_screwdriver_paths(asm: Assembly) -> list[str]:
     for screw in asm.screws:
         path = cylinder(DRIVER_D / 2, screw.head, screw.axis, DRIVER_REACH)
         for label, shape in labelled_solids(asm):
-            if label.split(" copy ")[0].removesuffix(" inlays") in screw.after:
+            if base_name(label) in screw.after:
                 continue
             v = common(shape, path)
             if v > VOLUME_TOL:
@@ -752,8 +804,9 @@ def check_fans(asm: Assembly) -> list[str]:
         return failures
     held = {h.name: h for h in asm.held}
     covers = [s for p in asm.parts if p.role == "cover" for s in p.solids()]
-    supports = [s for p in asm.parts if p.role != "cover" for s in p.instances()]
-    cover_tris = triangles(covers)
+    supports = [s for p in asm.parts if p.role not in ("cover", "bumper") for s in p.instances()]
+    # A vent's air must pass the cover and the bumpers on it.
+    cover_tris = triangles(covers + [s for p in asm.parts if p.role == "bumper" for s in p.instances()])
     for fan in asm.fans:
         if fan.name not in FANS:
             failures.append(f"{fan.name}: not a fan position ({', '.join(FANS)})")
@@ -789,8 +842,8 @@ def check_fans(asm: Assembly) -> list[str]:
                         for x in np.linspace(-w / 2 + 2, w / 2 - 2, 13) for z in np.linspace(2, ht - 2, 13)])
         share = 1.0 - ray_hits(pts, out, cover_tris).mean() if len(cover_tris) else 1.0
         if covers and share < FAN_VENT_OPEN:
-            failures.append(f"{fan.name}: only {share:.0%} of its face sees out through the cover "
-                            f"(needs {FAN_VENT_OPEN:.0%}): no vent in front of it")
+            failures.append(f"{fan.name}: only {share:.0%} of its face sees out through the cover and the bumpers "
+                            f"(needs {FAN_VENT_OPEN:.0%}): no vent in front of it, or a bumper over it")
         facing = out[0] * fan.origin[0] + out[1] * fan.origin[1]
         if facing <= 0:
             failures.append(f"{fan.name}: its vent side faces into the box, not out of it")
@@ -800,9 +853,10 @@ def check_fans(asm: Assembly) -> list[str]:
 def check_cover(asm: Assembly) -> list[str]:
     """The cover: every screen that must show sits below its top; it comes
     nearer above each held-down part than that part's stops are tall; its lid
-    has no opening above the parts in CLOSED_OVER; and it lifts straight off:
-    nothing lies above any face of it that looks up (rays up from them), and
-    raised by each of LIFT_STEPS it overlaps nothing."""
+    has no opening above the parts in CLOSED_OVER; and it lifts straight off,
+    with the bumpers on it: nothing else lies above any face of it that looks
+    up (rays up from them), and raised by each of LIFT_STEPS it overlaps
+    nothing else."""
     covers = [p for p in asm.parts if p.role == "cover"]
     failures = []
     for cover in covers:
@@ -832,8 +886,10 @@ def check_cover(asm: Assembly) -> list[str]:
             if open_.any():
                 failures.append(f"{cover.name}: an opening in it above the {name} "
                                 f"({int(open_.sum())} points, first at {fmt(pts[open_][0])})")
+        # The bumpers ride on the cover's rails and lift off with it.
+        riders = {p.name for p in asm.parts if p.role == "bumper"}
         others = [(label, shape) for label, shape in labelled_solids(asm)
-                  if label.split(" copy ")[0].removesuffix(" inlays") != cover.name]
+                  if base_name(label) != cover.name and base_name(label) not in riders]
         # Lifting it, every face of it that looks up sweeps the space above:
         # nothing may lie there. Rays up from those faces meet nothing else.
         above = triangles(shape for _, shape in others)
@@ -952,6 +1008,169 @@ def imu_failures(asm: Assembly, imu) -> list[str]:
     return failures
 
 
+def check_bumpers(asm: Assembly) -> list[str]:
+    """The bumpers stand BUMPER_PROUD proud of the cover, every held part and
+    the cover's screw heads in every horizontal direction and upwards (their
+    tops above the lid and the screen); each is held on its rails by a screw
+    into the cover, rests on its stop on the cover, slides on its rails, and
+    with its screws out lifts off them with the cover in place, meeting
+    nothing."""
+    bumpers = [p for p in asm.parts if p.role == "bumper"]
+    if not bumpers:
+        return []
+    failures = []
+    pts = np.concatenate([vertices(s) for p in bumpers for s in p.instances()])
+    covers = [p for p in asm.parts if p.role == "cover"]
+    cover_names = {c.name for c in covers}
+    instances = [s for p in bumpers for s in p.instances()]
+
+    def on_a_bumper(screw) -> bool:
+        return any(head_on(screw, s) for s in instances)
+
+    others = [(c.name, vertices(s)) for c in covers for s in c.solids()]
+    others += [(h.name, vertices(h.shape)) for h in asm.held]
+    # The screws driven with the cover on (the cover's own), not the bumpers'.
+    others += [(s.name, np.array([s.head])) for s in asm.screws
+               if not cover_names & set(s.after) and not on_a_bumper(s)]
+    dirs = [(math.cos(math.radians(a)), math.sin(math.radians(a)), 0.0) for a in np.arange(0.0, 360.0, BUMPER_STEP)]
+    for d in dirs + [(0.0, 0.0, 1.0)]:
+        v = np.asarray(d)
+        reach = float((pts @ v).max())
+        name, far = max(((n, float((p @ v).max())) for n, p in others), key=lambda t: t[1], default=(None, -math.inf))
+        if reach < far + BUMPER_PROUD - 1e-6:
+            where = "upwards (their tops)" if d[2] else f"towards {math.degrees(math.atan2(d[1], d[0])) % 360:.0f}°"
+            failures.append(f"bumpers: {where} they reach {reach:.2f}, not {BUMPER_PROUD} past the {name} at {far:.2f}")
+    solids = list(labelled_solids(asm))
+    for part in bumpers:
+        for i, inst in enumerate(part.instances()):
+            label = part.name if i == 0 else f"{part.name} copy {i + 1}"
+            rest = [(lb, s) for lb, s in solids if lb != label]
+            if covers and not any(retains(sc, inst, covers) for sc in asm.screws):
+                failures.append(f"{label}: no screw holds it on its rails: turned over, it slides off")
+            lowered = inst.moved(Location((0, 0, -BUMPER_STOP)))
+            if covers and not any(common(lowered, s) > VOLUME_TOL for lb, s in rest if base_name(lb) in cover_names):
+                failures.append(f"{label}: lowered {BUMPER_STOP} mm it meets no cover: nothing stops it on its rails")
+            for dz in LIFT_STEPS:
+                hit = next((lb for lb, s in rest if common(inst.moved(Location((0, 0, dz))), s) > VOLUME_TOL), None)
+                if hit:
+                    failures.append(f"{label}: lifted {dz} mm it meets {hit}: it does not come off with the cover on")
+                    break
+            for dx, dy in ((BUMPER_PLAY, 0), (-BUMPER_PLAY, 0), (0, BUMPER_PLAY), (0, -BUMPER_PLAY)):
+                hit = next((lb for lb, s in rest if common(inst.moved(Location((dx, dy, 0))), s) > VOLUME_TOL), None)
+                if hit:
+                    failures.append(f"{label}: moved {fmt((dx, dy))} it meets {hit}: no sliding fit")
+                    break
+    return failures
+
+
+def head_on(screw, shape: Shape) -> bool:
+    return Vertex(*screw.head).distance_to(shape) <= max(SCREW_ON, screw.shank[0])
+
+
+def retains(screw, inst: Shape, covers) -> bool:
+    """Whether a screw's head lies on the bumper `inst` and its shank reaches
+    from there into the cover."""
+    d, length = screw.shank
+    if length <= 0 or not head_on(screw, inst):
+        return False
+    axis = -np.asarray(screw.axis, dtype=float)
+    shank = cylinder(d / 2, screw.head, tuple(axis), length)
+    return any(common(shank, s) > VOLUME_TOL for c in covers for s in c.solids())
+
+
+def check_captive(asm: Assembly) -> list[str]:
+    """A loose part in a pocket (`held_down`) cannot lift out of it: it can
+    rise less than its pocket's depth. A part rises until something fixed
+    stops it; meeting a loose part or a held part it or another loose part
+    carries, it pushes that up too, which rises only as far as it can itself
+    (a stack: the LM2596's standoffs under the module, under the T-Display's
+    holder, under the board, under the lid). Clearances are measured with
+    rays straight up from every face that looks up."""
+    solids = dict(labelled_solids(asm))
+    loose = {}
+    for part in asm.parts:
+        if part.held_down > 0:
+            for i in range(len(part.instances())):
+                loose[part.name if i == 0 else f"{part.name} copy {i + 1}"] = part
+    movable = set(loose) | {n for part in loose.values() for n in part.carries if n in solids}
+    tris = {label: triangles([shape]) for label, shape in solids.items()}
+    boxes = {label: shape.bounding_box() for label, shape in solids.items()}
+    ups = {}
+
+    def up_points(label: str) -> np.ndarray:
+        if label not in ups:
+            pts = [(p.X, p.Y, p.Z) for face in solids[label].faces() for p, n in face_samples(face) if n.Z > 1e-3]
+            ups[label] = np.array(pts) if pts else np.zeros((0, 3))
+        return ups[label]
+
+    memo: dict[str, float] = {}
+
+    def rise(label: str, path: tuple = ()) -> float:
+        """How far `label` can rise, pushing what lies over it."""
+        if label not in movable:
+            return 0.0
+        if label in memo:
+            return memo[label]
+        pts, b = up_points(label), boxes[label]
+        best = math.inf
+        for other, ob in boxes.items():
+            if other == label or other in path or ob.max.Z <= b.min.Z or ob.max.X <= b.min.X or b.max.X <= ob.min.X \
+                    or ob.max.Y <= b.min.Y or b.max.Y <= ob.min.Y:
+                continue
+            gap = float(ray_distances(pts, (0, 0, 1), tris[other]).min()) if len(pts) else math.inf
+            if gap < best:
+                best = min(best, gap + rise(other, path + (label,)))
+        memo[label] = best
+        return best
+
+    failures = []
+    for label, part in loose.items():
+        r = rise(label)
+        if r >= part.held_down - 1e-6:
+            what = "nothing stops it" if math.isinf(r) else f"it rises {r:.2f} mm before it is stopped"
+            failures.append(f"{label}: {what}, not less than its pocket's {part.held_down} mm: it can lift out")
+    return failures
+
+
+def check_supports(asm: Assembly) -> list[str]:
+    """Each support bears on its held part's underside in every one of its
+    regions (at least CONTACT_AREA where the part comes within CONTACT_GAP
+    under `face` and the held part within CONTACT_GAP over it), nowhere else
+    under it, and locates it: moved LOCATE along x or y, the held part meets
+    it."""
+    failures = []
+    parts = {p.name: p for p in asm.parts}
+    held = {h.name: h for h in asm.held}
+    for sup in asm.supports:
+        part, h = parts.get(sup.part), held.get(sup.held)
+        if part is None or h is None:
+            failures.append(f"support: no part '{sup.part}' or held part '{sup.held}'")
+            continue
+        z0 = sup.face - CONTACT_GAP
+        for r in sup.regions:
+            # Where the part reaches into the slab under `face` and the held
+            # part into the slab over it, one over the other.
+            below = part.shape & box(*r, z0, sup.face)
+            above = h.shape & box(*r, sup.face, sup.face + CONTACT_GAP)
+            area = 0.0
+            if volume(below) > 0 and volume(above) > 0:
+                area = common(below.moved(Location((0, 0, CONTACT_GAP))), above) / CONTACT_GAP
+            if area < CONTACT_AREA:
+                failures.append(f"{part.name}: bears on the {h.name} over {area:.1f} mm² at {fmt(r)} "
+                                f"(at least {CONTACT_AREA})")
+        b = bbox6(h.shape)
+        band = box(b[0], b[1], b[2], b[3], z0, sup.face)
+        for r in sup.regions:
+            band = band - box(*r, z0 - 1, sup.face + 1)
+        v = common(part.shape, band)
+        if v > VOLUME_TOL:
+            failures.append(f"{part.name}: bears on the {h.name} outside its regions ({v:.2f} mm³)")
+        for dx, dy in ((LOCATE, 0), (-LOCATE, 0), (0, LOCATE), (0, -LOCATE)):
+            if common(h.shape.moved(Location((dx, dy, 0))), part.shape) <= VOLUME_TOL:
+                failures.append(f"{part.name}: the {h.name} moved {fmt((dx, dy))} does not meet it: not located")
+    return failures
+
+
 def run_checks(asm: Assembly, frame: FrameMap | None = None) -> list[str]:
     if frame is None and asm.openings:
         frame = FrameMap()
@@ -970,5 +1189,8 @@ def run_checks(asm: Assembly, frame: FrameMap | None = None) -> list[str]:
     failures += check_air_channel(asm)
     failures += check_fans(asm)
     failures += check_cover(asm)
+    failures += check_bumpers(asm)
+    failures += check_captive(asm)
+    failures += check_supports(asm)
     return failures
 

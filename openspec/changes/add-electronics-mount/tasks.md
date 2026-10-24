@@ -57,9 +57,9 @@
 
 ## 5. Bumpers and holders
 
-- [ ] 5.1 Model the rails on the cover's corners and the PETG leaf-spring bumpers that slide onto them. They stand proud of the body and the lid and stay inside the keep-clear region. Verify the keep-clear and overhang checks pass, and a check that the bumpers' tops are above the lid and the screen.
-- [ ] 5.2 Model the T-Display holder on the deck: supported on the board's bare underside, located by lips, held down by the lid, and printable in its own orientation. Verify the holder's contact check, the overhang check and the screwdriver-path check pass.
-- [ ] 5.3 Model the remaining holders in white: the LM2596 standoffs, the IMU bosses and the fan holders. Verify all checks pass.
+- [x] 5.1 Model the rails on the cover's corners and the PETG leaf-spring bumpers that slide onto them. They stand proud of the body and the lid and stay inside the keep-clear region. Verify the keep-clear and overhang checks pass, and a check that the bumpers' tops are above the lid and the screen.
+- [x] 5.2 Model the T-Display holder on the deck: supported on the board's bare underside, located by lips, held down by the lid, and printable in its own orientation. Verify the holder's contact check, the overhang check and the screwdriver-path check pass.
+- [x] 5.3 Model the remaining holders in white: the LM2596 standoffs, the IMU bosses and the fan holders. Verify all checks pass.
 
 ## 6. Documentation
 

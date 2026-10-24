@@ -1,5 +1,5 @@
 """Tests of the mount's checks, the build, the export and the layout (tasks
-2.1 to 4.4).
+2.1 to 5.3).
 
     uv run --locked --quiet --script hardware/spooder-electronics-mount/build.py --test
 
@@ -10,7 +10,8 @@ STEP file per distinct part, each STEP re-read with the built part's bounding
 box, and the deck's holes found again on the insert positions. The layout
 (layout.py) is tested as built: every check passes on it, and what the checks
 leave to the layout holds (the cover's interior, the battery plug inside the
-legs' region, the spacers on the floor, the XT60's back stops).
+legs' region, the spacers on the floor, the XT60's back stops, the bumpers,
+the T-Display's holder and the loose holders in their pockets).
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ import measurements as M
 from export import export_parts, model_xml, verify_export
 import layout as L
 from model import (FANS, IMU, LM2596_OUTPUT_ROUTE, SCHOTTKY, SERVO_2040, SZBK07, AirChannel, Assembly, Exposure, Fan, Held,
-                   ImuPad, Opening, Part, Route, Screw, Terminal, Vent, box, teardrop, turned)
+                   ImuPad, Opening, Part, Route, Screw, Support, Terminal, Vent, box, teardrop, turned)
 
 UP = (0.0, 0.0, 1.0)
 DOWN = (0.0, 0.0, -1.0)
@@ -567,6 +568,175 @@ class CoverChecks(unittest.TestCase):
         self.assertTrue(fails(f, "something lies above it", "does not lift straight off"), f)
 
 
+def railed_cover() -> Part:
+    """The test cover with a rail on its +x wall, 2 x 4 mm, from z 36 to 49."""
+    c = cover()
+    c.shape = c.shape + box(21.5, 24, -2, 2, 36, 49)
+    return c
+
+
+def rail_bumper(lift: float = 0.0, slide: float = 0.2, top: float = 55.0, role: str = "bumper") -> Part:
+    """A block round the rail, `slide` clear of it and of the wall, its slot
+    closed `slide` over the rail's top."""
+    shape = box(22 + slide, 26.4, -4.4, 4.4, 38, top) - box(21, 24 + slide, -2 - slide, 2 + slide, 37, 49 + slide)
+    return Part("bumper", shape.moved(Location((0, 0, lift))), role, DOWN, "yellow")
+
+
+RETAINER = Screw("bumper screw", (26.4, 0.0, 45.0), (1.0, 0.0, 0.0), shank=(2.0, 4.0))  # through it into the rail
+
+
+class Bumpers(unittest.TestCase):
+    def asm(self, *parts: Part, screws=(RETAINER,)) -> Assembly:
+        return Assembly(parts=[railed_cover(), *parts], screws=list(screws))
+
+    def test_a_bumper_on_its_rail_rests_slides_and_lifts_off(self):
+        f = C.check_bumpers(self.asm(rail_bumper()))
+        self.assertFalse(fails(f, "bumper:") or fails(f, "bumper copy"), f)
+
+    def test_a_bumper_without_its_screw_or_with_a_short_one_fails(self):
+        self.assertTrue(fails(C.check_bumpers(self.asm(rail_bumper(), screws=())), "bumper: no screw holds it"))
+        short = Screw("bumper screw", (26.4, 0.0, 45.0), (1.0, 0.0, 0.0), shank=(2.0, 2.0))  # ends in the slot
+        self.assertTrue(fails(C.check_bumpers(self.asm(rail_bumper(), screws=(short,))), "bumper: no screw holds it"))
+
+    def test_a_bumper_off_its_stop_fails(self):
+        self.assertTrue(fails(C.check_bumpers(self.asm(rail_bumper(lift=2.0))), "nothing stops it"))
+
+    def test_a_bumper_under_something_cannot_be_replaced(self):
+        f = C.check_bumpers(self.asm(rail_bumper(), block(22, 27, -5, 5, 60, 62)))
+        self.assertTrue(fails(f, "bumper: lifted", "meets block", "does not come off"), f)
+
+    def test_a_bumper_without_a_sliding_fit_fails(self):
+        self.assertTrue(fails(C.check_bumpers(self.asm(rail_bumper(slide=0.0))), "no sliding fit"))
+
+    def test_bumpers_must_stand_proud_all_round_and_above(self):
+        f = C.check_bumpers(self.asm(rail_bumper()))
+        self.assertTrue(fails(f, "towards 180°", "past the cover"), f)  # one bumper, on the +x side only
+        self.assertFalse(fails(f, "towards 0°"), f)
+        self.assertFalse(fails(f, "upwards"), f)
+        f = C.check_bumpers(self.asm(rail_bumper(top=52.5)))
+        self.assertTrue(fails(f, "upwards (their tops)", "past the cover"), f)
+        head = Screw("cover screw", (0.0, 0.0, 54.5), UP)
+        f = C.check_bumpers(Assembly(parts=[railed_cover(), rail_bumper()], screws=[head, RETAINER]))
+        self.assertTrue(fails(f, "upwards (their tops)", "past the cover screw"), f)
+        self.assertFalse(fails(f, "past the bumper screw"), f)
+        screen = Held("t-display", box(-6, 6, -6, 6, 45, 54.5), exposed=(Exposure(UP, (-6, 6, -6, 6, 54.5, 54.5)),))
+        f = C.check_bumpers(Assembly(parts=[railed_cover(), rail_bumper()], held=[screen]))
+        self.assertTrue(fails(f, "upwards (their tops)", "past the t-display"), f)
+
+    def test_the_cover_lifts_off_with_its_bumpers(self):
+        held = [CoverChecks.SZ]
+        self.assertEqual(C.check_cover(Assembly(parts=[railed_cover(), rail_bumper()], held=held)), [])
+        f = C.check_cover(Assembly(parts=[railed_cover(), rail_bumper(role="holder")], held=held))
+        self.assertTrue(fails(f, "does not lift straight off"), f)
+
+    def test_a_bumper_over_a_vent_fails(self):
+        asm = Fans().asm()
+        asm.parts.append(Part("bumper", box(22.8, 24, -16, 16, 28, 64), "bumper", DOWN, "yellow"))
+        self.assertTrue(fails(C.check_fans(asm), "or a bumper over it"))
+
+
+class Captive(unittest.TestCase):
+    """A holder in a 1.5 mm pocket in a deck, a board on it, a lid over it."""
+
+    deck_ = Part("deck", box(-20, 20, -20, 20, 26, 29) - box(-5.2, 17.2, -5.2, 5.2, 27.5, 30), "deck", UP, "black")
+    board = Held("board", box(-6, 6, -6, 6, 32.05, 33.65))
+    lid = Part("lid", box(-20, 20, -20, 20, 34.5, 36), "cover", DOWN, "black")
+
+    def holder(self, carries=("board",), copies=()) -> Part:
+        return Part("holder", box(-5, 5, -5, 5, 27.55, 32), "holder", UP, "white", copies=copies, held_down=1.5,
+                    carries=carries)
+
+    def test_held_down_through_what_it_carries_passes(self):
+        self.assertEqual(C.check_captive(Assembly(parts=[self.deck_, self.holder(), self.lid], held=[self.board])), [])
+
+    def test_nothing_over_it_fails(self):
+        f = C.check_captive(Assembly(parts=[self.deck_, self.holder()], held=[self.board]))
+        self.assertTrue(fails(f, "holder: nothing stops it", "it can lift out"), f)
+
+    def test_a_stack_rises_by_its_gaps_added_up(self):
+        # The lower holder meets the upper one after 0.6 mm, which meets the
+        # lid after 1.0 mm more: 1.6 mm, more than the 1.5 mm pocket.
+        upper = Part("upper", box(-5, 5, -5, 5, 32.6, 34), "holder", UP, "white", held_down=1.5)
+        for lid_z, lifts in ((35.0, True), (34.8, False)):
+            lid = Part("lid", box(-20, 20, -20, 20, lid_z, 36), "cover", DOWN, "black")
+            f = C.check_captive(Assembly(parts=[self.deck_, self.holder(carries=()), upper, lid]))
+            self.assertEqual(fails(f, "holder: it rises 1.60 mm") if lifts else f, True if lifts else [], f)
+        self.assertFalse(fails(f, "upper"), f)
+
+    def test_a_copy_with_nothing_over_it_fails(self):
+        asm = Assembly(parts=[self.deck_, self.holder(copies=(Location((12, 0, 0)),)), self.lid], held=[self.board])
+        asm.parts[2] = Part("lid", box(-20, 6, -20, 20, 34.5, 36), "cover", DOWN, "black")
+        f = C.check_captive(asm)
+        self.assertTrue(fails(f, "holder copy 2"), f)
+        self.assertFalse(fails(f, "holder:"), f)
+
+    def test_parts_already_touching_have_no_room_to_rise(self):
+        # Contact is a clearance of 0, alone and in a stack.
+        touching = Part("lid", box(-20, 20, -20, 20, 32, 36), "cover", DOWN, "black")
+        self.assertEqual(C.check_captive(Assembly(parts=[self.deck_, self.holder(carries=()), touching])), [])
+        upper = Part("upper", box(-5, 5, -5, 5, 32, 34), "holder", UP, "white", held_down=1.5)
+        lid = Part("lid", box(-20, 20, -20, 20, 34, 36), "cover", DOWN, "black")
+        self.assertEqual(C.check_captive(Assembly(parts=[self.deck_, self.holder(carries=()), upper, lid])), [])
+
+    def test_a_carried_part_left_out_is_ignored(self):
+        # An optional fan not fitted is no failure; a held part it does not
+        # carry (the board here) counts as fixed and stops it.
+        f = C.check_captive(Assembly(parts=[self.deck_, self.holder(carries=("fan",)), self.lid], held=[self.board]))
+        self.assertEqual(f, [])
+        f = C.check_captive(Assembly(parts=[self.deck_, self.holder(carries=("fan",)), self.lid]))
+        self.assertTrue(fails(f, "holder: it rises 2.50 mm", "can lift out"), f)  # up to the lid
+        f = C.check_captive(Assembly(parts=[self.deck_, self.holder(carries=("fan",))]))
+        self.assertTrue(fails(f, "holder: nothing stops it"), f)
+
+
+class Supports(unittest.TestCase):
+    """A board with a bare spot in its underside parts, on a holder with a
+    pad in the bare spot and lips beyond its ends."""
+
+    REGION = (10.0, 20.0, 5.0, 15.0)
+
+    def board(self, under: bool = True) -> Held:
+        shape = box(0, 40, 0, 20, 50, 51)
+        if under:
+            shape = shape + (box(0, 40, 0, 20, 47, 50) - box(*self.REGION, 46, 50.5))
+        return Held("board", shape)
+
+    def holder(self, pad=(10.3, 19.7, 5.3, 14.7), pad_top=49.95, lips=True) -> Part:
+        shape = box(-2, 42, -2, 22, 44, 45) + box(*pad, 44.5, pad_top)
+        if lips:
+            shape = shape + box(0, 40, 20.3, 21.9, 44.5, 52) + box(0, 40, -1.9, -0.3, 44.5, 52)
+        return Part("holder", shape, "holder", UP, "white")
+
+    def asm(self, held=None, part=None) -> Assembly:
+        return Assembly(parts=[part or self.holder()], held=[held or self.board()],
+                        supports=[Support("holder", "board", 50.0, (self.REGION,))])
+
+    def test_a_pad_in_the_bare_spot_with_lips_passes(self):
+        self.assertEqual(C.check_supports(self.asm()), [])
+
+    def test_a_pad_short_of_the_board_fails(self):
+        self.assertTrue(fails(C.check_supports(self.asm(part=self.holder(pad_top=49.5))), "bears on the board over 0.0"))
+
+    def test_a_board_above_its_declared_face_fails(self):
+        raised = Held("board", self.board().shape.moved(Location((0, 0, 0.5))))
+        self.assertTrue(fails(C.check_supports(self.asm(held=raised)), "bears on the board over 0.0"))
+
+    def test_bearing_outside_the_bare_spot_fails(self):
+        f = C.check_supports(self.asm(part=self.holder(pad=(5.0, 19.7, 5.3, 14.7))))
+        self.assertTrue(fails(f, "outside its regions"), f)
+
+    def test_a_board_free_to_slide_fails(self):
+        f = C.check_supports(self.asm(held=self.board(under=False), part=self.holder(lips=False)))
+        self.assertTrue(fails(f, "moved (1.0, 0.0)", "not located") and fails(f, "moved (0.0, -1.0)", "not located"), f)
+        f = C.check_supports(self.asm(part=self.holder(lips=False)))
+        self.assertEqual(f, [], "the pad in the bare spot locates it")
+
+    def test_a_missing_part_fails(self):
+        asm = self.asm()
+        asm.supports = [Support("cradle", "board", 50.0, (self.REGION,))]
+        self.assertTrue(fails(C.check_supports(asm), "no part 'cradle'"))
+
+
 class Build(unittest.TestCase):
     def test_the_empty_part_set_passes_and_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp, redirect_stdout(io.StringIO()):
@@ -841,7 +1011,9 @@ class Layout(unittest.TestCase):
         self.assertEqual(C.run_checks(self.asm), [])
 
     def test_the_part_set(self):
-        self.assertEqual(sorted(p.name for p in self.asm.parts), ["cover", "deck", "spacer"])
+        self.assertEqual(sorted(p.name for p in self.asm.parts),
+                         ["bumper", "cover", "deck", "exhaust-fan-holder-left", "exhaust-fan-holder-right", "imu-pad",
+                          "intake-fan-holder", "lm2596-standoff", "spacer", "t-display-holder"])
         self.assertEqual(sorted(h.name for h in self.asm.held),
                          sorted(["szbk07", "servo 2040", "lm2596", "t-display", "lsm6dso", "xt60", "fuse holder",
                                  SCHOTTKY, *FANS]))
@@ -957,7 +1129,8 @@ class Layout(unittest.TestCase):
         old = L.EXH_LIP_OVER
         try:
             L.EXH_LIP_OVER = -(L.FIT + 0.4)  # the lips end beyond the fan's ends
-            asm = Assembly(parts=[L.deck()], held=[h for h in self.asm.held if h.name in FANS], fans=self.asm.fans)
+            parts = [L.deck(), L.intake_holder()[0], *(p for p, _ in L.exhaust_holders())]
+            asm = Assembly(parts=parts, held=[h for h in self.asm.held if h.name in FANS], fans=self.asm.fans)
             self.assertTrue(fails(C.check_fans(asm), "exhaust fan", "slides 1.0 mm inwards"))
         finally:
             L.EXH_LIP_OVER = old
@@ -973,6 +1146,93 @@ class Layout(unittest.TestCase):
         self.assertLess(C.common(cov.shape, cov.inlays), C.VOLUME_TOL)
         layer = box(bi.min.X, bi.max.X, bi.min.Y, bi.max.Y, bi.min.Z, bi.max.Z)
         self.assertAlmostEqual(C.common(cov.shape, layer) + C.common(cov.inlays, layer), C.volume(layer), delta=0.05)
+
+    def test_the_bumpers(self):
+        # One part, copied to the four corners, printed on its top in yellow;
+        # their tops above the lid, the screen and the cover's screw heads;
+        # each on its corner face's rails, which end in wedges flush with the
+        # top chamfer.
+        b = self.part("bumper")
+        self.assertEqual((b.role, b.colour, b.print_up, len(b.instances())), ("bumper", "yellow", DOWN, 4))
+        self.assertEqual(C.check_bumpers(self.asm), [])
+        self.assertEqual(C.check_overhangs(Assembly(parts=[b])), [])
+        top = min(i.bounding_box().max.Z for i in b.instances())
+        screen = next(e for h in self.asm.held if h.name == "t-display" for e in h.exposed if e.must_show)
+        heads = [s.head[2] for s in self.asm.screws if s.name.startswith("cover screw")]
+        self.assertGreater(top, max([self.part("cover").shape.bounding_box().max.Z, screen.region[5], *heads]))
+        for k, inst in enumerate(b.instances()):
+            centre = inst.bounding_box().center()
+            self.assertGreater(abs(centre.X), L.BOX_X - L.CORNER_HALF, f"bumper {k + 1} at a corner")
+            self.assertGreater(abs(centre.Y), L.BOX_Y - L.CORNER_HALF, f"bumper {k + 1} at a corner")
+        self.assertEqual(C.volume(L.rails()) > 0, True)
+        self.assertLess(C.common(self.part("cover").shape, b.shape), C.VOLUME_TOL)
+
+    def test_a_bumper_too_low_fails(self):
+        # Its top under the cover's screw heads: the screws would meet the floor first.
+        old = L.BUMPER_Z1
+        try:
+            L.BUMPER_Z1 = L.LID_Z1 + 1.0
+            asm = Assembly(parts=[self.part("cover"), L.bumper()], held=self.asm.held, screws=self.asm.screws)
+            self.assertTrue(fails(C.check_bumpers(asm), "upwards (their tops)", "cover screw"))
+        finally:
+            L.BUMPER_Z1 = old
+
+    def test_the_t_display_holder(self):
+        # Printed on its back; it bears on the board's bare spots only and
+        # locates it, its screws' paths and the LM2596's are clear, and the lid
+        # over the board's pins keeps the board within its lips.
+        h = self.part("t-display-holder")
+        self.assertEqual((h.role, h.colour, h.print_up), ("holder", "white", (0.0, 1.0, 0.0)))
+        self.assertEqual(C.check_overhangs(Assembly(parts=[h])), [])
+        self.assertEqual(C.check_supports(self.asm), [])
+        self.assertEqual(C.check_screwdriver_paths(self.asm), [])
+        for s in self.asm.screws:
+            if s.name.startswith("lm2596 screw"):
+                self.assertIn("t-display-holder", s.after, "the LM2596 is screwed down before the holder goes on")
+        td = next(x for x in self.asm.held if x.name == "t-display")
+        self.assertEqual(td.held_down, L.TDH_LIP_H)
+        self.assertLess(L.LID_Z0 - C.bbox6(td.shape)[5], L.TDH_LIP_H, "the lid keeps the board within its lips")
+        self.assertEqual([s.regions for s in self.asm.supports],
+                         [tuple(L.td_box(*b, 0, 0)[:4] for b in M.TD_BARE)])
+
+    def test_the_holders_are_white_and_kept_in_their_pockets(self):
+        holders = [p for p in self.asm.parts if p.role == "holder" and p.name != "spacer"]
+        self.assertEqual(len(holders), 6)
+        for p in holders:
+            self.assertEqual(p.colour, "white", p.name)
+            self.assertEqual(p.held_down, L.POCKET_DEPTH, p.name)
+            self.assertEqual(C.check_overhangs(Assembly(parts=[p])), [], p.name)
+            bottom = min(i.bounding_box().min.Z for i in p.instances())
+            self.assertAlmostEqual(bottom, L.POCKET_Z + L.TOUCH, places=6, msg=p.name)
+        self.assertEqual(C.check_captive(self.asm), [])
+        self.assertEqual(self.asm.imu_pad.part, "imu-pad")
+
+    def test_the_holders_stay_in_their_pockets_without_the_fans(self):
+        asm = Assembly(parts=self.asm.parts, held=[h for h in self.asm.held if h.name not in FANS])
+        self.assertEqual(C.check_captive(asm), [])
+
+    def test_the_bumpers_are_screwed_to_their_rails(self):
+        screws = [s for s in self.asm.screws if s.name.startswith("bumper")]
+        self.assertEqual(len(screws), 8)
+        b = self.part("bumper")
+        covers = [self.part("cover")]
+        for inst in b.instances():
+            self.assertEqual(sum(C.retains(s, inst, covers) for s in screws), 2)
+
+    def test_without_the_t_display_holder_the_lm2596_lifts_out(self):
+        # The holder's plate keeps the LM2596 and its standoffs down.
+        asm = Assembly(parts=[p for p in self.asm.parts if p.name != "t-display-holder"], held=self.asm.held)
+        f = C.check_captive(asm)
+        self.assertTrue(fails(f, "lm2596-standoff: ", "can lift out") and fails(f, "lm2596-standoff copy 2: "), f)
+
+    def test_an_intake_holder_short_of_the_lid_lifts_out(self):
+        old = L.INTAKE_LID_GAP
+        try:
+            L.INTAKE_LID_GAP = 10.0
+            asm = Assembly(parts=[self.part("deck"), self.part("cover"), L.intake_holder()[0]], held=self.asm.held)
+            self.assertTrue(fails(C.check_captive(asm), "intake-fan-holder: ", "can lift out"))
+        finally:
+            L.INTAKE_LID_GAP = old
 
     def test_the_xt60_is_held_against_plugging_and_unplugging(self):
         # Pushed in (+x), its body meets the cradle's back stops; pulled out,

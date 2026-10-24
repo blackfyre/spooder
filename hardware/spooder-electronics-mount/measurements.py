@@ -127,6 +127,13 @@ SERVO_PLUG_SECTION = (8.0, 4.5)
 # hook-up wire with its insulation; assumed.
 SENSOR_WIRE_D = 1.3
 
+# How far above the LM2596's board's underside its wires stand where they are
+# soldered to its pads: the 1.6 mm board and a wire lying on its pad. The
+# routes to its pads rise no higher, under the exhaust fan holder's right lip
+# 3.87 mm above the board's underside. Source: nominal, 22 AWG hook-up wire;
+# assumed.
+LM2596_WIRE_HEIGHT = 3.8
+
 # The constants in this file that are nominal (the ones above, and the two
 # Servo 2040 wire sides below), each listed in the README's "Measure before
 # printing" table. Source: this file.
@@ -161,6 +168,7 @@ MEASURE_BEFORE_PRINTING = (
     "LSM6DSO_HEIGHT",
     "SERVO_PLUG_SECTION",
     "SENSOR_WIRE_D",
+    "LM2596_WIRE_HEIGHT",
     "S2040_EXT_WIRE_SIDE",
     "S2040_SENSOR_WIRE_SIDE",
 )

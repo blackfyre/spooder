@@ -16,7 +16,9 @@ position. An `Assembly` is what `build.py` generates and what the checks in
 - `Screw`: a screw's head and the outward direction a screwdriver comes from;
 - `AirChannel`: the passive air path from the inlet past the SZBK07 to the
   outlet;
-- `Vent`: a grille in the cover, and `Fan`: a fan position behind one.
+- `Vent`: a grille in the cover, and `Fan`: a fan position behind one;
+- `Support`: where a printed part bears on a held part (the T-Display's
+  holder under the board's bare spots).
 
 Boxes are given as (x0, x1, y0, y1, z0, z1).
 """
@@ -102,6 +104,11 @@ class Part:
     colour: str
     copies: tuple[Location, ...] = ()
     inlays: Shape | None = None  # the cover's second-colour inlays, exported in its 3MF
+    # A loose part located in a pocket this deep (the holders in the deck):
+    # lifted by this much, it or the held parts it `carries` (which rise with
+    # it) must meet something, so it cannot lift out of its pocket.
+    held_down: float = 0.0
+    carries: tuple[str, ...] = ()
 
     def instances(self) -> list[Shape]:
         return [self.shape] + [self.shape.moved(loc) for loc in self.copies]
@@ -206,6 +213,9 @@ class Screw:
     head: Vec3
     axis: Vec3
     after: tuple[str, ...] = ()
+    # Its shank's (diameter, length) in from the head, when the checks need
+    # it (a bumper's retaining screw, which must reach into the cover).
+    shank: tuple[float, float] = (0.0, 0.0)
 
 
 @dataclass
@@ -271,6 +281,19 @@ class Fan:
 
 
 @dataclass
+class Support:
+    """A printed part (`part`) that carries the held part `held` from below,
+    bearing on its underside at z `face` only within `regions` (x0, x1, y0,
+    y1): the T-Display's holder under the board's bare spots. The part also
+    locates it: moved sideways, the held part meets it."""
+
+    part: str
+    held: str
+    face: float
+    regions: tuple[tuple[float, float, float, float], ...]
+
+
+@dataclass
 class ImuPad:
     """The IMU's pad on the deck: the part it is on and its screw bosses'
     centres (x, y), their top z and radius, and the pilot hole's radius."""
@@ -293,3 +316,4 @@ class Assembly:
     imu_pad: ImuPad | None = None
     vents: list[Vent] = field(default_factory=list)
     fans: list[Fan] = field(default_factory=list)
+    supports: list[Support] = field(default_factory=list)

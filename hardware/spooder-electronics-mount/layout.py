@@ -38,8 +38,8 @@ from build123d import Axis, Location, Plane, Polygon, Solid, extrude
 
 import measurements as M
 from model import (FANS, IMU, J6, LM2596_OUTPUT_ROUTE, SCHOTTKY, SENSOR_HEADER, SERVO_2040, SIDES, SZBK07, AirChannel,
-                   Assembly, Box6, Exposure, Fan, Held, ImuPad, Opening, Part, Route, Screw, Terminal, Vent, box, box6,
-                   turned)
+                   Assembly, Box6, Exposure, Fan, Held, ImuPad, Opening, Part, Route, Screw, Support, Terminal, Vent, box,
+                   box6, teardrop, turned)
 
 UP = (0.0, 0.0, 1.0)
 DOWN = (0.0, 0.0, -1.0)
@@ -194,24 +194,6 @@ def s2(bx: float, by: float) -> tuple[float, float]:
     return S2_X0 + bx, S2_Y0 + by
 
 
-# LM2596 on the right behind the corridor, its length along y: input pads at
-# the rear end, output pads at the front. On bosses so its underside leads
-# clear the deck. Source: chosen.
-LM_X0 = 39.5
-LM_Y0 = -27.0
-LM_BOSS_H = 3.0  # Source: chosen.
-LM_BOSS_D = 6.0  # Source: chosen.
-LM_BOX = (LM_X0, LM_X0 + M.LM2596_SIZE[1], LM_Y0, LM_Y0 + M.LM2596_SIZE[0],
-          DECK_Z1 + LM_BOSS_H + TOUCH, DECK_Z1 + LM_BOSS_H + TOUCH + M.LM2596_SIZE[2])
-LM_PAD_DEPTH = 2 * M.LM2596_PAD_INSET  # the pad region at each end
-
-
-def lm(mx: float, my: float) -> tuple[float, float]:
-    """A point on the LM2596 (length along x, width along y, from its corner
-    by the input pads), in the robot's frame: length along +y, width along -x."""
-    return LM_X0 + M.LM2596_SIZE[1] - my, LM_Y0 + mx
-
-
 # T-Display above the LM2596, screen up, its long side along y, as high as
 # its header pins allow under the lid, so the screen sits close under its
 # window: its holder (task 5.2) stands over the LM2596, at least a plate
@@ -222,7 +204,10 @@ TD_Y0 = -(M.TD_PCB[3] - M.TD_PCB[2]) / 2
 TD_HOLDER_PLATE = 2.0  # Source: chosen, the holder's plate (task 5.2).
 TD_Z0 = (LID_Z0 - FIT - M.TD_HEADER_PIN_DEPTH  # PCB underside, its header pins under the chamfer by the right wall
          - under_chamfer(BOX_X - WALL - (TD_X0 - (M.TD_HEADER_ROWS[0][0]))))
-assert TD_Z0 >= LM_BOX[5] + FIT + TD_HOLDER_PLATE + M.TD_UNDERSIDE_TALLEST + 0.1, "no room for the holder's plate"
+# The holder's plate lies FIT under the board's underside parts; its pads
+# rise from it to the bare spots. Source: the skill (FIT), TOUCH.
+TDH_PLATE_Z1 = TD_Z0 - M.TD_UNDERSIDE_TALLEST - FIT
+TDH_PLATE_Z0 = TDH_PLATE_Z1 - TD_HOLDER_PLATE
 
 
 def td(x: float, y: float) -> tuple[float, float]:
@@ -236,6 +221,41 @@ def td_box(x0: float, x1: float, y0: float, y1: float, z0: float, z1: float) -> 
     model's -z), in the robot's frame."""
     (ax, ay), (bx, by) = td(x0, y0), td(x1, y1)
     return (min(ax, bx), max(ax, bx), min(ay, by), max(ay, by), TD_Z0 + z0, TD_Z0 + z1)
+
+
+# LM2596 on the right behind the corridor, its length along y: input pads at
+# the rear end, output pads at the front, under the T-Display's holder. It
+# stands on two white standoffs (task 5.3) loose in pockets in the deck, as
+# tall as leaves FIT under the holder's plate, so the holder keeps it and
+# them from lifting out of the pockets. Source: chosen.
+LM_X0 = 39.5
+LM_Y0 = -27.0
+LM_BOSS_D = 6.0  # Source: chosen.
+# Pockets in the deck that locate the loose holders (task 5.3): this deep,
+# this much wider than the part on each side. Deeper than any holder can
+# rise before what lies over it stops it (check_captive): the most is the
+# IMU's pad, about 1 mm up to the Servo 2040's underside leads; the LM2596's
+# standoffs rise about 0.8 mm, pushing the module, the T-Display's holder and
+# the board until its header pins meet the cover. Source: chosen, half the
+# deck; the fit between the skill's sliding fit (0.15) and FIT.
+POCKET_DEPTH = 1.5
+POCKET_FIT = 0.2
+POCKET_Z = DECK_Z1 - POCKET_DEPTH  # a pocket's floor
+LM_BOSS_H = TDH_PLATE_Z0 - FIT - M.LM2596_SIZE[2] - DECK_Z1 - TOUCH
+LM_BOX = (LM_X0, LM_X0 + M.LM2596_SIZE[1], LM_Y0, LM_Y0 + M.LM2596_SIZE[0],
+          DECK_Z1 + LM_BOSS_H + TOUCH, DECK_Z1 + LM_BOSS_H + TOUCH + M.LM2596_SIZE[2])
+LM_PAD_DEPTH = 2 * M.LM2596_PAD_INSET  # the pad region at each end
+# Its wires are soldered to pads on its board: their ends lie within this of
+# the board's underside, and the routes to them rise no higher, under the
+# exhaust fan holder's right lip (EXH_LIP_Z). Source: measurements.
+LM_WIRE_H = M.LM2596_WIRE_HEIGHT
+LM_WIRE_Z1 = LM_BOX[4] + LM_WIRE_H
+
+
+def lm(mx: float, my: float) -> tuple[float, float]:
+    """A point on the LM2596 (length along x, width along y, from its corner
+    by the input pads), in the robot's frame: length along +y, width along -x."""
+    return LM_X0 + M.LM2596_SIZE[1] - my, LM_Y0 + mx
 
 
 # The IMU breakout under the Servo 2040, its length along x, centred on the
@@ -476,7 +496,7 @@ def lm_terminal(end: str) -> Terminal:
         y0, y1, side = LM_BOX[2], LM_BOX[2] + LM_PAD_DEPTH, (0.0, -1.0, 0.0)
     else:
         y0, y1, side = LM_BOX[3] - LM_PAD_DEPTH, LM_BOX[3], (0.0, 1.0, 0.0)
-    return Terminal(f"lm2596 {end}", "lm2596", (LM_BOX[0], LM_BOX[1], y0, y1, LM_BOX[4], LM_BOX[5]), side)
+    return Terminal(f"lm2596 {end}", "lm2596", (LM_BOX[0], LM_BOX[1], y0, y1, LM_BOX[4], LM_WIRE_Z1), side)
 
 
 def t_display() -> Held:
@@ -503,7 +523,9 @@ def t_display() -> Held:
     pcb_top = TD_Z0 + t
     for x0, x1, y0, y1 in window_rects():
         exposed.append(Exposure(UP, (x0, x1, y0, y1, pcb_top, pcb_top), must_show=False))
-    return Held("t-display", shape, exposed=tuple(exposed))
+    # Its holder's lips stand TDH_LIP_H above its underside: the lid, over its
+    # header pins, must come nearer than that (task 5.2).
+    return Held("t-display", shape, exposed=tuple(exposed), held_down=TDH_LIP_H)
 
 
 def window_rects() -> list[tuple[float, float, float, float]]:
@@ -586,10 +608,10 @@ def routes(t: dict[str, Terminal]) -> list[Route]:
     j6_approach = (t["j6"].region[0] - 0.2, t["j6"].region[1] + 0.2, BAND_Y[0], S2_Y0 - TOUCH, S2_Z1 + TOUCH, top)
     left_strip_cups = (col[0], S2_X0 - 0.35, XT_CUPS[2] - 0.5, XT_CUPS[3] + 0.5, RZ0, XT_BODY[5] + 0.5)
     fuse_rear = (FUSE_BOX[0], col[1], FUSE_BOX[2] - 3.0, FUSE_BOX[2] - FIT, RZ0, FUSE_BOX[5] + 1.0)
-    lm_in = (COR_X[0], LM_BOX[1], LM_BOX[2] - 4.0, LM_BOX[2] - TOUCH, RZ0, LM_BOX[5])
+    lm_in = (COR_X[0], LM_BOX[1], LM_BOX[2] - 4.0, LM_BOX[2] - TOUCH, RZ0, LM_WIRE_Z1)
     # Up to the inner header row, clear of the LM2596's boss beside it.
     td_link = (COR_X[0], td_terminal(1, "x").region[1] + 0.02, *td_terminal(1, "x").region[2:4], RZ0, cz1)
-    out_front = (COR_X[0], LM_BOX[1], LM_BOX[3] + TOUCH, OUT_FRONT_Y1, RZ0, LM_BOX[5])
+    out_front = (COR_X[0], LM_BOX[1], LM_BOX[3] + TOUCH, OUT_FRONT_Y1, RZ0, LM_WIRE_Z1)
     td_x = td_terminal(0, "x").region
     out_td = (td_x[1] - 6.0, td_x[1] + 0.3, LM_BOX[3] + TOUCH, LM_BOX[3] + 6.1, RZ0, cz1)
     lead_x = (t["servo header"].region[0] - 0.25, t["servo header"].region[1] + 0.25)
@@ -702,8 +724,9 @@ def tie_points() -> dict[str, list[tuple[float, float, float, float]]]:
 
 def deck() -> Part:
     """The deck: the box's footprint and the tabs to the ring's inserts, with
-    the insert holes, slots, entries and tie holes through it, and on it the
-    stops, standoffs, bosses, the IMU pad and the XT60's cradle."""
+    the insert holes, slots, entries and tie holes through it, the pockets
+    that locate the loose holders (task 5.3), and on it the SZBK07's stops,
+    the Servo 2040's standoffs, the XT60's cradle and the cover's posts."""
     z0, z1 = DECK_Z0, DECK_Z1
     shape = octagon(BOX_X, BOX_Y, BOX_DIAG, z0, z1) + box(-TAB_X, TAB_X, -TAB_Y, TAB_Y, z0, z1)
     shape = shape + features()
@@ -717,43 +740,210 @@ def deck() -> Part:
         top = LID_Z0 - TOUCH
         shape = shape - cyl(M3_INSERT_D / 2, x, y, top - M3_INSERT_L, top + 1)
         shape = shape - cyl(M3_D / 2, x, y, top - M3_INSERT_L - SCREW_TAIL, top)
+    for _, feet in loose_holders():
+        for foot in feet:
+            shape = shape - pocket(foot)
     return Part("deck", shape, "deck", UP, "black")
 
 
-def fan_holders() -> list[Solid]:
-    """The fans' holders on the deck. The intake stands on the deck between
-    a low lip outside its foot, lips inside its ends and a cheek at its rear
-    end (the XT60 cradle's rear wall locates its front end). The exhaust
-    stands on two columns under its ends, above the board's corner, with a
-    cheek beyond each end that reaches in over its inner face as a lip; in
-    the corner frame (u, v), turned 45 degrees."""
-    z = DECK_Z1 - EMBED
-    hz = DECK_Z1 + FAN_HOLD_H
+# --------------------------------------------------------------------------- loose holders (task group 5)
+
+# A holder's foot, as the deck's pocket for it is cut: a box (x0, x1, y0, y1)
+# in a frame turned `turn` degrees, or a circle (x, y, r).
+Foot = tuple
+
+
+def foot_solid(foot: Foot, grow: float, z0: float, z1: float) -> Solid:
+    """A foot's footprint grown by `grow` on each side, from z0 to z1."""
+    if len(foot) == 3:
+        x, y, r = foot
+        return cyl(r + grow, x, y, z0, z1)
+    x0, x1, y0, y1, turn = foot
+    return turned((x0 - grow, x1 + grow, y0 - grow, y1 + grow, z0, z1), turn)
+
+
+def pocket(foot: Foot) -> Solid:
+    """The deck's pocket for a foot: POCKET_FIT round it, POCKET_DEPTH deep,
+    cut to just above the deck's top (not into the features on it), and kept
+    inside the cover's walls, whose rim on the deck stays whole."""
+    return foot_solid(foot, POCKET_FIT, POCKET_Z, DECK_Z1 + 0.01) & cavity()
+
+
+def foot_base(foot: Foot, z1: float) -> Solid:
+    """The part of a holder in its pocket and up to z1: the foot, standing
+    TOUCH above the pocket's floor."""
+    return foot_solid(foot, 0.0, POCKET_Z + TOUCH, z1)
+
+
+def loose_holders() -> list[tuple[Part, list[Foot]]]:
+    """The white holders that sit loose in pockets in the deck, each with its
+    feet: the LM2596's standoffs, the IMU's pad, the fans' holders and the
+    T-Display's holder. Each is kept in its pocket by what lies over it."""
+    return [lm_standoffs(), imu_pad(), intake_holder(), *exhaust_holders(), td_holder()]
+
+
+def lm_standoffs() -> tuple[Part, list[Foot]]:
+    """The LM2596's two standoffs, one part copied to the other hole: a
+    round column from its pocket up to the module, with a pilot for the
+    module's self-tapping screw down its length. The module over them is
+    FIT under the T-Display's holder, which keeps it and them in place."""
+    (x, y), *rest = [lm(*h) for h in M.LM2596_HOLES]
+    top = LM_BOX[4] - TOUCH
+    shape = foot_base((x, y, LM_BOSS_D / 2), top) - cyl(PILOT_M25_D / 2, x, y, POCKET_Z + TOUCH + 1.0, top + 1)
+    copies = tuple(Location((ox - x, oy - y, 0)) for ox, oy in rest)
+    feet = [(hx, hy, LM_BOSS_D / 2) for hx, hy in [(x, y), *rest]]
+    return Part("lm2596-standoff", shape, "holder", UP, "white", copies=copies, held_down=POCKET_DEPTH,
+                carries=("lm2596",)), feet
+
+
+# The IMU's pad (task 5.3): a flat plate across the breakout between its two
+# bosses, clear of the floor inserts' screw heads (r 2.85, ISO 7380) beside
+# it; the Servo 2040 over the breakout keeps it in its pocket. Source: chosen.
+IMU_PAD_Y = (11.0, 17.5)
+IMU_PAD_TOP = DECK_Z1 + 1.0  # the plate's top, under the breakout's underside parts
+IMU_PILOT_DEPTH = 4.0  # an M2 x 6 through the 1.6 mm breakout. Source: chosen.
+
+
+def imu_pad() -> tuple[Part, list[Foot]]:
+    """The pad: a plate, and a boss with a pilot under each of the breakout's
+    holes."""
+    x0, x1 = IMU_BOX[0], IMU_BOX[1]
+    feet: list[Foot] = [(x0, x1, *IMU_PAD_Y, 0.0)] + [(x, y, IMU_BOSS_D / 2) for x, y in IMU_BOSSES]
+    shape = foot_base(feet[0], IMU_PAD_TOP)
+    top = IMU_BOX[4] - TOUCH
+    for f in feet[1:]:
+        shape = shape + foot_base(f, top)
+    for x, y in IMU_BOSSES:
+        shape = shape - cyl(PILOT_M2_D / 2, x, y, top - IMU_PILOT_DEPTH, top + 1)
+    return Part("imu-pad", shape, "holder", UP, "white", held_down=POCKET_DEPTH, carries=(IMU,)), feet
+
+
+def intake_holder() -> tuple[Part, list[Foot]]:
+    """The intake fan's holder: a plate under the fan, a low lip outside its
+    foot, lips inside its ends and a cheek at its rear end (the XT60
+    cradle's rear wall locates its front end). The cheek rises behind the
+    fan, clear of the air channel, to just under the lid, which keeps the
+    holder in its pocket: the fan does not reach the lid."""
     wall_in = -(BOX_X - WALL) + TOUCH  # the cover's left wall, inside
     diag_in = BOX_DIAG - WALL * SQRT2  # the cover's corner faces, inside, as |x| + |y|
+    hz = DECK_Z1 + FAN_HOLD_H
     cheek_y = (INTAKE_Y0 - FIT - FAN_CHEEK, INTAKE_Y0 - FIT)
-    found = [
-        box(wall_in, INTAKE_X0 - FIT, INTAKE_Y0, INTAKE_Y1, z, DECK_Z1 + INTAKE_LIP_H),
-        box(INTAKE_X1 + FIT, INTAKE_LIP_X1, INTAKE_Y0, INTAKE_Y0 + INTAKE_LIP_LEN, z, hz),
-        box(INTAKE_X1 + FIT, INTAKE_LIP_X1, INTAKE_Y1 - INTAKE_LIP_LEN, INTAKE_Y1, z, hz),
-        box(-(diag_in - 2 * TOUCH + cheek_y[0]), INTAKE_X1 + FIT, *cheek_y, z, hz),
-    ]
+    cheek_x0 = -(diag_in - 2 * TOUCH + cheek_y[0])
+    lips_y = ((INTAKE_Y0, INTAKE_Y0 + INTAKE_LIP_LEN), (INTAKE_Y1 - INTAKE_LIP_LEN, INTAKE_Y1))
+    # The plate under the fan and the cheek, and under each inner lip (overlapping the plate).
+    feet: list[Foot] = [(wall_in, INTAKE_X1 + FIT, cheek_y[0], INTAKE_Y1, 0.0)]
+    feet += [(INTAKE_X1 + FIT - EMBED, INTAKE_LIP_X1, *y, 0.0) for y in lips_y]
+    shape = foot_base(feet[0], DECK_Z1)
+    for f, y in zip(feet[1:], lips_y):
+        shape = shape + foot_base(f, DECK_Z1) + box(INTAKE_X1 + FIT, INTAKE_LIP_X1, *y, DECK_Z1 - EMBED, hz)
+    shape = (shape + box(wall_in, INTAKE_X0 - FIT, INTAKE_Y0, INTAKE_Y1, DECK_Z1 - EMBED, DECK_Z1 + INTAKE_LIP_H)
+             + box(cheek_x0, INTAKE_X1 + FIT, *cheek_y, DECK_Z1 - EMBED, hz)
+             + box(cheek_x0, INTAKE_X1 - INTAKE_COLUMN_GAP, *cheek_y, hz - EMBED, LID_Z0 - INTAKE_LID_GAP))
+    return Part("intake-fan-holder", shape & cavity(TOUCH), "holder", UP, "white", held_down=POCKET_DEPTH,
+                carries=(FANS[1],)), feet
+
+
+# The intake holder's cheek rises behind the fan to this far under the lid
+# (the exhaust holders' cheeks too), this far inside the fan's inner face
+# (clear of the air channel's first segment). Source: chosen, less than
+# POCKET_DEPTH; the channel's 0.2.
+INTAKE_LID_GAP = 0.5
+INTAKE_COLUMN_GAP = 0.3
+
+
+def exhaust_holders() -> list[tuple[Part, list[Foot]]]:
+    """The exhaust fan's holders: two columns under its ends, above the
+    board's corner, each with a cheek beyond its end that reaches in over the
+    fan's inner face as a lip; in the corner frame (u, v), turned 45 degrees.
+    The cheeks rise to just under the cover, which keeps them in their
+    pockets with the fan fitted or not."""
     top = EXH_Z0 - TOUCH
-    cz = EXH_Z0 + FAN_HOLD_H - 0.5  # below the air channel over the board
+    cz = LID_Z0 - INTAKE_LID_GAP
     lip = (EXH_U0 - FIT - EXH_LIP_T, EXH_U0 - FIT)
+    inside = cavity(TOUCH)
     # Left end: the column and the cheek, which rises past the servo leads'
     # route and there reaches in over the fan's inner face as a lip.
-    left = (turned((EXH_HOLD_U0[0], EXH_U1, EXH_V1 - FAN_END, EXH_V1 + FIT + FAN_CHEEK, z, top), DIAG)
-            + turned((EXH_HOLD_U0[0], EXH_U1, EXH_V1 + FIT, EXH_V1 + FIT + FAN_CHEEK, top - 1.0, EXH_LIP_Z[0][1]), DIAG)
+    lf: Foot = (EXH_HOLD_U0[0], EXH_U1, EXH_V1 - FAN_END, EXH_V1 + FIT + FAN_CHEEK, DIAG)
+    left = (foot_base(lf, top)
+            + turned((EXH_HOLD_U0[0], EXH_U1, EXH_V1 + FIT, EXH_V1 + FIT + FAN_CHEEK, top - 1.0, cz), DIAG)
             + turned((lip[0], EXH_HOLD_U0[0] + 1.0, EXH_V1 + FIT, EXH_V1 + FIT + FAN_CHEEK, *EXH_LIP_Z[0]), DIAG)
             + turned((*lip, EXH_V1 - EXH_LIP_OVER, EXH_V1 + FIT + 0.5, *EXH_LIP_Z[0]), DIAG))
     # Right end: the column and the cheek, which reaches in over the fan's
     # inner face above the LM2596's output route, below the T-Display.
-    right = (turned((EXH_HOLD_U0[1], EXH_U1, EXH_V0 - FIT - FAN_CHEEK, EXH_V0 + FAN_END, z, top), DIAG)
+    rf: Foot = (EXH_HOLD_U0[1], EXH_U1, EXH_V0 - FIT - FAN_CHEEK, EXH_V0 + FAN_END, DIAG)
+    right = (foot_base(rf, top)
              + turned((EXH_HOLD_U0[1], EXH_U1, EXH_V0 - FIT - FAN_CHEEK, EXH_V0 - FIT, top - 1.0, cz), DIAG)
              + turned((lip[0], EXH_U1, EXH_V0 - FIT - FAN_CHEEK, EXH_V0 - FIT, *EXH_LIP_Z[1]), DIAG)
              + turned((*lip, EXH_V0 - FIT - 0.5, EXH_V0 + EXH_LIP_OVER, *EXH_LIP_Z[1]), DIAG))
-    return found + [left, right]
+    return [(Part(f"exhaust-fan-holder-{side}", shape & inside, "holder", UP, "white", held_down=POCKET_DEPTH,
+                  carries=(FANS[0],)), [foot])
+            for side, shape, foot in (("left", left, lf), ("right", right, rf))]
+
+
+# The T-Display's holder (task 5.2): a white portal over the LM2596, printed
+# on its back (up +y), loose in pockets in the deck and held down through the
+# board by the lid. Source: chosen (design.md "Assumptions", task group 5).
+# - Its right wall stands between the LM2596 and the cover's right wall, its
+#   rear wall behind the LM2596's input route; the plate over the module joins
+#   them, and the rear block on the plate is its rear lip.
+# - Pads rise from the plate into the board's bare spots (TD_BARE), FIT inside
+#   each, and bear on its underside; their faces towards the rear (down as
+#   printed) slope at 45 degrees, inside the bare spot.
+# - The front lip stands beyond the board's front end, its foot sloping under
+#   the end's bare strip.
+TDH_LIP_T = 1.6  # Source: chosen, four perimeters.
+TDH_LIP_H = 2.0  # the lips' top above the board's underside, higher than the lid lets it rise. Source: chosen.
+TDH_REAR_Y0 = -34.4  # the rear wall's back, clear of the rear-right cover post. Source: chosen.
+
+
+def td_holder() -> tuple[Part, list[Foot]]:
+    pcb = td_box(*M.TD_PCB, 0, 0)
+    face = TD_Z0 - TOUCH  # the pads' tops, under the board's underside
+    top = TD_Z0 + TDH_LIP_H
+    pz0, pz1 = TDH_PLATE_Z0, TDH_PLATE_Z1
+    x0 = td_terminal(1, "x").region[1] + 0.02 + TOUCH  # clear of the T-Display's link route
+    x_front = (40.0 + FIT + TOUCH, td_terminal(0, "x").region[1] - 6.0 - TOUCH)  # clear of the air channel and the 5V wire
+    xw = (LM_BOX[1] + FIT + TOUCH, INNER_X)  # the right wall
+    yr = (TDH_REAR_Y0, LM_BOX[2] - 4.0 - TOUCH)  # the rear wall, behind the LM2596's input route
+    zf = POCKET_Z + TOUCH
+    feet: list[Foot] = [(*xw, yr[0], LM_BOX[3] - TOUCH, 0.0), (x0, xw[1], *yr, 0.0)]
+    shape = foot_base(feet[0], pz0 + EMBED) + foot_base(feet[1], pz0 + EMBED)
+    # The right wall stands clear of the LM2596's rear standoff.
+    sx, sy = lm(*M.LM2596_HOLES[0])
+    r = LM_BOSS_D / 2 + FIT
+    shape = shape - box(xw[0] - 1.0, sx + r, sy - r, sy + r, zf - 1.0, LM_BOX[4] + FIT)
+    # The plate, short of the 5V wire up to the board's pin.
+    shape = shape + box(x0, xw[1], yr[0], pcb[3] + FIT - TOUCH, pz0, pz1)
+    shape = shape - box(x_front[1], xw[1] + 1.0, LM_BOX[3] - TOUCH, LM_BOX[3] + 6.1 + TOUCH, pz0 - 1.0, pz1 + 1.0)
+    # The rear block, its front face the rear lip.
+    shape = shape + box(x0, xw[1], yr[0], pcb[2] - FIT, pz1 - EMBED, top)
+    # The pads: their tops FIT inside the bare spots, their rear faces at 45 degrees.
+    for b in M.TD_BARE[1:]:
+        bx0, bx1, by0, by1, _, _ = td_box(*b, 0, 0)
+        y0, y1 = by0 + FIT, by1 - FIT
+        shape = shape + yz_prism([(y0, face), (y1, face), (y1, pz1 - EMBED), (y0 + face - pz1 + EMBED, pz1 - EMBED)],
+                                 bx0 + FIT, bx1 - FIT)
+    # The end pad and the front lip: across the end's bare strip, the lip's
+    # inner face FIT beyond the board's end, and its foot sloping under it.
+    ex0, ex1, ey0, ey1, _, _ = td_box(*M.TD_BARE[0], 0, 0)
+    y0, y1 = ey0 + FIT, pcb[3] - FIT
+    lip0, lip1 = pcb[3] + FIT, pcb[3] + FIT + TDH_LIP_T
+    notch = lip0 - y1  # down at 45 degrees from the pad's front edge to the lip's inner face
+    shape = shape + yz_prism([(y0 + face - pz1 + EMBED, pz1 - EMBED), (y0, face), (y1, face), (lip0, face - notch),
+                              (lip0, top), (lip1, top), (lip1, pz1 - EMBED)], x_front[0], x_front[1])
+    return Part("t-display-holder", shape & cavity(TOUCH), "holder", (0.0, 1.0, 0.0), "white",
+                held_down=POCKET_DEPTH, carries=("t-display",)), feet
+
+
+def yz_prism(pts, x0: float, x1: float) -> Solid:
+    """A prism of a polygon in (y, z), from x0 to x1, whichever way round the polygon runs."""
+    plane = Plane(origin=(x0, 0, 0), x_dir=(0, 1, 0), z_dir=(1, 0, 0))
+    return extrude(plane * Polygon(*pts, align=None), amount=x1 - x0, dir=(1, 0, 0)).solid()
+
+
+def td_support() -> Support:
+    """Where the holder bears on the board: its bare spots."""
+    return Support("t-display-holder", "t-display", TD_Z0, tuple(td_box(*b, 0, 0)[:4] for b in M.TD_BARE))
 
 
 def intake_fan() -> Fan:
@@ -868,7 +1058,7 @@ def window_cutter() -> Solid:
 
 def cover() -> Part:
     """The cover: a faceted shell standing on the deck's rim, its top edge
-    chamfered, a groove round its walls, the window over the T-Display, the
+    chamfered, a groove round its walls, the bumpers' rails on its corner faces, the window over the T-Display, the
     vents, the XT60's notch, the screw holes, hold-down blocks over the
     SZBK07's corners, and the flush inlays. It prints lid-down."""
     outer = octagon(BOX_X, BOX_Y, BOX_DIAG, COVER_Z0, LID_Z1)
@@ -877,6 +1067,7 @@ def cover() -> Part:
     d = GROOVE_DEPTH
     shape = shape - (octagon(BOX_X + 1, BOX_Y + 1, BOX_DIAG + SQRT2, *GROOVE_Z)
                      - octagon(BOX_X - d, BOX_Y - d, BOX_DIAG - d * SQRT2, GROOVE_Z[0] - 1, GROOVE_Z[1] + 1))
+    shape = shape + rails() - rail_pilots()
     for xa, xb in ((SZ_BOX[0], SZ_BOX[0] + SZ_HOLD[0]), (SZ_BOX[1] - SZ_HOLD[0], SZ_BOX[1])):
         for ya, yb in ((SZ_BOX[2], SZ_BOX[2] + SZ_HOLD[1]), (SZ_BOX[3] - SZ_HOLD[1], SZ_BOX[3])):
             shape = shape + box(xa, xb, ya, yb, SZ_BOX[5] + SZ_HOLD_GAP, LID_Z0 + EMBED)
@@ -891,6 +1082,162 @@ def cover() -> Part:
     shape = shape - box(-BOX_X - 1, -(BOX_X - WALL) + 0.5, ny0, ny1, COVER_Z0 - 1, nz1)
     marks = inlays()
     return Part("cover", shape - marks, "cover", DOWN, "black", inlays=marks)
+
+
+# --------------------------------------------------------------------------- bumpers (task 5.1)
+
+# Each corner face carries two vertical rails, a dovetail near each end of
+# the face and clear of the outlet's grille in the front-right one; a yellow
+# PETG bumper slides down onto them. The bumper is a hook round each rail,
+# joined by a curved leaf that stands off the face and flexes in a knock;
+# the hooks stand past the side walls and the bumper's top above the lid.
+# The rails' tops are 45-degree wedges flush with the top chamfer, and the
+# bumper's slots end in the same slope, which is its stop. Every corner's
+# bumper is the same part: the corner faces are alike, and the bumper is
+# symmetric about its face's centre line. Source: chosen (design.md
+# "Bumpers", "Assumptions", task group 5).
+#
+# In a corner's frame: s along the face, n out of it, z up; the face's centre
+# at the origin (corner_location()).
+CORNER_HALF = (BOX_X + BOX_Y - BOX_DIAG) * SQRT2 / 2  # half the corner face's length
+CORNER_CENTRE = ((BOX_X + BOX_DIAG - BOX_Y) / 2, (BOX_DIAG - BOX_X + BOX_Y) / 2)  # the front-right face's centre
+RAIL_S = 21.0  # each rail's centre along the face, its neck on the face. Source: chosen.
+RAIL_NECK = 3.0  # the dovetail's width at the face. Source: chosen.
+RAIL_HEAD = 5.4  # its width at its outer face. Source: chosen.
+RAIL_D = 3.0  # how far it stands off the face. Source: chosen.
+RAIL_Z0 = 40.0  # its foot, above the groove. Source: chosen.
+RAIL_TOP = LID_Z1 - COVER_CHAMFER  # where the top chamfer begins: the wedge ends flush with it
+SLIDE = 0.2  # sliding fit round the rail, PETG on PETG, normal to each face. Source: chosen, above the skill's 0.15 for TPU.
+HOOK_WALL = 1.2  # the hook's wall beside the rail's head. Source: chosen, three perimeters.
+HOOK_BACK = 1.6  # its wall outside the rail. Source: chosen.
+BUMPER_Z0 = 44.0  # the hooks' foot. Source: chosen, 25 mm along the rails.
+BUMPER_RISE = 3.5  # how far the bumpers' tops stand above the lid's. Source: chosen, above the cover's screw heads.
+BUMPER_Z1 = LID_Z1 + BUMPER_RISE
+LEAF_T = 1.5  # Source: design.md "Bumpers" (1.2 to 1.6 mm).
+LEAF_H = 12.0  # the leaf's height, down from the bumper's top, above most of the outlet's grille. Source: chosen.
+LEAF_APEX = 8.0  # the leaf's outer face off the corner face at its middle. Source: chosen, inside the keep-clear radius.
+LEAF_POINTS = 41
+# An M2 x 6 self-tapping screw through each hook into its rail keeps the
+# bumper on its rails when the robot is turned over or shaken; it comes out
+# from outside to change the bumper. At this height, under the leaf; the
+# rail's pilot reaches into the cover's wall, leaving this much of it.
+# Source: chosen; the pilot as the IMU's (PILOT_M2_D), the clearance the
+# skill's M2.5 clearance (2.9) less 0.5.
+RETAIN_Z = 52.0
+RETAIN_SCREW = (2.0, 6.0)  # its shank's diameter and length
+RETAIN_CLEAR_D = 2.4
+RETAIN_WALL_LEFT = 0.6
+
+
+def corner_location(k: int) -> Location:
+    """Corner k's frame (0 front-right, 1 front-left, 2 rear-left, 3 rear-right)."""
+    cx, cy = CORNER_CENTRE
+    sx, sy = ((1, 1), (-1, 1), (-1, -1), (1, -1))[k]
+    return Location((sx * cx, sy * cy, 0), (0, 0, (-45.0, 45.0, 135.0, -135.0)[k]))
+
+
+def rail_profile(s0: float, grow: float = 0.0, n0: float = -EMBED) -> list[tuple[float, float]]:
+    """The dovetail's outline in (s, n), from n0 to its outer face, grown by
+    `grow` normal to each side."""
+    k = (RAIL_HEAD - RAIL_NECK) / 2 / RAIL_D  # its half-width grows k per mm out
+    shift = grow * math.sqrt(1 + k * k)  # a flank moved `grow` normal to itself, along s
+
+    def half(n: float) -> float:
+        return RAIL_NECK / 2 + k * n + shift
+
+    n1 = RAIL_D + grow
+    return [(s0 - half(n0), n0), (s0 + half(n0), n0), (s0 + half(n1), n1), (s0 - half(n1), n1)]
+
+
+def xy_prism(pts, z0: float, z1: float) -> Solid:
+    """A prism of a polygon in (x, y), from z0 up to z1, whichever way round the polygon runs."""
+    return extrude(Plane.XY.offset(z0) * Polygon(*pts, align=None), amount=z1 - z0, dir=(0, 0, 1)).solid()
+
+
+def below_wedge(offset: float = 0.0) -> Solid:
+    """Everything in a corner's frame with n + z at most RAIL_TOP + offset:
+    under the rails' 45-degree tops (offset 0), or the bumper's slots' (its
+    SLIDE normal to them)."""
+    t = RAIL_TOP + offset
+    return yz_prism([(-10.0, 0.0), (20.0, 0.0), (20.0, t - 20.0), (-10.0, t + 10.0)], -40.0, 40.0)
+
+
+def at_corners(one: Solid) -> Solid:
+    """A solid given in a corner's frame, at all four corners."""
+    out = None
+    for k in range(4):
+        r = one.moved(corner_location(k))
+        out = r if out is None else out + r
+    return out
+
+
+def rails() -> Solid:
+    """The four corner faces' rails, on the cover."""
+    one = None
+    for s0 in (-RAIL_S, RAIL_S):
+        r = xy_prism(rail_profile(s0), RAIL_Z0, RAIL_TOP + 1.0) & below_wedge()
+        one = r if one is None else one + r
+    return at_corners(one)
+
+
+def rail_pilots() -> Solid:
+    """The retaining screws' pilots, through each rail into the cover's
+    wall: horizontal as the cover prints, so teardrops pointing down (up as
+    printed)."""
+    n0, n1 = -(WALL - RETAIN_WALL_LEFT), RAIL_D + 0.5
+    one = None
+    for s0 in (-RAIL_S, RAIL_S):
+        t = teardrop(PILOT_M2_D / 2, n1 - n0, s0, (n0 + n1) / 2, RETAIN_Z, "y", DOWN)
+        one = t if one is None else one + t
+    return at_corners(one)
+
+
+def bumper_screws() -> list[Screw]:
+    """Each bumper's two retaining screws: the head on the hook's outer face,
+    driven in along -n from outside."""
+    found = []
+    n = RAIL_D + SLIDE + HOOK_BACK
+    for k in range(4):
+        a = math.radians((-45.0, 45.0, 135.0, -135.0)[k])
+        cx, cy = (CORNER_CENTRE[0] * (1, -1, -1, 1)[k], CORNER_CENTRE[1] * (1, 1, -1, -1)[k])
+        out = (-math.sin(a), math.cos(a), 0.0)  # n in the robot's frame
+        for side, s0 in (("a", -RAIL_S), ("b", RAIL_S)):
+            x = cx + s0 * math.cos(a) + n * out[0]
+            y = cy + s0 * math.sin(a) + n * out[1]
+            found.append(Screw(f"bumper {k + 1} screw {side}", (x, y, RETAIN_Z), out, shank=RETAIN_SCREW))
+    return found
+
+
+def leaf_profile() -> list[tuple[float, float]]:
+    """The leaf: a circular band between the hooks, its outer face through
+    the hooks' outer faces at the rails and LEAF_APEX out at its middle."""
+    ne = RAIL_D + SLIDE + HOOK_BACK
+    sag = LEAF_APEX - ne
+    radius = (RAIL_S ** 2 + sag ** 2) / (2 * sag)
+    cn = LEAF_APEX - radius
+    a = math.asin(RAIL_S / radius)
+    angles = [-a + 2 * a * i / (LEAF_POINTS - 1) for i in range(LEAF_POINTS)]
+    outer = [(radius * math.sin(t), cn + radius * math.cos(t)) for t in angles]
+    inner = [((radius - LEAF_T) * math.sin(t), cn + (radius - LEAF_T) * math.cos(t)) for t in reversed(angles)]
+    return outer + inner
+
+
+def bumper() -> Part:
+    """The front-right corner's bumper, copied to the other three corners. It
+    prints on its top (up -z): the leaf hangs from the top, and the slots'
+    sloped ends face up as printed."""
+    half = RAIL_HEAD / 2 + SLIDE + HOOK_WALL
+    shape = None
+    for s0 in (-RAIL_S, RAIL_S):
+        hook = box(s0 - half, s0 + half, SLIDE, RAIL_D + SLIDE + HOOK_BACK, BUMPER_Z0, BUMPER_Z1)
+        slot = xy_prism(rail_profile(s0, SLIDE, -1.0), BUMPER_Z0 - 1.0, BUMPER_Z1 + 1.0) & below_wedge(SLIDE * SQRT2)
+        hook = hook - slot - teardrop(RETAIN_CLEAR_D / 2, HOOK_BACK + 2.0, s0, RAIL_D + SLIDE + HOOK_BACK / 2,
+                                      RETAIN_Z, "y", DOWN)
+        shape = hook if shape is None else shape + hook
+    shape = shape + xy_prism(leaf_profile(), BUMPER_Z1 - LEAF_H, BUMPER_Z1)
+    first = corner_location(0)
+    copies = tuple(corner_location(k) * first.inverse() for k in (1, 2, 3))
+    return Part("bumper", shape.moved(first), "bumper", DOWN, "yellow", copies=copies)
 
 
 def channel() -> AirChannel:
@@ -926,12 +1273,10 @@ def channel() -> AirChannel:
 
 
 def pilots():
-    """((x, y), pilot diameter, boss top) for every self-tapping screw into
-    the deck: the board's standoffs, the LM2596's and the IMU's bosses."""
-    found = [(s2(*h), PILOT_M25_D, S2_Z0 - TOUCH) for h in M.S2040_HOLES]
-    found += [(lm(*h), PILOT_M25_D, LM_BOX[4] - TOUCH) for h in M.LM2596_HOLES]
-    found += [(b, PILOT_M2_D, IMU_BOX[4] - TOUCH) for b in IMU_BOSSES]
-    return found
+    """((x, y), pilot diameter, standoff top) for every self-tapping screw
+    into the deck: the board's standoffs. (The LM2596's and the IMU's screws
+    go into their white holders, lm_standoffs() and imu_pad().)"""
+    return [(s2(*h), PILOT_M25_D, S2_Z0 - TOUCH) for h in M.S2040_HOLES]
 
 
 def features() -> Solid:
@@ -939,8 +1284,7 @@ def features() -> Solid:
     z = DECK_Z1 - EMBED
     parts = []
     for (x, y), _, top in pilots():
-        d = S2_STANDOFF_D if top == S2_Z0 - TOUCH else LM_BOSS_D if top == LM_BOX[4] - TOUCH else IMU_BOSS_D
-        parts.append(cyl(d / 2, x, y, z, top))
+        parts.append(cyl(S2_STANDOFF_D / 2, x, y, z, top))
     # SZBK07: L-stops at the rear corners, ribs in front of the front corners.
     sx0, sx1, sy0, sy1 = SZ_BOX[:4]
     zt = DECK_Z1 + STOP_H
@@ -959,12 +1303,10 @@ def features() -> Solid:
         parts.append(box(-INNER_X, bx1 + TOUCH + XT_STOP, ya, yb, z, wz))
     for ya, yb in ((by0 - FIT, XT_CUPS[2] - FIT), (XT_CUPS[3] + FIT, by1 + FIT)):
         parts.append(box(bx1 + TOUCH, bx1 + TOUCH + XT_STOP, ya, yb, z, wz))
-    # The cover's posts, up to just under the lid, and the fans' holders,
-    # each kept inside the cover.
+    # The cover's posts, up to just under the lid, kept inside the cover.
     inside = cavity(TOUCH)
     for x, y in COVER_SCREWS:
         parts.append(cyl(POST_D / 2, x, y, z, LID_Z0 - TOUCH) & inside)
-    parts += [h & inside for h in fan_holders()]
     out = parts[0]
     for p in parts[1:]:
         out = out + p
@@ -995,13 +1337,13 @@ def screws() -> list[Screw]:
         found.append(Screw(f"servo 2040 screw {i + 1}", (*s2(*h), S2_Z1 + 1.8), UP, after=("cover",)))
     for i, h in enumerate(M.LM2596_HOLES):
         found.append(Screw(f"lm2596 screw {i + 1}", (*lm(*h), LM_BOX[4] + MODULE_PCB_T + 1.8), UP,
-                           after=("t-display", "t-display holder", "cover")))
+                           after=("t-display", "t-display-holder", "cover")))
     for i, (x, y) in enumerate(IMU_BOSSES):
         found.append(Screw(f"lsm6dso screw {i + 1}", (x, y, IMU_BOX[4] + MODULE_PCB_T + 1.2), UP,
                            after=(SERVO_2040, "cover")))
     for i, (x, y) in enumerate(COVER_SCREWS):
         found.append(Screw(f"cover screw {i + 1}", (x, y, LID_Z1 + BUTTON_HEAD_H), UP))
-    return found
+    return found + bumper_screws()
 
 
 # --------------------------------------------------------------------------- the assembly
@@ -1012,14 +1354,16 @@ def assembly() -> Assembly:
     fans = [exhaust_fan(), intake_fan()]
     held = [szbk07(), servo2040(), lm2596(), t_display(), imu(), xt60(), fuse(), diode()]
     held += [Held(f.name, f.shape()) for f in fans]
+    holders = [part for part, _ in loose_holders()]
     return Assembly(
-        parts=[deck(), spacer(), cover()],
+        parts=[deck(), spacer(), cover(), bumper(), *holders],
         held=held,
         routes=routes(t),
         openings=openings(),
         screws=screws(),
         channel=channel(),
-        imu_pad=ImuPad("deck", IMU_BOSSES, IMU_BOX[4] - TOUCH, IMU_BOSS_D / 2, PILOT_M2_D / 2),
+        imu_pad=ImuPad("imu-pad", IMU_BOSSES, IMU_BOX[4] - TOUCH, IMU_BOSS_D / 2, PILOT_M2_D / 2),
         vents=vents(),
         fans=fans,
+        supports=[td_support()],
     )
