@@ -19,13 +19,15 @@
 (`uv lock --script`). The sizes come from measurements.py, the layout from
 layout.py, the checks from checks.py and the export from export.py. When any check fails, the build
 names every failure and writes nothing; when all pass, it writes each
-distinct part once (export.py) and re-reads the files to confirm them.
+distinct part once (export.py) into a staging folder, re-reads the files to
+confirm them, and only then moves them into print/ and step/.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
 import unittest
 from collections.abc import Callable
 from pathlib import Path
@@ -34,7 +36,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from checks import run_checks  # noqa: E402
-from export import export_parts, verify_export  # noqa: E402
+from export import export_parts, publish, verify_export  # noqa: E402
 from layout import assembly, measurement_failures  # noqa: E402
 from model import Assembly  # noqa: E402
 
@@ -73,13 +75,18 @@ def main(argv: list[str] | None = None, outdir: Path = HERE, make: Callable[[], 
     if args.check:
         return 0
 
-    written = export_parts(asm.parts, outdir)
-    failures = verify_export(asm.parts, outdir)
-    if failures:
-        print(f"\n{len(failures)} export problem(s):")
-        for f in failures:
-            print("  " + f)
-        return 1
+    # Staged beside print/ and step/, so a failed re-read publishes nothing
+    # and the move into place stays on one file system.
+    with tempfile.TemporaryDirectory(prefix=".export-", dir=outdir) as tmp:
+        staging = Path(tmp)
+        staged = export_parts(asm.parts, staging)
+        failures = verify_export(asm.parts, staging)
+        if failures:
+            print(f"\n{len(failures)} export problem(s); nothing written:")
+            for f in failures:
+                print("  " + f)
+            return 1
+        written = publish(staged, staging, asm.parts, outdir)
     for path in written:
         print(f"wrote {path.relative_to(outdir)}")
     print(f"Exported {len(asm.parts)} distinct part(s).")

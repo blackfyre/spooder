@@ -8,7 +8,7 @@ The sizes are nominal until the bought parts are measured: read "Measure before 
 |---|---|
 | `measurements.py` | every size, as a named constant with its source in a comment |
 | `reference_check.py` | re-derives the reference data in `measurements.py` from the frame top STL, the T-Display STEP model and the Servo 2040 drawing, and fails on any mismatch |
-| `build.py` | generates the parts, runs every check, and only when all pass writes the print and CAD files and re-reads them |
+| `build.py` | generates the parts, runs every check, and only when all pass writes the print and CAD files, re-reads them, and only then moves them into `print/` and `step/` |
 | `layout.py` | the layout: where each held part sits, the deck with its stops, standoffs, the XT60's cradle, the cover's posts and the holders' pockets, the spacers under it, the cover with the bumpers' rails, the bumpers, the loose holders (the LM2596's standoffs, the IMU's pad, the fans' holders, the T-Display's holder), the cable routes with the terminals they reach, the slots, tie holes, wire entry and pass-through, the vents, the fan positions, the air channel and the screws |
 | `model.py` | the part set's model (printed parts, held parts, cable routes and their terminals, deck openings, screws, the air channel, vents, fan positions, the IMU's pad) and geometry helpers such as `box()`, `turned()` and `teardrop()` |
 | `checks.py` | the checks, each rule's number named with its source |
@@ -205,6 +205,8 @@ These values are nominal: the parts have not been measured, nor the wire sides c
 | `SERVO_PLUG_SECTION` | `(8.0, 4.5)` | assumed: a 3-way 2.54 mm servo plug with its key, which must pass through a lead slot | not yet |
 | `SENSOR_WIRE_D` | `1.3` | assumed: 26 AWG hook-up wire with its insulation | not yet |
 | `LM2596_WIRE_HEIGHT` | `3.8` | assumed: the 1.6 mm board and 22 AWG wire soldered on its pads; over 3.87 the LM2596's wire routes meet the exhaust fan holder's right lip (`EXH_LIP_Z` in `layout.py`) | not yet |
+| `MODULE_PCB_THICKNESS` | `1.6` | assumed: a standard 1.6 mm board, for the LM2596 module and the LSM6DSO breakout under their screw heads | not yet |
+| `S2040_HEIGHT` | `12.0` | Pimoroni's product page (62 × 42 × 12 mm with its connectors); the drawing does not give it | not yet |
 | `S2040_EXT_WIRE_SIDE` | `'+x'` | the `spooder-printed-parts` skill: the EXT terminal takes its wires from the board's right edge (the drawing does not show its opening) | not yet |
 | `S2040_SENSOR_WIRE_SIDE` | `'+x'` | assumed: the sensor header's leads leave towards the board's right edge, the nearest edge clear of other headers | not yet |
 

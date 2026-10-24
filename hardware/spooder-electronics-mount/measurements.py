@@ -134,8 +134,12 @@ SENSOR_WIRE_D = 1.3
 # assumed.
 LM2596_WIRE_HEIGHT = 3.8
 
-# The constants in this file that are nominal (the ones above, and the two
-# Servo 2040 wire sides below), each listed in the README's "Measure before
+# The LM2596 module's and the LSM6DSO breakout's board thickness, which their
+# screw heads sit on. Source: nominal, a standard 1.6 mm board; assumed.
+MODULE_PCB_THICKNESS = 1.6
+
+# The constants in this file that are nominal (the ones above, and the
+# Servo 2040's height and two wire sides below), each listed in the README's "Measure before
 # printing" table. Source: this file.
 # Of those, the ones the build records but does not use: the fans are held
 # by their frames, not screwed through their holes, and their leads are routed
@@ -175,6 +179,8 @@ MEASURE_BEFORE_PRINTING = (
     "SERVO_PLUG_SECTION",
     "SENSOR_WIRE_D",
     "LM2596_WIRE_HEIGHT",
+    "MODULE_PCB_THICKNESS",
+    "S2040_HEIGHT",
     "S2040_EXT_WIRE_SIDE",
     "S2040_SENSOR_WIRE_SIDE",
 )
@@ -229,7 +235,8 @@ FRAME_OPEN = FRAME_OPEN_CENTRE + FRAME_OPEN_NECK + FRAME_OPEN_FRONT_REAR + FRAME
 
 # Board outline. Source: drawing, 62.00 x 42.00.
 S2040_BOARD = (62.0, 42.0)
-# Height with its connectors. Source: Pimoroni's product page, 62 x 42 x 12 mm.
+# Height with its connectors. Source: nominal, Pimoroni's product page
+# (62 x 42 x 12 mm); the drawing does not give it.
 S2040_HEIGHT = 12.0
 # Header pitch on every header. Source: drawing, the 0.1 inch grid.
 S2040_PITCH = 2.54

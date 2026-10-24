@@ -8,6 +8,8 @@ Each distinct part is written once, in the frame top's coordinates:
 
 Files in print/ and step/ that the build did not write (a renamed or removed
 part) are deleted, so the folders hold exactly the current part set.
+The build exports into a staging folder, re-reads it there and only then
+`publish()`es it, so a failed re-read leaves print/ and step/ as they were.
 `verify_export()` re-reads what was written: one print file and one STEP
 file per distinct part and nothing else, each STEP's and print file's
 bounding box equal to the built part's, each 3MF one object of two parts,
@@ -17,6 +19,7 @@ and the deck's insert holes found again in its STEP.
 from __future__ import annotations
 
 import copy
+import os
 import re
 import uuid
 import zipfile
@@ -87,6 +90,24 @@ def export_parts(parts: list[Part], outdir: Path) -> list[Path]:
         step = outdir / STEP_DIR / f"{part.name}{STEP_SUFFIX}"
         export_step(cad_shape(part), step, timestamp=STEP_TIMESTAMP)
         written.append(step)
+    return written
+
+
+def publish(staged: list[Path], staging: Path, parts: list[Part], outdir: Path) -> list[Path]:
+    """Move verified files from `staging` into the same places under `outdir`,
+    deleting the stale ones there; return the files' new paths."""
+    for stale in sorted(existing_files(outdir) - expected_files(parts)):
+        (outdir / stale).unlink()
+    written = []
+    for path in staged:
+        target = outdir / path.relative_to(staging)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(path, target)
+        written.append(target)
+    for sub in (PRINT_DIR, STEP_DIR):
+        d = outdir / sub
+        if d.is_dir() and not any(d.iterdir()):
+            d.rmdir()
     return written
 
 

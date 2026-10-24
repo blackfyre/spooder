@@ -101,10 +101,9 @@ SPACER_Z1 = DECK_Z0 - TOUCH
 PILOT_M25_D = 2.2
 PILOT_M2_D = 1.6
 # Round a board's mounting hole its parts leave room for a screw head and a
-# screwdriver, and its board is this thick there. Source: chosen, a Ø4
-# screwdriver (the spec's "Access and service") with fit; a 1.6 mm board.
+# screwdriver; the board is M.MODULE_PCB_THICKNESS thick there. Source:
+# chosen, a Ø4 screwdriver (the spec's "Access and service") with fit.
 SCREW_CLEAR_R = 2.3
-MODULE_PCB_T = 1.6
 # Cable-tie holes: 3.4 along the tie, 2.0 across. Source: the skill (TIE_HOLE).
 TIE_L = 3.4
 TIE_W = 2.0
@@ -523,7 +522,7 @@ def lm2596() -> Held:
     """The module's envelope, clear above its mounting holes."""
     shape = box6(LM_BOX)
     for h in M.LM2596_HOLES:
-        shape = shape - cyl(SCREW_CLEAR_R, *lm(*h), LM_BOX[4] + MODULE_PCB_T, LM_BOX[5] + 1)
+        shape = shape - cyl(SCREW_CLEAR_R, *lm(*h), LM_BOX[4] + M.MODULE_PCB_THICKNESS, LM_BOX[5] + 1)
     return Held("lm2596", shape)
 
 
@@ -597,7 +596,7 @@ def imu() -> Held:
     """The breakout's envelope, clear above its mounting holes."""
     shape = box6(IMU_BOX)
     for x, y in IMU_BOSSES:
-        shape = shape - cyl(SCREW_CLEAR_R, x, y, IMU_BOX[4] + MODULE_PCB_T, IMU_BOX[5] + 1)
+        shape = shape - cyl(SCREW_CLEAR_R, x, y, IMU_BOX[4] + M.MODULE_PCB_THICKNESS, IMU_BOX[5] + 1)
     return Held(IMU, shape)
 
 
@@ -1415,10 +1414,10 @@ def screws() -> list[Screw]:
     for i, h in enumerate(M.S2040_HOLES):
         found.append(Screw(f"servo 2040 screw {i + 1}", (*s2(*h), S2_Z1 + 1.8), UP, after=("cover",)))
     for i, h in enumerate(M.LM2596_HOLES):
-        found.append(Screw(f"lm2596 screw {i + 1}", (*lm(*h), LM_BOX[4] + MODULE_PCB_T + 1.8), UP,
+        found.append(Screw(f"lm2596 screw {i + 1}", (*lm(*h), LM_BOX[4] + M.MODULE_PCB_THICKNESS + 1.8), UP,
                            after=("t-display", "t-display-holder", "cover")))
     for i, (x, y) in enumerate(IMU_BOSSES):
-        found.append(Screw(f"lsm6dso screw {i + 1}", (x, y, IMU_BOX[4] + MODULE_PCB_T + 1.2), UP,
+        found.append(Screw(f"lsm6dso screw {i + 1}", (x, y, IMU_BOX[4] + M.MODULE_PCB_THICKNESS + 1.2), UP,
                            after=(SERVO_2040, "cover")))
     for i, (x, y) in enumerate(COVER_SCREWS):
         found.append(Screw(f"cover screw {i + 1}", (x, y, LID_Z1 + BUTTON_HEAD_H), UP))

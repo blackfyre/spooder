@@ -21,6 +21,7 @@ import io
 import math
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stdout
 from dataclasses import replace
 from pathlib import Path
@@ -812,6 +813,27 @@ class Build(unittest.TestCase):
             self.assertEqual(build.main([], outdir=Path(tmp), make=lambda: bad), 1)
             self.assertEqual(list(Path(tmp).rglob("*")), [])
         self.assertIn("keep-clear", out.getvalue())
+
+    def test_a_failing_reread_publishes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp, redirect_stdout(io.StringIO()) as out:
+            root = Path(tmp)
+            (root / "print").mkdir()
+            (root / "print" / "old.stl").write_text("solid old\nendsolid old\n")
+            with mock.patch.object(build, "verify_export", return_value=["export: deck.stl is wrong"]):
+                self.assertEqual(build.main([], outdir=root, make=lambda: Assembly(parts=[deck()])), 1)
+            files = sorted(str(p.relative_to(root)) for p in root.rglob("*"))
+            self.assertEqual(files, ["print", "print/old.stl"])
+        self.assertIn("deck.stl is wrong", out.getvalue())
+
+    def test_a_passing_build_publishes_and_removes_stale_files(self):
+        with tempfile.TemporaryDirectory() as tmp, redirect_stdout(io.StringIO()):
+            root = Path(tmp)
+            (root / "print").mkdir()
+            (root / "print" / "old.stl").write_text("solid old\nendsolid old\n")
+            self.assertEqual(build.main([], outdir=root, make=lambda: Assembly(parts=[deck()])), 0)
+            files = sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
+            self.assertEqual(files, ["print/deck.stl", "step/deck.step"])
+            self.assertEqual(sorted(p.name for p in root.iterdir()), ["print", "step"])
 
     def test_check_only_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp, redirect_stdout(io.StringIO()):
