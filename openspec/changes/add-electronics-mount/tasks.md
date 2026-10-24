@@ -39,9 +39,9 @@
 
 ## 3. Deck and layout
 
-- [ ] 3.1 Lay out the held parts by their connections (design: "Layout follows the wiring"), with the deck fastened to the eight frame inserts, and the retention for each part. The LM2596 is screwed down; the XT60 holder takes the force of plugging and unplugging; the Schottky diode has a tie point on the LM2596's output route. Verify the fit, overlap and enclosure checks pass, and send a render.
-- [ ] 3.2 Add the reserved cable routes, the tie holes and the servo lead slots. Verify the route and frame-clearance checks pass.
-- [ ] 3.3 Add the sensor provisions:
+- [x] 3.1 Lay out the held parts by their connections (design: "Layout follows the wiring"), with the deck fastened to the eight frame inserts, and the retention for each part. The LM2596 is screwed down; the XT60 holder takes the force of plugging and unplugging; the Schottky diode has a tie point on the LM2596's output route. Verify the fit, overlap and enclosure checks pass, and send a render.
+- [x] 3.2 Add the reserved cable routes, the tie holes and the servo lead slots. Verify the route and frame-clearance checks pass.
+- [x] 3.3 Add the sensor provisions:
   - the IMU pad with two bosses, within 30 mm of the centre and at least 10 mm from the SZBK07's outline;
   - the 4-wire pass-through to below the frame top;
   - the 7-wire end-stop entry, routed to the sensor header from its wire side.

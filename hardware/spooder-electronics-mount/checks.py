@@ -19,7 +19,8 @@ import numpy as np
 from build123d import Compound, GeomType, Plane, Shape, Solid, Vector, Vertex
 
 import measurements as M
-from model import FANS, LM2596_OUTPUT_ROUTE, SCHOTTKY, Assembly, Box6, box, box6
+from model import (FANS, IMU, J6, LM2596_OUTPUT_ROUTE, SCHOTTKY, SENSOR_HEADER, SERVO_2040, SZBK07, Assembly, Box6,
+                   Terminal, box, box6)
 
 # Leg keep-clear radius about the body's centre. Source: design.md "Context":
 # nothing on the legs comes nearer than r 81.8 above the frame top, less a
@@ -64,6 +65,19 @@ AIR_PAST = 1.0
 VOLUME_TOL = 0.01
 # Grid step of the frame top's height map. Source: reference_check.py's GRID.
 FRAME_GRID = 0.25
+# A route reaches a terminal when it holds the space next to the terminal's
+# held part on the terminal's side: from this far off the part's outline
+# (clear of the fit gap round it), this deep. Source: chosen, beyond the
+# spooder-printed-parts skill's FIT of 0.3.
+APPROACH_OFFSET = 0.4
+APPROACH = 1.0
+# The IMU breakout lies within this of the body's centre, and this far from
+# the SZBK07's outline. Source: the spec's "Sensor provisions".
+IMU_MAX_R = 30.0
+IMU_SZBK07_GAP = 10.0
+# Clearance round each wire counted through an entry or a pass-through.
+# Source: chosen.
+WIRE_CLEARANCE = 0.2
 # Surface samples are spaced about this far apart. Source: chosen, finer than
 # the narrowest feature the checks look for (a 3 mm bridge).
 SAMPLE_STEP = 1.5
@@ -361,8 +375,11 @@ def check_routes(asm: Assembly) -> list[str]:
         if (name, held.route) != (SCHOTTKY, LM2596_OUTPUT_ROUTE):
             failures.append(f"{name}: only the {SCHOTTKY} may lie in a route, and only '{LM2596_OUTPUT_ROUTE}' "
                             f"(not '{held.route}')")
+    covers = {p.name for p in asm.parts if p.role == "cover"}
     for route in asm.routes:
         for label, shape in labelled_solids(asm):
+            if route.cover_off and label.split(" copy ")[0].removesuffix(" inlays") in covers:
+                continue
             held = inline.get(label)
             if held is not None and label == SCHOTTKY and held.route == route.name == LM2596_OUTPUT_ROUTE:
                 continue
@@ -377,6 +394,97 @@ def check_routes(asm: Assembly) -> list[str]:
             out = outside(diode.shape, routes[LM2596_OUTPUT_ROUTE].shape)
             if out > VOLUME_TOL:
                 failures.append(f"{SCHOTTKY}: {out:.2f} mm³ outside its route '{LM2596_OUTPUT_ROUTE}'")
+    route = routes.get(LM2596_OUTPUT_ROUTE)
+    if route is not None:
+        failures += sleeve_failures(route)
+    return failures
+
+
+def sleeve_failures(route) -> list[str]:
+    """The diode's route carries its sleeve along its whole length: the route
+    is made of boxes, each at least the sleeve across in every direction, and
+    the boxes join, one to the next, through openings at least the sleeve
+    across in two directions, into one run."""
+    d = M.SCHOTTKY_SLEEVE_D - 1e-6
+    if not route.boxes:
+        return [f"route '{route.name}': not made of boxes, so its width cannot be checked"]
+    failures = []
+    for b in route.boxes:
+        narrow = min(b[1] - b[0], b[3] - b[2], b[5] - b[4])
+        if narrow < d:
+            failures.append(f"route '{route.name}': box {fmt(b)} is {narrow:.1f} mm across, "
+                            f"too narrow for the diode's {M.SCHOTTKY_SLEEVE_D} mm sleeve")
+    n = len(route.boxes)
+    joined = {0}
+    frontier = [0]
+    while frontier:
+        i = frontier.pop()
+        for j in range(n):
+            if j in joined:
+                continue
+            a, b = route.boxes[i], route.boxes[j]
+            sizes = [min(a[2 * k + 1], b[2 * k + 1]) - max(a[2 * k], b[2 * k]) for k in range(3)]
+            if min(sizes) >= -1e-9 and sorted(sizes)[1] >= d:
+                joined.add(j)
+                frontier.append(j)
+    if len(joined) < n:
+        failures.append(f"route '{route.name}': its boxes do not join into one run at least the diode's "
+                        f"{M.SCHOTTKY_SLEEVE_D} mm sleeve across")
+    return failures
+
+
+def approach(end: Terminal, held_box: Box6 | None) -> Box6:
+    """The space a route must hold to reach `end`: next to the held part's
+    outline on the terminal's side, over the terminal's cross-section; or,
+    for a free-space terminal, its region."""
+    if held_box is None:
+        return end.region
+    axis = next(i for i, c in enumerate(end.side) if c)
+    sign = 1 if end.side[axis] > 0 else -1
+    face = held_box[2 * axis + 1] if sign > 0 else held_box[2 * axis]
+    lo, hi = sorted((face + sign * APPROACH_OFFSET, face + sign * (APPROACH_OFFSET + APPROACH)))
+    probe = list(end.region)
+    probe[2 * axis], probe[2 * axis + 1] = lo, hi
+    return tuple(probe)
+
+
+def bbox6(shape: Shape) -> Box6:
+    bb = shape.bounding_box()
+    return (bb.min.X, bb.max.X, bb.min.Y, bb.max.Y, bb.min.Z, bb.max.Z)
+
+
+def check_route_ends(asm: Assembly) -> list[str]:
+    """Each route is one connected run, and reaches each of its terminals
+    from the side the terminal takes its wires from: it holds the space next
+    to the terminal's part on that side (or, for a wire entry, the space
+    above it)."""
+    held = {h.name: h for h in asm.held}
+    failures = []
+    for route in asm.routes:
+        if len(route.shape.solids()) != 1:
+            failures.append(f"route '{route.name}': {len(route.shape.solids())} separate pieces, not one run")
+        for end in route.ends:
+            if sum(1 for c in end.side if c) != 1 or sum(abs(c) for c in end.side) != 1:
+                failures.append(f"route '{route.name}': {end.name}'s side {end.side} is not an axis direction")
+                continue
+            box_ = None
+            if end.held is not None:
+                part = held.get(end.held)
+                if part is None:
+                    failures.append(f"route '{route.name}': no held part '{end.held}' for {end.name}")
+                    continue
+                box_ = bbox6(part.shape)
+                inside = all(box_[2 * i] - 1e-3 <= end.region[2 * i] <= end.region[2 * i + 1] <= box_[2 * i + 1] + 1e-3
+                             for i in range(3))
+                if not inside:
+                    failures.append(f"route '{route.name}': {end.name} {fmt(end.region)} is not on {end.held}")
+                    continue
+            probe = approach(end, box_)
+            out = outside(box6(probe), route.shape)
+            if out > VOLUME_TOL:
+                where = "".join(f"{'+-'[c < 0]}{'xyz'[i]}" for i, c in enumerate(end.side) if c)
+                failures.append(f"route '{route.name}' does not reach {end.name} from {where} "
+                                f"({out:.2f} mm³ of {fmt(probe)} outside it)")
     return failures
 
 
@@ -545,7 +653,106 @@ def check_air_channel(asm: Assembly) -> list[str]:
     return failures
 
 
+def rect_gap(a: Box6, b: Box6) -> float:
+    """The distance between two boxes' footprints (0 when they overlap)."""
+    dx = max(a[0] - b[1], b[0] - a[1], 0.0)
+    dy = max(a[2] - b[3], b[2] - a[3], 0.0)
+    return math.hypot(dx, dy)
+
+
+def wires_through(footprint, wires: int) -> bool:
+    """Whether `wires` wires of SENSOR_WIRE_D, each with WIRE_CLEARANCE round
+    it, pass side by side through a rectangular footprint."""
+    d = M.SENSOR_WIRE_D + 2 * WIRE_CLEARANCE
+    w, l = sorted((footprint[1] - footprint[0], footprint[3] - footprint[2]))
+    return math.floor(w / d + 1e-9) * math.floor(l / d + 1e-9) >= wires
+
+
+def route_between(asm: Assembly, a, b) -> bool:
+    """Whether one route ends at a terminal matching a and at one matching b
+    (each a predicate on a Terminal)."""
+    return any(any(a(e) for e in r.ends) and any(b(e) for e in r.ends) for r in asm.routes)
+
+
+def check_sensors(asm: Assembly, frame: FrameMap | None = None) -> list[str]:
+    """The sensor provisions: the IMU breakout near the centre, clear of the
+    SZBK07 and of every other held part, on a pad with two bosses, with a
+    route to J6; each pass-through over open frame, taking its wires; each
+    wire entry taking its wires, with a route from it to the Servo 2040's
+    sensor header."""
+    failures = []
+    held = {h.name: h for h in asm.held}
+    imu = held.get(IMU)
+    if imu is not None or asm.imu_pad is not None:
+        if imu is None:
+            failures.append(f"IMU pad: no held part '{IMU}' on it")
+        elif asm.imu_pad is None:
+            failures.append(f"{IMU}: no pad")
+        else:
+            failures += imu_failures(asm, imu)
+    for o in asm.openings:
+        if o.kind not in ("entry", "pass-through"):
+            continue
+        if not wires_through(o.footprint, o.wires):
+            failures.append(f"{o.name}: does not take {o.wires} wires of {M.SENSOR_WIRE_D} mm")
+        if o.kind == "pass-through":
+            frame = frame or FrameMap()
+            top = frame.highest(*o.footprint)
+            if top is not None:
+                failures.append(f"{o.name}: the frame is not open under it (it rises to z {top:.2f})")
+        elif not route_between(asm, lambda e, o=o: e.held is None and inside_footprint(e.region, o.footprint),
+                               lambda e: e.held == SERVO_2040 and e.name == SENSOR_HEADER):
+            failures.append(f"{o.name}: no route from it to the {SERVO_2040}'s {SENSOR_HEADER}")
+    return failures
+
+
+def inside_footprint(region: Box6, footprint) -> bool:
+    return (footprint[0] - 1e-3 <= region[0] and region[1] <= footprint[1] + 1e-3
+            and footprint[2] - 1e-3 <= region[2] and region[3] <= footprint[3] + 1e-3)
+
+
+def imu_failures(asm: Assembly, imu) -> list[str]:
+    failures = []
+    pad = asm.imu_pad
+    b = bbox6(imu.shape)
+    far = max(math.hypot(x, y) for x in b[:2] for y in b[2:4])
+    if far > IMU_MAX_R + 1e-6:
+        failures.append(f"{IMU}: reaches {far:.1f} mm from the centre (at most {IMU_MAX_R})")
+    szbk07 = next((h for h in asm.held if h.name == SZBK07), None)
+    if szbk07 is None:
+        failures.append(f"{IMU}: no held part '{SZBK07}' to keep clear of")
+    else:
+        gap = rect_gap(b, bbox6(szbk07.shape))
+        if gap < IMU_SZBK07_GAP - 1e-6:
+            failures.append(f"{IMU}: {gap:.1f} mm from the {SZBK07}'s outline (at least {IMU_SZBK07_GAP})")
+    for other in asm.held:
+        if other is not imu and common(imu.shape, other.shape) > VOLUME_TOL:
+            failures.append(f"{IMU}: overlaps {other.name}")
+    part = next((p for p in asm.parts if p.name == pad.part), None)
+    if part is None:
+        failures.append(f"IMU pad: no part '{pad.part}'")
+        return failures
+    if len(pad.bosses) != 2:
+        failures.append(f"IMU pad: {len(pad.bosses)} bosses, not two")
+    if not b[4] - 0.2 <= pad.top <= b[4] + 1e-6:
+        failures.append(f"IMU pad: its bosses' top at z {pad.top} does not carry the {IMU} at z {b[4]:.2f}")
+    for x, y in pad.bosses:
+        if not (b[0] <= x <= b[1] and b[2] <= y <= b[3]):
+            failures.append(f"IMU pad: boss at ({x}, {y}) is not under the {IMU}")
+        ring = cylinder(pad.radius - 0.05, (x, y, pad.top - 1), (0, 0, 1), 1) - cylinder(
+            pad.pilot_r + 0.05, (x, y, pad.top - 2), (0, 0, 1), 3)
+        if common(part.shape, ring) < 0.5 * volume(ring):
+            failures.append(f"IMU pad: no boss at ({x}, {y})")
+        if common(part.shape, cylinder(pad.pilot_r - 0.05, (x, y, pad.top - 2), (0, 0, 1), 2.5)) > VOLUME_TOL:
+            failures.append(f"IMU pad: no pilot hole in the boss at ({x}, {y})")
+    if not route_between(asm, lambda e: e.held == IMU, lambda e: e.held == SERVO_2040 and e.name == J6):
+        failures.append(f"{IMU}: no route to the {SERVO_2040}'s J6")
+    return failures
+
+
 def run_checks(asm: Assembly, frame: FrameMap | None = None) -> list[str]:
+    if frame is None and asm.openings:
+        frame = FrameMap()
     failures = []
     failures += check_single_solid(asm)
     failures += check_fit(asm)
@@ -553,7 +760,9 @@ def run_checks(asm: Assembly, frame: FrameMap | None = None) -> list[str]:
     failures += check_overlaps(asm)
     failures += check_enclosure(asm)
     failures += check_routes(asm)
+    failures += check_route_ends(asm)
     failures += check_frame_clearance(asm, frame)
+    failures += check_sensors(asm, frame)
     failures += check_overhangs(asm)
     failures += check_screwdriver_paths(asm)
     failures += check_air_channel(asm)

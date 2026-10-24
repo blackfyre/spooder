@@ -208,6 +208,8 @@ def check_t_display() -> None:
         span = (min(b.min.X for b in inrow), max(b.max.X for b in inrow), min(b.min.Y for b in inrow), max(b.max.Y for b in inrow))
         expect(all(close(p, q, 0.02) for p, q in zip(span, row)), f"TD_HEADER_ROWS {row} (found {tuple(round(v, 2) for v in span)})")
     expect(all(any(overlaps(rect(b), r) for r in M.TD_HEADER_ROWS) for b in pins), "every pin lies in a TD_HEADER_ROWS strip")
+    depth = -min(b.min.Z for b in pins)
+    expect(close(depth, M.TD_HEADER_PIN_DEPTH, 0.05), f"TD_HEADER_PIN_DEPTH {M.TD_HEADER_PIN_DEPTH} (found {depth:.2f})")
 
     expect(len(M.TD_BARE) > 0, "TD_BARE names bare spots")
     for bare in M.TD_BARE:

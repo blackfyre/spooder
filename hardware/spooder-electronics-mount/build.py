@@ -16,8 +16,8 @@
     uv run --locked --quiet --script hardware/spooder-electronics-mount/build.py --test   # the unit tests
 
 `mise run cad` runs all of them. Its dependencies are locked in build.py.lock
-(`uv lock --script`). The sizes come from measurements.py, the checks from
-checks.py and the export from export.py. When any check fails, the build
+(`uv lock --script`). The sizes come from measurements.py, the layout from
+layout.py, the checks from checks.py and the export from export.py. When any check fails, the build
 names every failure and writes nothing; when all pass, it writes each
 distinct part once (export.py) and re-reads the files to confirm them.
 """
@@ -35,13 +35,14 @@ sys.path.insert(0, str(HERE))
 
 from checks import run_checks  # noqa: E402
 from export import export_parts, verify_export  # noqa: E402
+from layout import assembly  # noqa: E402
 from model import Assembly  # noqa: E402
 
 
 def build() -> Assembly:
-    """The part set, in the frame top's coordinates. Empty until the deck
-    and the held parts are laid out (task group 3 of add-electronics-mount)."""
-    return Assembly()
+    """The part set, in the frame top's coordinates: the deck, its spacers,
+    the held parts, routes and openings (layout.py)."""
+    return assembly()
 
 
 def run_tests() -> int:

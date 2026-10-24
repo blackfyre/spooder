@@ -1,4 +1,5 @@
-"""Tests of the mount's checks, the build and the export (tasks 2.1 to 2.3).
+"""Tests of the mount's checks, the build, the export and the layout (tasks
+2.1 to 3.3).
 
     uv run --locked --quiet --script hardware/spooder-electronics-mount/build.py --test
 
@@ -6,7 +7,10 @@ Each check is shown to fail on a deliberately bad shape and to pass on a good
 one. The export is tested on a small fixture set (a deck on the eight
 inserts, a bumper with copies, a cover with inlays): one print file and one
 STEP file per distinct part, each STEP re-read with the built part's bounding
-box, and the deck's holes found again on the insert positions.
+box, and the deck's holes found again on the insert positions. The layout
+(layout.py) is tested as built: every check passes on it, and what the checks
+leave to the layout holds (the cover's interior, the battery plug inside the
+legs' region, the spacers on the floor, the XT60's back stops).
 """
 
 from __future__ import annotations
@@ -24,8 +28,9 @@ import build
 import checks as C
 import measurements as M
 from export import export_parts, verify_export
-from model import (LM2596_OUTPUT_ROUTE, SCHOTTKY, AirChannel, Assembly, Exposure, Held, Opening, Part, Route, Screw,
-                   box, teardrop)
+import layout as L
+from model import (IMU, LM2596_OUTPUT_ROUTE, SCHOTTKY, SERVO_2040, SZBK07, AirChannel, Assembly, Exposure, Held, ImuPad,
+                   Opening, Part, Route, Screw, Terminal, box, teardrop)
 
 UP = (0.0, 0.0, 1.0)
 DOWN = (0.0, 0.0, -1.0)
@@ -197,7 +202,7 @@ class Enclosure(unittest.TestCase):
 
 
 class Routes(unittest.TestCase):
-    ROUTE = Route(LM2596_OUTPUT_ROUTE, box(0, 40, -4, 4, 30, 38))
+    ROUTE = Route.of(LM2596_OUTPUT_ROUTE, [(0, 40, -4, 4, 30, 38)])
     OTHER = Route("link", box(30, 34, -10, 10, 30, 38))
     SENSOR = Route("sensor", box(0, 40, 10, 20, 30, 38))
 
@@ -412,7 +417,7 @@ class AirChannelCheck(unittest.TestCase):
 class Build(unittest.TestCase):
     def test_the_empty_part_set_passes_and_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp, redirect_stdout(io.StringIO()):
-            self.assertEqual(build.main([], outdir=Path(tmp)), 0)
+            self.assertEqual(build.main([], outdir=Path(tmp), make=Assembly), 0)
             self.assertEqual(list(Path(tmp).iterdir()), [])
 
     def test_a_failing_check_writes_nothing(self):
@@ -480,6 +485,259 @@ class Export(unittest.TestCase):
             export_parts(parts, out)
             f = verify_export(parts, out)
             self.assertTrue(fails(f, "deck.step", "no clear M3 hole"), f)
+
+
+class RouteEnds(unittest.TestCase):
+    BOARD = Held("board", box(0, 20, 0, 20, 30, 32))
+    EXT = Terminal("ext", "board", (17, 20, 8, 12, 30, 32), (1.0, 0.0, 0.0))
+
+    def asm(self, route_box, end=EXT) -> Assembly:
+        return Assembly(held=[self.BOARD], routes=[Route.of("ext run", [route_box], ends=(end,))])
+
+    def test_a_route_from_the_wire_side_passes(self):
+        self.assertEqual(C.check_route_ends(self.asm((20.05, 30, 6, 14, 29, 34))), [])
+
+    def test_a_route_that_stops_short_fails(self):
+        f = C.check_route_ends(self.asm((22, 30, 6, 14, 29, 34)))
+        self.assertTrue(fails(f, "ext run", "does not reach ext from +x"), f)
+
+    def test_a_route_from_another_side_fails(self):
+        f = C.check_route_ends(self.asm((0, 20, 20.05, 30, 29, 34)))
+        self.assertTrue(fails(f, "does not reach ext from +x"), f)
+
+    def test_a_route_beside_the_terminal_fails(self):
+        f = C.check_route_ends(self.asm((20.05, 30, 13, 20, 29, 34)))
+        self.assertTrue(fails(f, "does not reach ext"), f)
+
+    def test_a_terminal_off_its_part_or_on_no_part_fails(self):
+        off = Terminal("ext", "board", (21, 24, 8, 12, 30, 32), (1.0, 0.0, 0.0))
+        self.assertTrue(fails(C.check_route_ends(self.asm((20.05, 30, 6, 14, 29, 34), off)), "is not on board"))
+        missing = Terminal("ext", "nothing", (17, 20, 8, 12, 30, 32), (1.0, 0.0, 0.0))
+        self.assertTrue(fails(C.check_route_ends(self.asm((20.05, 30, 6, 14, 29, 34), missing)), "no held part"))
+
+    def test_a_side_off_the_axes_fails(self):
+        bad = Terminal("ext", "board", (17, 20, 8, 12, 30, 32), (0.7, 0.7, 0.0))
+        self.assertTrue(fails(C.check_route_ends(self.asm((20.05, 30, 6, 14, 29, 34), bad)), "not an axis"))
+
+    def test_a_route_in_separate_pieces_fails(self):
+        entry = Terminal("entry", None, (25, 27, 8, 12, 29, 30), (0.0, 0.0, -1.0))
+        apart = Route.of("ext run", [(20.05, 23, 6, 14, 29, 34), (24, 30, 6, 14, 29, 34)], ends=(self.EXT, entry))
+        f = C.check_route_ends(Assembly(held=[self.BOARD], routes=[apart]))
+        self.assertTrue(fails(f, "2 separate pieces"), f)
+
+    def test_a_free_space_end_must_lie_in_the_route(self):
+        entry = Terminal("entry", None, (25, 27, 8, 12, 29, 30), (0.0, 0.0, -1.0))
+        self.assertEqual(C.check_route_ends(self.asm((20.05, 30, 6, 14, 29, 34), entry)), [])
+        self.assertTrue(fails(C.check_route_ends(self.asm((20.05, 26, 6, 14, 29, 34), entry)), "does not reach entry"))
+
+
+class DiodeRouteWidth(unittest.TestCase):
+    def test_a_box_narrower_than_the_sleeve_fails(self):
+        diode = Held(SCHOTTKY, box(5, 25, -3, 3, 31, 37), route=LM2596_OUTPUT_ROUTE)
+        wide = Route.of(LM2596_OUTPUT_ROUTE, [(0, 40, -4, 4, 30, 38)])
+        self.assertEqual(C.check_routes(Assembly(held=[diode], routes=[wide])), [])
+        narrow = Route.of(LM2596_OUTPUT_ROUTE, [(0, 40, -4, 4, 30, 38), (40, 60, -2, 2, 30, 38)])
+        f = C.check_routes(Assembly(held=[diode], routes=[narrow]))
+        self.assertTrue(fails(f, "too narrow for the diode"), f)
+
+    def test_a_junction_narrower_than_the_sleeve_fails(self):
+        diode = Held(SCHOTTKY, box(5, 25, -3, 3, 31, 37), route=LM2596_OUTPUT_ROUTE)
+        turn = Route.of(LM2596_OUTPUT_ROUTE, [(0, 30, -3, 3, 30, 37), (24, 30, -3, 40, 30, 37)])
+        self.assertEqual(C.check_routes(Assembly(held=[diode], routes=[turn])), [])
+        pinched = Route.of(LM2596_OUTPUT_ROUTE, [(0, 30, -3, 3, 30, 37), (29, 35, 2.5, 40, 36, 43)])
+        f = C.check_routes(Assembly(held=[diode], routes=[pinched]))
+        self.assertTrue(fails(f, "do not join into one run"), f)
+
+    def test_a_route_not_made_of_boxes_fails(self):
+        diode = Held(SCHOTTKY, box(5, 25, -3, 3, 31, 37), route=LM2596_OUTPUT_ROUTE)
+        shape_only = Route(LM2596_OUTPUT_ROUTE, box(0, 40, -4, 4, 30, 38))
+        f = C.check_routes(Assembly(held=[diode], routes=[shape_only]))
+        self.assertTrue(fails(f, "not made of boxes"), f)
+
+
+class CoverOffRoutes(unittest.TestCase):
+    def test_the_cover_may_cross_a_cover_off_route_but_nothing_else(self):
+        usb = Route.of("usb-c cable", [(-30, -15, -2, 2, 35, 40)], cover_off=True)
+        asm = Assembly(parts=[cover()], routes=[usb])
+        self.assertEqual(C.check_routes(asm), [])
+        asm.parts.append(block(-17, -16, -1, 1, 36, 38))
+        self.assertTrue(fails(C.check_routes(asm), "block enters the route 'usb-c cable'"))
+        asm.routes[0] = Route.of("usb-c cable", [(-30, -15, -2, 2, 35, 40)])
+        self.assertTrue(fails(C.check_routes(asm), "cover enters"))
+
+
+class Sensors(unittest.TestCase):
+    """The IMU pad, the pass-through and the end-stop entry on a small set:
+    a deck with two bosses, the IMU on them, an SZBK07 and a board."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.frame = C.FrameMap()
+
+    def asm(self, imu_at=(-10.0, 10.0, 9.0, 24.0), szbk07_y1=-1.5, bosses=((-7.5, 16.5), (7.5, 16.5)),
+            pilot=True, route=True, openings=()) -> Assembly:
+        x0, x1, y0, y1 = imu_at
+        shape = box(-24, 24, -60, 60, Z0, Z0 + 3)
+        for bx, by in bosses:
+            shape = shape + C.cylinder(2.5, (bx, by, Z0 + 2.5), (0, 0, 1), 3.5)
+            if pilot:
+                shape = shape - C.cylinder(0.8, (bx, by, Z0 + 1), (0, 0, 1), 6)
+        top = Z0 + 6
+        board = Held(SERVO_2040, box(-20, 20, 6, 40, 40, 42))
+        held = [Held(IMU, box(x0, x1, y0, y1, top + 0.05, top + 3)), Held(SZBK07, box(-20, 20, -40, szbk07_y1, 30, 50)),
+                board]
+        j6 = Terminal("j6", SERVO_2040, (-10, 10, 6, 8, 40, 42), (0.0, -1.0, 0.0))
+        imu_end = Terminal("imu wires", IMU, (x0, x1, y0, y0 + 2, top + 0.05, top + 3), (0.0, -1.0, 0.0))
+        routes = [Route.of("imu to j6", [(x0, x1, 0, y0, top, top + 4), (-10, 10, 0, 5.9, top, 44)],
+                           ends=(imu_end, j6))] if route else []
+        return Assembly(parts=[Part("deck", shape, "deck", UP, "black")], held=held, routes=routes,
+                        openings=list(openings), imu_pad=ImuPad("deck", bosses, top, 2.5, 0.8))
+
+    def test_the_pad_passes(self):
+        self.assertEqual(C.check_sensors(self.asm(), self.frame), [])
+
+    def test_too_far_from_the_centre_fails(self):
+        f = C.check_sensors(self.asm(imu_at=(-10.0, 10.0, 16.0, 31.0), bosses=((-7.5, 23.5), (7.5, 23.5))), self.frame)
+        self.assertTrue(fails(f, "from the centre"), f)
+
+    def test_too_near_the_szbk07_fails(self):
+        f = C.check_sensors(self.asm(szbk07_y1=0.0), self.frame)
+        self.assertTrue(fails(f, "from the szbk07's outline"), f)
+
+    def test_overlapping_a_held_part_fails(self):
+        asm = self.asm()
+        asm.held.append(Held("fuse holder", box(5, 15, 20, 30, 30, 40)))
+        self.assertTrue(fails(C.check_sensors(asm, self.frame), "lsm6dso: overlaps fuse holder"))
+
+    def test_a_missing_boss_or_pilot_fails(self):
+        asm = self.asm(bosses=((-7.5, 16.5),))
+        self.assertTrue(fails(C.check_sensors(asm, self.frame), "1 bosses, not two"))
+        asm.imu_pad.bosses = ((-7.5, 16.5), (7.5, 16.5))
+        self.assertTrue(fails(C.check_sensors(asm, self.frame), "no boss at (7.5, 16.5)"))
+        self.assertTrue(fails(C.check_sensors(self.asm(pilot=False), self.frame), "no pilot hole"))
+
+    def test_a_boss_top_that_does_not_carry_it_fails(self):
+        asm = self.asm()
+        asm.imu_pad.top -= 1.0
+        self.assertTrue(fails(C.check_sensors(asm, self.frame), "does not carry"))
+
+    def test_no_route_to_j6_fails(self):
+        self.assertTrue(fails(C.check_sensors(self.asm(route=False), self.frame), "no route to the servo 2040's J6"))
+
+    def test_an_imu_without_a_pad_or_a_pad_without_an_imu_fails(self):
+        asm = self.asm()
+        asm.imu_pad = None
+        self.assertTrue(fails(C.check_sensors(asm, self.frame), "no pad"))
+        asm = self.asm()
+        asm.held = [h for h in asm.held if h.name != IMU]
+        self.assertTrue(fails(C.check_sensors(asm, self.frame), "no held part 'lsm6dso'"))
+
+    def test_a_pass_through_over_open_frame_passes_and_over_the_floor_fails(self):
+        open_ = Opening("pass-through", "deck", (-5.0, -1.0, 1.0, 5.0), Z0, Z0 + 3, kind="pass-through", wires=4)
+        self.assertEqual(C.check_sensors(self.asm(openings=[open_]), self.frame), [])
+        x, y = M.FRAME_FLOOR_INSERTS[0]
+        floor = Opening("pass-through", "deck", (x + 3, x + 7, y - 2, y + 2), Z0, Z0 + 3, kind="pass-through", wires=4)
+        self.assertTrue(fails(C.check_sensors(self.asm(openings=[floor]), self.frame), "frame is not open"))
+
+    def test_an_opening_too_small_for_its_wires_fails(self):
+        small = Opening("pass-through", "deck", (-5.0, -3.5, 1.0, 5.0), Z0, Z0 + 3, kind="pass-through", wires=4)
+        self.assertTrue(fails(C.check_sensors(self.asm(openings=[small]), self.frame), "does not take 4 wires"))
+
+    def test_an_entry_needs_a_route_to_the_board(self):
+        entry = Opening("end-stop entry", "deck", (22.0, 26.0, 10.0, 20.0), Z0, Z0 + 3, kind="entry", wires=7)
+        asm = self.asm(openings=[entry])
+        self.assertTrue(fails(C.check_sensors(asm, self.frame), "end-stop entry: no route"))
+        header = Terminal("sensor header", SERVO_2040, (17, 20, 10, 20, 40, 42), (1.0, 0.0, 0.0))
+        asm.routes.append(Route.of("end-stop wires", [(20.05, 26, 9, 21, Z0 + 3, 44)],
+                                   ends=(Terminal("entry", None, (22, 26, 10, 20, Z0 + 3, Z0 + 4), (0, 0, -1)), header)))
+        self.assertEqual(C.check_sensors(asm, self.frame), [])
+        asm.routes[-1].ends = (asm.routes[-1].ends[0], Terminal("ext", SERVO_2040, header.region, header.side))
+        self.assertTrue(fails(C.check_sensors(asm, self.frame), "no route from it to the servo 2040's sensor header"))
+        self.assertTrue(fails(C.check_sensors(self.asm(openings=[Opening(
+            "end-stop entry", "deck", (22.0, 23.5, 10.0, 20.0), Z0, Z0 + 3, kind="entry", wires=7)]), self.frame),
+            "does not take 7 wires"))
+
+
+class Layout(unittest.TestCase):
+    """The layout as built."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.asm = L.assembly()
+
+    def test_every_check_passes(self):
+        self.assertEqual(C.run_checks(self.asm), [])
+
+    def test_the_part_set(self):
+        self.assertEqual(sorted(p.name for p in self.asm.parts), ["deck", "spacer"])
+        self.assertEqual(sorted(h.name for h in self.asm.held),
+                         sorted(["szbk07", "servo 2040", "lm2596", "t-display", "lsm6dso", "xt60", "fuse holder",
+                                 SCHOTTKY]))
+        self.assertEqual(len(self.asm.parts[1].instances()), 4, "a spacer at each floor insert")
+
+    def test_held_parts_and_routes_lie_inside_the_cover(self):
+        for h in self.asm.held:
+            self.assertTrue(L.interior_ok(C.bbox6(h.shape)), h.name)
+        for r in self.asm.routes:
+            if r.cover_off or r.name == "battery plug":
+                continue
+            for b in r.boxes:
+                self.assertTrue(L.interior_ok(b), f"{r.name} {b}")
+
+    def test_the_battery_plug_stays_inside_the_legs_region(self):
+        plug = next(r for r in self.asm.routes if r.name == "battery plug")
+        far = max(math.hypot(x, y) for b in plug.boxes for x in b[:2] for y in b[2:4])
+        self.assertLessEqual(far, C.KEEP_CLEAR_R)
+
+    def test_the_spacers_stand_on_the_floor(self):
+        frame = C.FrameMap()
+        for x, y in M.FRAME_FLOOR_INSERTS:
+            r = L.SPACER_OD / 2
+            for dx, dy in ((r - 0.5, 0), (-r + 0.5, 0), (0, r - 0.5), (0, -r + 0.5)):
+                top = frame.highest(x + dx - 0.2, x + dx + 0.2, y + dy - 0.2, y + dy + 0.2)
+                self.assertIn(top, (None, M.FRAME_FLOOR_Z), f"spacer at ({x}, {y}) over z {top}")
+
+    def test_every_route_reaches_its_ends_and_the_sensors_are_provided(self):
+        self.assertEqual(C.check_route_ends(self.asm), [])
+        self.assertEqual(C.check_sensors(self.asm), [])
+        kinds = sorted((o.kind, o.wires) for o in self.asm.openings if o.kind in ("entry", "pass-through"))
+        self.assertEqual(kinds, [("entry", 7), ("pass-through", 4)])
+        self.assertTrue(any(e.name == "sensor header" for r in self.asm.routes for e in r.ends))
+
+    def test_the_board_s_wire_sides_follow_the_measurements(self):
+        # A wire side measured differently on the board turns its terminal,
+        # and the route laid for the old side no longer reaches it.
+        held = [L.servo2040(), L.szbk07()]
+        for name, side in (("S2040_EXT_WIRE_SIDE", "-y"), ("S2040_SENSOR_WIRE_SIDE", "+y")):
+            old = getattr(M, name)
+            try:
+                setattr(M, name, side)
+                t = L.s2_terminals()
+                runs = [r for r in L.routes(t) if r.name in ("szbk07 output to ext", "end-stop wires")]
+                f = C.check_route_ends(Assembly(held=held, routes=runs))
+                self.assertTrue(fails(f, "does not reach", f"from {side}"), f"{name}: {f}")
+            finally:
+                setattr(M, name, old)
+
+    def test_the_lm2596_is_screwed_down_and_the_diode_tied_in_its_route(self):
+        screws = [s for s in self.asm.screws if s.name.startswith("lm2596 screw")]
+        self.assertEqual(len(screws), len(M.LM2596_HOLES))
+        diode = next(h for h in self.asm.held if h.name == SCHOTTKY)
+        bb = C.bbox6(diode.shape)
+        ties = [o for o in self.asm.openings if o.name.startswith("diode tie")]
+        self.assertEqual(len(ties), 2)
+        for o in ties:
+            self.assertTrue(bb[0] <= o.footprint[0] and o.footprint[1] <= bb[1], "under the diode's length")
+
+    def test_the_xt60_is_held_against_plugging_and_unplugging(self):
+        # Pushed in (+x), its body meets the cradle's back stops; pulled out,
+        # a tie over it through the deck holds it.
+        xt = next(h for h in self.asm.held if h.name == "xt60")
+        deck = self.asm.parts[0].shape
+        push = box(L.XT_BODY[1], L.XT_BODY[1] + 1.0, *L.XT_BODY[2:])
+        self.assertGreater(C.common(deck, push), 1.0, "a back stop behind the body")
+        self.assertLess(C.common(deck, xt.shape), C.VOLUME_TOL)
+        self.assertEqual(len([o for o in self.asm.openings if o.name.startswith("xt60 tie")]), 2)
 
 
 if __name__ == "__main__":

@@ -81,6 +81,52 @@ SCHOTTKY_SLEEVE_LENGTH = 20.0  # Source: nominal, assumed (body plus 7.4 mm each
 # bend; assumed until measured.
 SERVO_PLUG_HEIGHT = 20.0
 
+# Added with the layout (task 3.1), nominal like the ones above.
+# The SZBK07's screw terminals span this much of the middle of each short end,
+# so a route reserves that span and the stops hold its corners. Source:
+# nominal, reseller photos (a 4-way block about 25 mm long); assumed.
+SZBK07_TERMINAL_SPAN = 30.0
+
+# XT60 socket housing: length along the mating axis, width, height. Source:
+# nominal, the Amass XT60 outline (about 16 x 15.5 x 8.2 mm); assumed until
+# measured.
+XT60_SIZE = (16.0, 15.5, 8.2)
+# Its solder cups behind the housing, and the cups' width and height.
+# Source: nominal, assumed.
+XT60_CUP_LENGTH = 7.0
+XT60_CUP_SECTION = (10.0, 6.0)  # Source: nominal, assumed (two cups side by side).
+# The battery's plug mated in the socket, with its solder joints, beyond the
+# socket's mating face. Source: nominal, assumed (an XT60 plug's housing less
+# its overlap with the socket, plus its joints).
+XT60_PLUG_LENGTH = 20.0
+
+# The inline fuse holder (a blade-fuse holder on its leads): length between
+# its lead exits, width, height. Source: nominal, assumed for an inline ATO
+# holder.
+FUSE_HOLDER_SIZE = (35.0, 14.0, 10.0)
+
+# Servo 2040 board thickness, and how far its through-hole leads stand below
+# its underside. Source: nominal, a standard 1.6 mm board; the leads assumed.
+S2040_PCB_THICKNESS = 1.6
+S2040_UNDERSIDE_LEADS = 2.0  # Source: nominal, assumed.
+
+# A USB-C cable's plug, its overmould: width, height and length out of the
+# receptacle. Source: nominal, a common cable (about 12 x 6.5 x 30 mm); assumed.
+USB_C_PLUG = (12.5, 7.0, 30.0)
+
+# The LSM6DSO breakout's height on its bosses: its board and parts. Source:
+# nominal, a 1.6 mm board with the chip and passives; assumed.
+LSM6DSO_HEIGHT = 3.0
+
+# A servo plug's section, which must pass through a lead slot when the leads
+# are threaded up from below. Source: nominal, a 3-way 2.54 mm servo plug
+# (about 8 x 4.5 mm with its key); assumed.
+SERVO_PLUG_SECTION = (8.0, 4.5)
+
+# An end-stop or sensor wire's outside diameter. Source: nominal, 26 AWG
+# hook-up wire with its insulation; assumed.
+SENSOR_WIRE_D = 1.3
+
 # The constants in this file that are nominal (the ones above, and the two
 # Servo 2040 wire sides below), each listed in the README's "Measure before
 # printing" table. Source: this file.
@@ -103,6 +149,18 @@ MEASURE_BEFORE_PRINTING = (
     "SCHOTTKY_SLEEVE_D",
     "SCHOTTKY_SLEEVE_LENGTH",
     "SERVO_PLUG_HEIGHT",
+    "SZBK07_TERMINAL_SPAN",
+    "XT60_SIZE",
+    "XT60_CUP_LENGTH",
+    "XT60_CUP_SECTION",
+    "XT60_PLUG_LENGTH",
+    "FUSE_HOLDER_SIZE",
+    "S2040_PCB_THICKNESS",
+    "S2040_UNDERSIDE_LEADS",
+    "USB_C_PLUG",
+    "LSM6DSO_HEIGHT",
+    "SERVO_PLUG_SECTION",
+    "SENSOR_WIRE_D",
     "S2040_EXT_WIRE_SIDE",
     "S2040_SENSOR_WIRE_SIDE",
 )
@@ -241,6 +299,9 @@ TD_UNDERSIDE_TALLEST = 3.4
 # The model's pins and spacers stand out of the -z face to z -8.5; the mount
 # keeps both faces clear along these strips. Source: T-Display.step.
 TD_HEADER_ROWS = ((-25.17, -22.63, 14.83, 45.31), (-2.26, 0.28, 14.83, 45.31))
+# How far the pins and spacers stand out on the -z face, from the PCB's +z
+# face (the model's z 0). Source: T-Display.step, the pins' lowest z.
+TD_HEADER_PIN_DEPTH = 8.5
 # Bare spots on the +z face, (x0, x1, y0, y1): no part and no header row in
 # them, on a 0.5 mm grid rounded outwards round every part, so a holder can
 # bear on them. Source: T-Display.step (reference_check.py re-checks them).

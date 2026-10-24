@@ -9,9 +9,10 @@ position. An `Assembly` is what `build.py` generates and what the checks in
   and any further copies (the bumpers) and second-colour inlays (the cover);
 - `Held`: a bought part's outline (boards, converters, fans, the diode),
   reduced to simple solids for the checks;
-- `Route`: a reserved cable route, which no part may enter;
-- `Opening`: a tie hole, slot or pass-through in the deck, which must open
-  onto free space on the frame top below it;
+- `Route`: a reserved cable route, which no part may enter, and the
+  `Terminal`s it ends at, each reached from the side it takes its wires from;
+- `Opening`: a tie hole, slot, wire entry or pass-through in the deck, which
+  must open onto free space on the frame top below it;
 - `Screw`: a screw's head and the outward direction a screwdriver comes from;
 - `AirChannel`: the passive air path from the inlet past the SZBK07 to the
   outlet.
@@ -36,6 +37,19 @@ LM2596_OUTPUT_ROUTE = "lm2596 output"
 # The fans, held parts that the passive air channel is checked without.
 # Source: the spec's "Cooling" (scenario "No fans fitted").
 FANS = ("exhaust fan", "intake fan")
+# Held parts the sensor provisions are checked against: the IMU breakout must
+# lie near the centre and clear of the SZBK07. Source: the spec's "Sensor
+# provisions".
+SZBK07 = "szbk07"
+IMU = "lsm6dso"
+SERVO_2040 = "servo 2040"
+# The Servo 2040's terminals that the sensor provisions' routes must reach.
+# Source: the spec's "Sensor provisions".
+J6 = "j6"
+SENSOR_HEADER = "sensor header"
+# Wire sides as measurements.py writes them, as unit axis directions.
+SIDES = {"+x": (1.0, 0.0, 0.0), "-x": (-1.0, 0.0, 0.0), "+y": (0.0, 1.0, 0.0), "-y": (0.0, -1.0, 0.0),
+         "+z": (0.0, 0.0, 1.0), "-z": (0.0, 0.0, -1.0)}
 Box6 = tuple[float, float, float, float, float, float]
 
 
@@ -116,24 +130,57 @@ class Held:
 
 
 @dataclass
+class Terminal:
+    """Where a route ends: a region (a box) of the held part `held`, and the
+    unit axis direction `side` its wires leave it along. With `held` None the
+    region is free space the route must contain itself (the space just above
+    a wire entry in the deck)."""
+
+    name: str
+    held: str | None
+    region: Box6
+    side: Vec3
+
+
+@dataclass
 class Route:
     """A reserved cable route: one or more solids no part may enter. Routes
-    may overlap each other."""
+    may overlap each other. `boxes` are the boxes the shape was made from,
+    when it was made from boxes (`Route.of`); `ends` are the terminals it
+    must reach; with `cover_off` it is kept clear of every part but the
+    cover."""
 
     name: str
     shape: Shape
+    ends: tuple[Terminal, ...] = ()
+    boxes: tuple[Box6, ...] = ()
+    cover_off: bool = False  # reserved only with the cover off (a USB cable): the cover is not checked against it
+
+    @classmethod
+    def of(cls, name: str, boxes, ends=(), cover_off: bool = False) -> "Route":
+        boxes = tuple(boxes)
+        shape = box6(boxes[0])
+        for b in boxes[1:]:
+            shape = shape + box6(b)
+        return cls(name, shape, tuple(ends), boxes, cover_off)
 
 
 @dataclass
 class Opening:
-    """A tie hole, slot or pass-through through a part (the deck), with its
-    footprint (x0, x1, y0, y1) and the part's underside z0 and top z1 there."""
+    """A tie hole, slot, wire entry or pass-through through a part (the
+    deck), with its footprint (x0, x1, y0, y1) and the part's underside z0
+    and top z1 there. `kind` is "tie", "slot", "entry" (wires up from below)
+    or "pass-through" (wires down to below the frame top, which needs the
+    frame open under it); `wires` is how many wires an entry or pass-through
+    must take."""
 
     name: str
     part: str
     footprint: tuple[float, float, float, float]
     z0: float
     z1: float
+    kind: str = "tie"
+    wires: int = 0
 
 
 @dataclass
@@ -166,6 +213,18 @@ class AirChannel:
 
 
 @dataclass
+class ImuPad:
+    """The IMU's pad on the deck: the part it is on and its screw bosses'
+    centres (x, y), their top z and radius, and the pilot hole's radius."""
+
+    part: str
+    bosses: tuple[tuple[float, float], ...]
+    top: float
+    radius: float
+    pilot_r: float
+
+
+@dataclass
 class Assembly:
     parts: list[Part] = field(default_factory=list)
     held: list[Held] = field(default_factory=list)
@@ -173,3 +232,4 @@ class Assembly:
     openings: list[Opening] = field(default_factory=list)
     screws: list[Screw] = field(default_factory=list)
     channel: AirChannel | None = None
+    imu_pad: ImuPad | None = None
