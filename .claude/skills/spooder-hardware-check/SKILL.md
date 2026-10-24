@@ -15,7 +15,7 @@ description: Workflow for wiring, powering, flashing and bringing up the Spooder
 
 - **Servo supply:** into the screw terminals, rated 10 A continuous, reverse-polarity protected, servos up to 11 V.
   - With the board's "Separate USB and Ext. Power" trace intact, the terminal supply also feeds USB VBUS and J6 pin 17 (5V).
-  - For any supply above 5 V, **cut that trace**, then power the logic from USB or a separate 5 V BEC on J6 pin 17.
+  - For any supply above 5 V, **cut that trace**, then power the logic from USB or a separate 5 V supply on J6 pin 17. J6 pin 17 is the board's 5V net, which is USB VBUS with no diode (schematic, `hardware/pimoroni-servo2040/`): feed it through a Schottky diode, or a computer on the USB port is back-fed.
 - **Ground:** connect external logic ground (bridge, sensors) only to **logic GND**, on J6 pins 1, 3, 5, 11 or 16 or the Qw/ST GND.
   - **Never** use the servo-connector ground pins. The current shunt sits in the servo ground return, so current returned through it is mis-measured.
 - **3.3 V logic only on J6.** No pin is 5 V tolerant.
@@ -34,6 +34,51 @@ J6 (unpopulated 17-pin header), pin → signal: 1 GND, 2 USER_SW, 3 GND, 4 RESET
 
 - **Never connect the boards' 5 V rails together.** Power the bridge from its own USB or a separate 5 V supply.
 - Cross TX to RX. With the bridge unplugged, the robot's RX pull-up keeps the line idle.
+
+**Battery wiring** (2S pack in the frame bottom's bay; the rest on the frame top's deck):
+
+```mermaid
+flowchart LR
+    subgraph bay["Frame bottom bay"]
+        PACK["2S LiPo 7.4 V<br/>5000 mAh, XT60 plug"]
+        BMS["2S BMS 30–40 A<br/>(optional backstop)"]
+    end
+    subgraph deck["Frame top deck"]
+        XT["XT60 socket"]
+        FUSE["Inline fuse 15 A"]
+        BUCK["SZBK07 step-down<br/>set 6.0 V, CC at max"]
+        LOGIC["5 V buck, ≥1 A"]
+        D1["Schottky diode"]
+        DIV["Divider 100k / 33k<br/>(planned)"]
+        TD["T-Display bridge"]
+    end
+    subgraph s2040["Servo 2040 (USB/ext trace cut)"]
+        TERM["Screw terminals<br/>servo power"]
+        J6["J6: pin 17 5V,<br/>pin 16 GND, pins 13/14 link"]
+        SENS["Sensor header input"]
+    end
+    SERVOS["18 × MG996R"]
+
+    PACK -- "+ / −" --> BMS -- "+ / −" --> XT
+    XT -- "+" --> FUSE
+    FUSE -- "+" --> BUCK
+    XT -- "−" --> BUCK
+    BUCK -- "6 V + / −" --> TERM -- "servo headers" --> SERVOS
+    FUSE -- "+" --> LOGIC
+    FUSE -- "+" --> DIV
+    LOGIC -- "5 V" --> D1 --> J6
+    LOGIC -- "5 V (its own diode on board)" --> TD
+    LOGIC -- "IN− and OUT−" --> J6
+    TD -- "GND, TX, RX" --> J6
+    DIV -- "about 2.1 V at 8.4 V" --> SENS
+```
+
+- **Servo power:** pack → XT60 → 15 A fuse → SZBK07 → screw terminals, in 14–16 AWG. Set the SZBK07 to 6.0 V with a multimeter before connecting the Servo 2040 (the MG996R's limit is 7.2 V), lock its potentiometer, and set its current limit to maximum. Its heatsinks are live at the input voltage: nothing may touch them.
+- **Logic power:** a separate 5 V buck from the fused pack (22–24 AWG), not from the 6 V servo rail, which sags under load. It feeds J6 pin 17 through a Schottky diode (about 4.7 V reaches the board) and the T-Display's 5V header pin directly: the T-Display has its own 1N5819 from VBUS, so neither board back-feeds a computer on its USB port, and the boards' 5 V rails are never joined.
+- **One ground point:** the logic buck's input and output negatives, the T-Display's GND and the divider's ground all go to the Servo 2040's logic GND (J6). The pack's negative reaches the board only through the SZBK07 and the screw terminals, so servo current never returns through the thin logic wires, and the board's current shunt and reverse-polarity MOSFET stay in its path.
+- **Battery sense (planned):** 100 kΩ from the fused pack to a sensor input, 33 kΩ to logic GND: 8.4 V reads as about 2.1 V, within the 3.3 V input. The firmware does not read it yet.
+- **XT60:** the socket on the robot, the plug on the battery, so a disconnected pack's pins are never exposed. Disconnecting it is the power switch.
+- **BMS (optional):** between the pack and its plug in the bay, rated above the servos' surges (30–40 A), as a hard cut-off if the firmware or the robot is left on. It drops power at once; the firmware's battery sense is the graceful stop.
 
 ## Build and flash
 

@@ -25,8 +25,10 @@ The firmware's link lengths came from upstream's code at this commit (coxa 41, f
 
 | Link | Firmware | Upstream's correction (`3c7eade`) | Measured on Spooder |
 |---|---|---|---|
-| Coxa | 41 | 46 | not yet |
+| Coxa | 41 | 46 | not yet; about 46.9 from these parts (coxa axis to the femur servo's opening) |
 | Femur | 116 | 108 | 108 |
 | Tibia (to the sprung tip) | 183 | 200 (ball foot) | 195 at rest, 190 bottomed out |
+
+`BOM.md` lists the bought hardware (bearings, inserts, screws), derived from these parts, since upstream never published a list.
 
 The sprung tip travels 5 mm: 40 g preload, about 330 g at full travel, so it bottoms out under the robot's standing load.

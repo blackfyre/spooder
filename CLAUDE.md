@@ -62,7 +62,11 @@ mise run clean
 - `desktop/`: the desktop calibrator (Go module).
 - `tools/`: the virtual robot, the bridge screenshot renderer, the delivery worktree and risk-tier scripts.
 - `test/`: Unity host tests, and `test/golden/`, the fixtures other implementations test against.
-- `hardware/aecert-hexapod-v1/`: upstream's printed parts (STLs and the whole-robot 3MF) at `ca5ed27`, the commit the movement code was ported from, copied unchanged; its README records the source and the measured link lengths against the firmware's.
+- `hardware/`: reference files, copied unchanged, each folder's README giving its source and licence:
+  - `aecert-hexapod-v1/`: upstream's printed parts (STLs and the whole-robot 3MF) at `ca5ed27`, the commit the movement code was ported from, with the measured link lengths against the firmware's and `BOM.md`, the hardware list derived from the parts;
+  - `lilygo-t-display/`: the bridge board's STEP model, case shell, schematic and KiCad/Eagle libraries;
+  - `pimoroni-servo2040/`: the robot board's schematic and mechanical drawing, with its key dimensions;
+  - `mg996r/`: the servo's STEP model (MIT).
 - `openspec/`: specifications (`specs/`) and changes (`changes/`). This is the source of truth for intended behaviour.
 
 ## Rules
