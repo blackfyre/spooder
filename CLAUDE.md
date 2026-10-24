@@ -62,11 +62,13 @@ mise run clean
 - `desktop/`: the desktop calibrator (Go module).
 - `tools/`: the virtual robot, the bridge screenshot renderer, the delivery worktree and risk-tier scripts.
 - `test/`: Unity host tests, and `test/golden/`, the fixtures other implementations test against.
-- `hardware/`: reference files, copied unchanged, each folder's README giving its source and licence:
-  - `aecert-hexapod-v1/`: upstream's printed parts (STLs and the whole-robot 3MF) at `ca5ed27`, the commit the movement code was ported from, with the measured link lengths against the firmware's and `BOM.md`, the hardware list derived from the parts;
-  - `lilygo-t-display/`: the bridge board's STEP model, case shell, schematic and KiCad/Eagle libraries;
-  - `pimoroni-servo2040/`: the robot board's schematic and mechanical drawing, with its key dimensions;
-  - `mg996r/`: the servo's STEP model (MIT).
+- `hardware/`: Spooder's own printed parts, and reference files copied unchanged.
+  - `spooder-electronics-mount/`: the printed mount for the electronics on the frame top (deck, cover, bumpers, holders), generated and checked with build123d (`mise run cad`, `mise run cad-preview`); its README gives the parts and colours, printing, the hardware list, the assembly order, the cable routes and the measurements to take before printing.
+  - The reference files, each folder's README giving its source and licence:
+    - `aecert-hexapod-v1/`: upstream's printed parts (STLs and the whole-robot 3MF) at `ca5ed27`, the commit the movement code was ported from, with the measured link lengths against the firmware's and `BOM.md`, the hardware list derived from the parts;
+    - `lilygo-t-display/`: the bridge board's STEP model, case shell, schematic and KiCad/Eagle libraries;
+    - `pimoroni-servo2040/`: the robot board's schematic and mechanical drawing, with its key dimensions;
+    - `mg996r/`: the servo's STEP model (MIT).
 - `openspec/`: specifications (`specs/`) and changes (`changes/`). This is the source of truth for intended behaviour.
 
 ## Rules

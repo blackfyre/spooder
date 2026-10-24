@@ -1,5 +1,5 @@
-"""Tests of the mount's checks, the build, the export and the layout (tasks
-2.1 to 5.3).
+"""Tests of the mount's checks, the build, the export, the layout and the
+README's parts table (tasks 2.1 to 6.1).
 
     uv run --locked --quiet --script hardware/spooder-electronics-mount/build.py --test
 
@@ -11,7 +11,8 @@ box, and the deck's holes found again on the insert positions. The layout
 (layout.py) is tested as built: every check passes on it, and what the checks
 leave to the layout holds (the cover's interior, the battery plug inside the
 legs' region, the spacers on the floor, the XT60's back stops, the bumpers,
-the T-Display's holder and the loose holders in their pockets).
+the T-Display's holder and the loose holders in their pockets), and the
+README lists every printed file with its copies, colour and orientation.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from build123d import Location
 import build
 import checks as C
 import measurements as M
-from export import export_parts, model_xml, verify_export
+from export import export_parts, model_xml, print_name, verify_export
 import layout as L
 from model import (FANS, IMU, LM2596_OUTPUT_ROUTE, SCHOTTKY, SERVO_2040, SZBK07, AirChannel, Assembly, Exposure, Fan, Held,
                    ImuPad, Opening, Part, Route, Screw, Support, Terminal, Vent, box, teardrop, turned)
@@ -1001,6 +1002,47 @@ class Sensors(unittest.TestCase):
             "does not take 7 wires"))
 
 
+README = (Path(__file__).resolve().parent / "README.md").read_text(encoding="utf-8")
+
+# What the README's "Print orientation" cell must say for each print_up: as in
+# the file, turned over, or which face lies on the bed.
+ORIENTATION_WORDS = {(0.0, 0.0, 1.0): "as in the file", (0.0, 0.0, -1.0): "turn it over",
+                     (0.0, 1.0, 0.0): "(−y) on the bed", (0.0, -1.0, 0.0): "(+y) on the bed",
+                     (1.0, 0.0, 0.0): "(−x) on the bed", (-1.0, 0.0, 0.0): "(+x) on the bed"}
+
+
+def readme_parts_mismatches(parts: list[Part], text: str) -> list[str]:
+    """Where the README's "Parts and colours" table (file, part, copies,
+    colour, print orientation) disagrees with the built parts: each distinct
+    part's print file listed once, with its copies, its colour first in the
+    colour cell, and its print orientation; and nothing else listed."""
+    section = text.split("## Parts and colours", 1)
+    body = section[1].split("\n## ", 1)[0] if len(section) == 2 else ""
+    rows = [[c.strip() for c in r.strip().strip("|").split("|")] for r in body.splitlines() if r.startswith("| `")]
+    listed = {r[0].strip("`"): r for r in rows}
+    found = [f"README: {name} is listed twice" for name in listed if [r[0] for r in rows].count(f"`{name}`") > 1]
+    for part in parts:
+        name = f"print/{print_name(part)}"
+        row = listed.pop(name, None)
+        if row is None:
+            found.append(f"README: {name} is not listed")
+            continue
+        if len(row) != 5:
+            found.append(f"README: {name} has {len(row)} columns, not 5")
+            continue
+        if row[2] != str(1 + len(part.copies)):
+            found.append(f"README: {name} copies {row[2]}, built {1 + len(part.copies)}")
+        if not row[3].startswith(part.colour):
+            found.append(f"README: {name} colour {row[3]!r}, built {part.colour}")
+        if part.inlays is not None and "inlays yellow" not in row[3]:
+            found.append(f"README: {name} colour {row[3]!r} names no yellow inlays")
+        words = ORIENTATION_WORDS.get(tuple(float(c) for c in part.print_up))
+        if words is None or words not in row[4]:
+            found.append(f"README: {name} orientation {row[4]!r}, built up {part.print_up}")
+    found += [f"README: {name} lists no built part" for name in listed]
+    return found
+
+
 class Layout(unittest.TestCase):
     """The layout as built."""
 
@@ -1077,6 +1119,19 @@ class Layout(unittest.TestCase):
 
     def part(self, name: str) -> Part:
         return next(p for p in self.asm.parts if p.name == name)
+
+    def test_the_readme_lists_every_printed_file(self):
+        self.assertEqual(readme_parts_mismatches(self.asm.parts, README), [])
+
+    def test_a_readme_missing_a_part_or_with_a_wrong_colour_fails(self):
+        dropped = "\n".join(r for r in README.splitlines() if not r.startswith("| `print/spacer.stl`"))
+        self.assertTrue(fails(readme_parts_mismatches(self.asm.parts, dropped), "print/spacer.stl", "not listed"))
+        recoloured = README.replace("| `print/bumper.stl` | a corner bumper | 4 | yellow |",
+                                    "| `print/bumper.stl` | a corner bumper | 4 | black |")
+        self.assertNotEqual(recoloured, README)
+        self.assertTrue(fails(readme_parts_mismatches(self.asm.parts, recoloured), "print/bumper.stl", "colour"))
+        turned_over = README.replace("lid-down: turn it over", "lid-down, as in the file")
+        self.assertTrue(fails(readme_parts_mismatches(self.asm.parts, turned_over), "print/cover.3mf", "orientation"))
 
     def test_the_cover_prints_lid_down_and_its_screen_sits_below_its_top(self):
         cov = self.part("cover")

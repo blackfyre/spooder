@@ -2,7 +2,7 @@
 
 Spooder's own printed mount for its electronics on the frame top: a deck screwed to the frame's inserts, a cover, corner bumpers and small holders. It is generated as code and checked before export (the `spooder-printed-parts` skill); the OpenSpec change `add-electronics-mount` describes it.
 
-This folder is being built: the generator, its checks and every part are in place (the deck and its spacers, the cover, the bumpers and the holders); the printing, hardware and assembly sections follow.
+The sizes are nominal until the bought parts are measured: read "Measure before printing" below before printing anything.
 
 | File | What it is |
 |---|---|
@@ -25,7 +25,104 @@ mise run cad-preview  # images/assembly.png, images/top.png and images/closed.pn
 uv run --locked --quiet --script hardware/spooder-electronics-mount/build.py --check  # check, write nothing
 ```
 
-### Layout
+## Parts and colours
+
+Everything prints in PETG. Each file holds one copy of its part, in the robot's orientation (the frame top's coordinates): turn it to its print orientation in the slicer. `test_build.py` checks this table against the built part set.
+
+| File | Part | Copies | Colour | Print orientation |
+|---|---|---|---|---|
+| `print/deck.stl` | the deck: plate, tabs to the ring's inserts, the Servo 2040's standoffs, the SZBK07's stops, the XT60's cradle, the cover's posts and the holders' pockets | 1 | black | flat, its underside on the bed, as in the file |
+| `print/spacer.stl` | a spacer under the deck at a floor insert | 4 | white | on its end, as in the file |
+| `print/cover.3mf` | the cover, with the inlays as its second part | 1 | black, inlays yellow | lid-down: turn it over |
+| `print/bumper.stl` | a corner bumper | 4 | yellow | on its top: turn it over, the slots' sloped ends facing up |
+| `print/lm2596-standoff.stl` | a standoff under the LM2596 | 2 | white | on its end, as in the file |
+| `print/imu-pad.stl` | the LSM6DSO's pad with its two bosses | 1 | white | flat, as in the file |
+| `print/intake-fan-holder.stl` | the intake fan's holder | 1 | white | standing, its foot on the bed, as in the file |
+| `print/exhaust-fan-holder-left.stl` | the exhaust fan's left column and cheek | 1 | white | standing, its foot on the bed, as in the file |
+| `print/exhaust-fan-holder-right.stl` | the exhaust fan's right column and cheek | 1 | white | standing, its foot on the bed, as in the file |
+| `print/t-display-holder.stl` | the T-Display's holder, a portal over the LM2596 | 1 | white | on its back: its rear face (−y) on the bed |
+
+The CAD files are `step/<part>.step`, the same names. The overhang check uses each part's print orientation above; the cover's 3MF is one object of two parts, so assign the yellow filament to the inlays in the slicer.
+
+## Printing
+
+Starting settings for a Bambu P1P with an AMS and a 0.4 mm nozzle (assumed: not yet tried on test prints, task 7.2):
+- **Every part:** PETG at the filament's own profile, 0.2 mm layers (the cover's inlays are 0.6 mm, three layers), **no supports**: every part passes the 45° overhang check in its orientation, and its horizontal holes are teardrops. A smooth or textured PEI plate with a glue stick as a release agent for PETG.
+- **Deck:** 3 walls, 25 % infill. The cover's posts are 2 mm walls round their insert holes, so they print solid.
+- **Cover:** 3 walls, 15 % infill, a 5 mm brim against warping (tall PETG walls on an open frame), and no draughts round the printer. The inlays print in the first three layers, so the purge is small; set the prime tower's volume to the slicer's minimum.
+- **Bumpers:** 4 walls, so the 1.5 mm leaf prints as solid walls with no infill (at a 0.42 mm line width), and 25 % infill in the hooks. Print the four at once.
+- **Holders and spacers:** 3 walls, 30 % infill.
+
+## Hardware
+
+Besides the electronics themselves (the SZBK07, one LM2596 module, the XT60 socket, the inline 15 A ATO fuse holder, a 1N5819 Schottky diode in 6 mm heat-shrink, the Servo 2040, the T-Display, and later the LSM6DSO breakout):
+
+| Item | Count | Where |
+|---|---|---|
+| M3 heat-set insert, Ø4.4 hole × 5 mm | 3 | the cover's posts on the deck (the frame top has its own eight) |
+| M3 × 6 button head (ISO 7380) | 4 | the deck to the ring's inserts, in counterbores |
+| M3 × 10 button head | 4 | the deck through the spacers to the floor's inserts |
+| M3 × 10 button head | 3 | the cover, down through the lid into the posts' inserts |
+| M2.5 × 6 self-tapping screw for plastics | 4 | the Servo 2040 onto the deck's standoffs |
+| M2.5 × 6 self-tapping screw for plastics | 2 | the LM2596 onto its standoffs (its 3 mm holes do not pass an M3) |
+| M2 × 5 self-tapping screw for plastics | 2 | the LSM6DSO breakout onto its pad's bosses, when fitted |
+| M2 × 6 self-tapping screw for plastics | 4 | each bumper's fixed hook into its rail |
+| cable tie, at most 3 mm wide and 1.8 mm thick | 4 | the diode, the XT60 and the fuse holder (two), through the deck's tie holes (3.4 × 2.0 mm) |
+| 3010 fan, 5 V, 2-pin (optional) | up to 2 | the exhaust position (blowing out) and the intake position (blowing in) |
+
+The screw lengths follow from the stack: the deck's counterbores leave 1 mm of plate under each head, the floor's spacers are 5.75 mm, the lid is 2.4 mm over a 5 mm insert, and each self-tapping screw passes a 1.6 mm board into a pilot 5 mm deep (the Servo 2040's standoffs), 4 mm deep (the IMU's bosses) or down the whole standoff (the LM2596's), so no screw is longer than its pilot. Check them against the measured parts.
+
+## Assembly order
+
+The order follows what covers what: the floor screws lie under the SZBK07 and the board, the loose holders are kept in their pockets by what goes over them, and the LM2596 is adjusted before its holder covers it.
+
+1. Press the three M3 inserts into the deck's cover posts with a soldering iron.
+2. Set the SZBK07 to 6.0 V and the LM2596 to 5.0 V on the bench (the `spooder-hardware-check` skill), and solder the harness: the XT60, the fuse holder and the leads to the SZBK07's input and the LM2596's input; the LM2596's output leads to J6 pin 17 (through the diode in its heat-shrink) and to the T-Display's 5V pin, and their ground to J6; the fan leads, if fitted, to the LM2596's output pads.
+3. Stand the four spacers on the frame top's floor inserts, lay the deck on the ring and the spacers, and drive the eight deck screws: M3 × 6 at the ring, M3 × 10 through the spacers.
+4. Drop the loose holders into their pockets: the IMU's pad, the LM2596's two standoffs, the intake fan's holder and the exhaust fan's two holders.
+5. Screw the LSM6DSO breakout onto its pad (when fitted), with its wires out of its rear edge towards J6.
+6. Seat the SZBK07 between its blocks and ribs, its input end left.
+7. Screw the Servo 2040 onto its standoffs over the IMU, the servo leads down through the two lead slots in front of it.
+8. Push the XT60 into its cradle against its back stops and tie it down; tie the fuse holder down at both ends.
+9. Screw the LM2596 onto its standoffs, and tie the diode down through its pair of holes in front of the module.
+10. Lay the wires in their routes (below) and connect the screw terminals and J6.
+11. Fit the T-Display's holder over the LM2596 and lay the T-Display on its pads between the lips, screen up.
+12. Fit the fans, if any, into their holders, the exhaust blowing out and the intake blowing in.
+13. Lower the cover straight down onto the deck's rim and drive its three M3 × 10 screws through the lid.
+14. Slide each bumper down onto its corner's rails until its slots stop on the wedges, and drive its M2 × 6 screw through the hook with the screw hole into the rail.
+
+Opening for calibrating or flashing is the reverse of step 13 only: the bumpers stay on the cover's rails and lift off with it, nothing is unplugged, and the Servo 2040's USB-C port faces the left with room for a cable. Unplug the battery at the XT60 first: there is no intrusion switch.
+
+## Cable routes
+
+Each run has a reserved route that no part enters (`routes()` in `layout.py`), reaching each terminal from the side it takes its wires from. Wire gauges follow the hardware-check skill.
+
+| Route | Wires | Path |
+|---|---|---|
+| `xt60 to fuse and szbk07 input` | 14–16 AWG | from the XT60's solder cups along the left side through the fuse holder to the SZBK07's input end |
+| `szbk07 output to ext` | 14–16 AWG | from the SZBK07's output end up the corridor on the right to the Servo 2040's EXT terminal, from its right edge |
+| `fused supply to lm2596` | 22–24 AWG | from the fuse holder's output beside the SZBK07's input end, along the band between the SZBK07 and the board, and up the corridor to the LM2596's input pads |
+| `lm2596 output` | 22–24 AWG | from the LM2596's output pads to the T-Display's 5V pin and, through the Schottky diode tied down in front of the module, under the board to J6's 5V pin; the only route a held part (the diode) lies in |
+| `t-display link to j6` | GND, TX, RX | from the T-Display's header row down the corridor and the band behind the board to J6 |
+| `servo leads` | 18 servo plugs | from the servo header in front of the board down through the two lead slots to the open frame below |
+| `end-stop wires` | 7 (six end-stops and their ground) | up through the end-stop entry in the corridor to the sensor header, from its right edge |
+| `imu to j6` | 4 | from the LSM6DSO's rear edge under the board into the band, and up to J6 |
+| `pass-through to j6` | 4 (the VL6180X) | up through the pass-through in the band to J6 |
+| `usb-c cable` | a USB-C plug | out of the Servo 2040's left edge over the deck's rim; reserved with the cover off only |
+| `battery plug` | the mated XT60 plug | outside the left wall's notch, within the legs' keep-clear radius |
+
+The fans' leads (2 × 26 AWG each) have no route of their own: the exhaust fan's run to the LM2596's output pads beside it, the intake fan's along the `fused supply to lm2596` route.
+
+## Cooling
+
+The mount is passive and ready for fans. Air comes in through the grille low in the left wall behind the XT60 (336 mm² open), crosses over the SZBK07's heatsinks and leaves through the grille high in the front-right corner face, so warm air rising and the exhaust fan both pull the same way; the lid has no opening over the SZBK07. The build keeps that channel clear, with no cross-section smaller than the inlet's open area.
+
+- **Exhaust fan** (30 mm, blowing out): fit it first if the SZBK07 runs hot. Its holders stand above the board's front-right corner behind the outlet.
+- **Intake fan** (30 mm, blowing in, optional): on the deck behind the inlet.
+- **Supply:** both run on 5 V from the LM2596's output pads, before the Schottky diode, so their current does not pass the diode on its way to J6. A 3010 fan draws about 0.1 A; the LM2596's 5 V rail carries both boards and both fans well within its rating.
+- **Limit:** after a 10-minute walk at full speed, cover on, the SZBK07's heatsink should stay at or below 70 °C (task 7.3), a margin below PETG's softening near 80 °C.
+
+## Layout
 
 The layout follows the wiring (`layout.py`, and `images/top.png` from above, the front at the top):
 - **Deck:** a 3 mm plate on the frame top's ring, its footprint the cover's (130 × 124 mm with 45° corner faces), with tabs forward and back to the ring's four inserts. It is screwed to all eight inserts with M3 button heads in counterbores; under it, a printed spacer at each of the four floor inserts (`spacer`, four copies) bridges the 5.75 mm down to the floor.
@@ -41,7 +138,7 @@ The layout follows the wiring (`layout.py`, and `images/top.png` from above, the
 - **Fastening:** three M3 screws down through the lid into heat-set inserts (Ø4.4 × 5) in posts on the deck, at the front-left, rear-left and rear-right; the front-right corner holds the exhaust fan, and no post fits beside it clear of the routes. The holes are vertical, so round, and each screw has a straight path from above.
 - **Cooling:** the inlet is a grille of seven 2 × 24 mm slots low in the left wall behind the XT60 (336 mm² open), the outlet seven 2 × 26 mm slots high in the front-right corner face. A 30 mm intake fan position (optional, blowing in) stands on the deck behind the inlet, between lips and a cheek, with the XT60 cradle's wall at its front end; the exhaust position (blowing out) stands above the board's front-right corner on two columns, with cheeks at its ends that reach in over its inner face as lips (the cover's wall stops it sliding out). Both holders are separate white parts. The passive air channel runs from the inlet over the fuse holder, across over the SZBK07's heatsinks, forward over the board, in front of the T-Display and into the corner to the outlet.
 
-### What the build checks
+## What the build checks
 
 Every check runs on what the part set declares; an empty set passes. When any check fails, the build names every failure and writes nothing.
 
@@ -63,7 +160,7 @@ Every check runs on what the part set declares; an empty set passes. When any ch
 - **Support:** the T-Display's holder bears on the board's underside (at least 2 mm² in each bare spot where the holder comes within 0.1 mm under the declared face and the board within 0.1 mm over it) and nowhere else under it, and the board moved 1 mm along x or y meets the holder.
 - **Cover:** every screen that must show sits below the cover's top; the cover comes nearer above a held-down part than its stops are tall (the SZBK07); the lid has no opening above the SZBK07 (rays up from its top, 1 mm apart, all meet the cover); the cover lifts straight off with its bumpers: nothing else lies above any face of it that looks up (rays up from them), and raised by 0.5 to 80 mm it overlaps nothing else.
 
-### Output
+## Output
 
 In the frame top's coordinates, each distinct part once (the four bumpers are one file):
 - `print/<part>.stl`, or `print/cover.3mf`: one object whose two parts are the body and the inlays, for the AMS (Bambu Studio 2.8.2 loads it as one object of two parts, each assignable to a filament). The files are in the robot's orientation: lay the cover lid-down in the slicer;

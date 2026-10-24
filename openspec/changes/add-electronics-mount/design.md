@@ -190,3 +190,9 @@ From task group 5 (bumpers and holders), also open to change:
 ## Open Questions
 
 - **The exact placement** of each part, within the principles above, follows from the measurements in task group 1.
+
+From task group 6 (documentation), also open to change:
+- **Print settings** in the README are starting values, not yet tried: 0.2 mm layers (the inlays' 0.6 mm is three), 3 walls with 15–30 % infill, 4 walls for the bumpers so the 1.5 mm leaf is solid walls, and a 5 mm brim on the cover against warping. Task 7.2's test prints confirm or change them.
+- **Screw lengths** follow from the stack-up in `layout.py`: M3 × 6 at the ring's inserts and M3 × 10 through the floor's spacers (heads in 2 mm counterbores in the 3 mm deck), M3 × 10 for the cover (the 2.4 mm lid over a 5 mm insert, `SCREW_TAIL` below it), M2.5 × 6 self-tapping for the Servo 2040 (a 1.6 mm board over a 5 mm pilot) and the LM2596 (its pilot runs down the standoff), M2 × 5 for the IMU breakout (over a 4 mm pilot: `IMU_PILOT_DEPTH`'s comment said M2 × 6, which would run past it, and now says M2 × 5), and the bumpers' M2 × 6.
+- **The fans' leads** have no reserved route: they are two thin wires each, the exhaust fan's run to the LM2596's output pads beside it, the intake fan's along the route from the fuse to the LM2596. They take the LM2596's output before the Schottky diode. Task 7.3's fit check shows whether they lie clear.
+- **The README's parts table is checked** by `test_build.py` against the built parts (each print file once, its copies, colour and print orientation), as task 6.1's verification; the "Measure before printing" table stays checked by `test_measurements.py`.

@@ -63,8 +63,8 @@
 
 ## 6. Documentation
 
-- [ ] 6.1 Write the README: parts and colours, print orientation and settings for each part, the hardware list, the assembly order, the cable routes, cooling, and the measurements to check. Verify every printed file and every constant named in "Measure before printing" appears in it.
-- [ ] 6.2 Update the hardware-check skill's power wiring, which already feeds both boards 5 V on their pins from a logic buck: name the LM2596 as that buck, state its dropout near an empty pack (the power protection watches the servo rail, not the pack, so it does not cover this), and add the fan supply. Update `CLAUDE.md`'s hardware list and `CHANGELOG.md`. Verify the Mermaid diagram matches the text.
+- [x] 6.1 Write the README: parts and colours, print orientation and settings for each part, the hardware list, the assembly order, the cable routes, cooling, and the measurements to check. Verify every printed file and every constant named in "Measure before printing" appears in it.
+- [x] 6.2 Update the hardware-check skill's power wiring, which already feeds both boards 5 V on their pins from a logic buck: name the LM2596 as that buck, state its dropout near an empty pack (the power protection watches the servo rail, not the pack, so it does not cover this), and add the fan supply. Update `CLAUDE.md`'s hardware list and `CHANGELOG.md`. Verify the Mermaid diagram matches the text.
 
 ## 7. Verification
 

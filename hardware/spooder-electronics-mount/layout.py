@@ -801,7 +801,7 @@ def lm_standoffs() -> tuple[Part, list[Foot]]:
 # it; the Servo 2040 over the breakout keeps it in its pocket. Source: chosen.
 IMU_PAD_Y = (11.0, 17.5)
 IMU_PAD_TOP = DECK_Z1 + 1.0  # the plate's top, under the breakout's underside parts
-IMU_PILOT_DEPTH = 4.0  # an M2 x 6 through the 1.6 mm breakout. Source: chosen.
+IMU_PILOT_DEPTH = 4.0  # an M2 x 5 through the 1.6 mm breakout. Source: chosen.
 
 
 def imu_pad() -> tuple[Part, list[Foot]]:

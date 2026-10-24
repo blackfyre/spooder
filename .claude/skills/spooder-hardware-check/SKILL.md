@@ -35,7 +35,7 @@ J6 (unpopulated 17-pin header), pin → signal: 1 GND, 2 USER_SW, 3 GND, 4 RESET
 - **Never connect the boards' 5 V rails together.** Power the bridge from its own USB or a separate 5 V supply.
 - Cross TX to RX. With the bridge unplugged, the robot's RX pull-up keeps the line idle.
 
-**Battery wiring** (2S pack in the frame bottom's bay; the rest on the frame top's deck):
+**Battery wiring** (2S pack in the frame bottom's bay; the rest on the frame top, in the printed electronics mount, `hardware/spooder-electronics-mount/`, whose README gives the cable routes and the assembly order):
 
 ```mermaid
 flowchart LR
@@ -47,10 +47,11 @@ flowchart LR
         XT["XT60 socket"]
         FUSE["Inline fuse 15 A"]
         BUCK["SZBK07 step-down<br/>set 6.0 V, CC at max"]
-        LOGIC["5 V buck, ≥1 A"]
+        LOGIC["LM2596 logic buck<br/>set 5.0 V"]
         D1["Schottky diode"]
         DIV["Divider 100k / 33k<br/>(planned)"]
         TD["T-Display bridge"]
+        FANS["3010 5 V fans<br/>(optional, up to 2)"]
     end
     subgraph s2040["Servo 2040 (USB/ext trace cut)"]
         TERM["Screw terminals<br/>servo power"]
@@ -68,14 +69,17 @@ flowchart LR
     FUSE -- "+" --> DIV
     LOGIC -- "5 V" --> D1 --> J6
     LOGIC -- "5 V (its own diode on board)" --> TD
+    LOGIC -- "5 V and OUT−" --> FANS
     LOGIC -- "IN− and OUT−" --> J6
     TD -- "GND, TX, RX" --> J6
     DIV -- "about 2.1 V at 8.4 V" --> SENS
 ```
 
 - **Servo power:** pack → XT60 → 15 A fuse → SZBK07 → screw terminals, in 14–16 AWG. Set the SZBK07 to 6.0 V with a multimeter before connecting the Servo 2040 (the MG996R's limit is 7.2 V), lock its potentiometer, and set its current limit to maximum. Its heatsinks are live at the input voltage: nothing may touch them.
-- **Logic power:** a separate 5 V buck from the fused pack (22–24 AWG), not from the 6 V servo rail, which sags under load. It feeds J6 pin 17 through a Schottky diode (about 4.7 V reaches the board) and the T-Display's 5V header pin directly: the T-Display has its own 1N5819 from VBUS, so neither board back-feeds a computer on its USB port, and the boards' 5 V rails are never joined.
-- **One ground point:** the logic buck's input and output negatives, the T-Display's GND and the divider's ground all go to the Servo 2040's logic GND (J6). The pack's negative reaches the board only through the SZBK07 and the screw terminals, so servo current never returns through the thin logic wires, and the board's current shunt and reverse-polarity MOSFET stay in its path.
+- **Logic power:** one LM2596 module, the logic buck, from the fused pack (22–24 AWG), not from the 6 V servo rail, which sags under load. Set it to 5.0 V with a multimeter before connecting either board. It feeds J6 pin 17 through a Schottky diode (a 1N5819 inline on its output lead, in heat-shrink: about 4.7 V reaches the board) and the T-Display's 5V header pin directly: the T-Display has its own 1N5819 from VBUS, so neither board back-feeds a computer on its USB port, and the boards' 5 V rails are never joined.
+- **Dropout near an empty pack:** the LM2596 needs its input about 1.5 V above its output. Near empty (about 6.4 V, 3.2 V a cell) its output sags to about 4.9 V, and J6 pin 17 to about 4.6 V after the diode. The power protection does not cover this: it watches the servo rail behind the SZBK07, not the pack, and the battery sense is not read yet. The boards' own regulators are expected to cope at 4.6 V; check it with a bench supply at 6.4 V on the XT60 and the fans running, measuring J6 pin 17 (the mount's fit check, task 7.3 of `add-electronics-mount`). Stop and charge before the pack gets there.
+- **Fans (optional):** 3010 5 V fans in the mount's exhaust and intake positions run from the LM2596's output pads, before the diode, so their current (about 0.1 A each) does not pass it. The exhaust blows out, the intake in.
+- **One ground point:** the logic buck's input and output negatives, the T-Display's GND and the divider's ground all go to the Servo 2040's logic GND (J6); the fans' negatives go to the logic buck's OUT−. The pack's negative reaches the board only through the SZBK07 and the screw terminals, so servo current never returns through the thin logic wires, and the board's current shunt and reverse-polarity MOSFET stay in its path.
 - **Battery sense (planned):** 100 kΩ from the fused pack to a sensor input, 33 kΩ to logic GND: 8.4 V reads as about 2.1 V, within the 3.3 V input. The firmware does not read it yet.
 - **XT60:** the socket on the robot, the plug on the battery, so a disconnected pack's pins are never exposed. Disconnecting it is the power switch.
 - **BMS (optional):** between the pack and its plug in the bay, rated above the servos' surges (30–40 A), as a hard cut-off if the firmware or the robot is left on. It drops power at once; the firmware's battery sense is the graceful stop.
