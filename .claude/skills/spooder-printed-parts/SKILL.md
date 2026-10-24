@@ -105,6 +105,7 @@ No part may need support.
 ## Assembly and service
 
 - **Keep everything electrical on the deck,** so the cover is a bare shell that lifts off after its screws, with nothing to unplug.
+- **A spring fixed at both ends pries its mounts.** A leaf or arch pressed flat pushes its ends apart, several times the load on a shallow one, so fix one end and let the other slide (the bumpers' free hook); a check moves the free end through the spring's travel.
 - **Hold parts captive by geometry where possible.** The SZBK07's stops are taller than the lid's gap above it, so the cover holds it; tape only holds it with the cover off.
 - **Check access for every connector and adjuster:**
   - USB-C plugs reach through the wall: receptacle 6 mm or less from the outer face, with a 14 × 13 opening;

@@ -92,6 +92,19 @@ def teardrop(r: float, length: float, x: float, y: float, z: float, axis: str, u
 
 
 @dataclass
+class Floating:
+    """The free end of a bumper's leaf: everything of the bumper inside
+    `region`. Flattening the leaf pushes it `travel` along `direction`, away
+    from the fixed end; pulled along `outward` (off the cover) it must stay
+    hooked on."""
+
+    region: Shape
+    direction: Vec3
+    outward: Vec3
+    travel: float
+
+
+@dataclass
 class Part:
     """A printed part. `shape` is its first copy in its assembled position;
     `copies` move it to the others (each distinct part is exported once).
@@ -109,6 +122,9 @@ class Part:
     # it) must meet something, so it cannot lift out of its pocket.
     held_down: float = 0.0
     carries: tuple[str, ...] = ()
+    # A bumper's free end (its first copy's), which must slide away from its
+    # fixed end as the leaf between them flattens in a knock.
+    floating: Floating | None = None
 
     def instances(self) -> list[Shape]:
         return [self.shape] + [self.shape.moved(loc) for loc in self.copies]

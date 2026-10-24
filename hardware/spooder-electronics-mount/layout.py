@@ -38,7 +38,7 @@ from build123d import Axis, Location, Plane, Polygon, Solid, extrude
 
 import measurements as M
 from model import (FANS, IMU, J6, LM2596_OUTPUT_ROUTE, SCHOTTKY, SENSOR_HEADER, SERVO_2040, SIDES, SZBK07, AirChannel,
-                   Assembly, Box6, Exposure, Fan, Held, ImuPad, Opening, Part, Route, Screw, Support, Terminal, Vent, box,
+                   Assembly, Box6, Exposure, Fan, Floating, Held, ImuPad, Opening, Part, Route, Screw, Support, Terminal, Vent, box,
                    box6, teardrop, turned)
 
 UP = (0.0, 0.0, 1.0)
@@ -1091,11 +1091,13 @@ def cover() -> Part:
 # PETG bumper slides down onto them. The bumper is a hook round each rail,
 # joined by a curved leaf that stands off the face and flexes in a knock;
 # the hooks stand past the side walls and the bumper's top above the lid.
-# The rails' tops are 45-degree wedges flush with the top chamfer, and the
-# bumper's slots end in the same slope, which is its stop. Every corner's
-# bumper is the same part: the corner faces are alike, and the bumper is
-# symmetric about its face's centre line. Source: chosen (design.md
-# "Bumpers", "Assumptions", task group 5).
+# A knock that flattens the leaf pushes its ends apart, so only the -s hook
+# is fixed (screwed to its rail); the +s hook's slot is FLOAT_SLOT longer
+# towards -s, so that hook slides outwards along its rail's dovetail, which
+# still keeps it on. The rails' tops are 45-degree wedges flush with the top
+# chamfer, and the bumper's slots end in the same slope, which is its stop.
+# Every corner's bumper is the same part, turned: the corner faces are
+# alike. Source: chosen (design.md "Bumpers", "Assumptions", task group 5).
 #
 # In a corner's frame: s along the face, n out of it, z up; the face's centre
 # at the origin (corner_location()).
@@ -1103,7 +1105,7 @@ CORNER_HALF = (BOX_X + BOX_Y - BOX_DIAG) * SQRT2 / 2  # half the corner face's l
 CORNER_CENTRE = ((BOX_X + BOX_DIAG - BOX_Y) / 2, (BOX_DIAG - BOX_X + BOX_Y) / 2)  # the front-right face's centre
 RAIL_S = 21.0  # each rail's centre along the face, its neck on the face. Source: chosen.
 RAIL_NECK = 3.0  # the dovetail's width at the face. Source: chosen.
-RAIL_HEAD = 5.4  # its width at its outer face. Source: chosen.
+RAIL_HEAD = 6.4  # its width at its outer face. Source: chosen, so the free hook's longer slot still hooks on.
 RAIL_D = 3.0  # how far it stands off the face. Source: chosen.
 RAIL_Z0 = 40.0  # its foot, above the groove. Source: chosen.
 RAIL_TOP = LID_Z1 - COVER_CHAMFER  # where the top chamfer begins: the wedge ends flush with it
@@ -1117,7 +1119,8 @@ LEAF_T = 1.5  # Source: design.md "Bumpers" (1.2 to 1.6 mm).
 LEAF_H = 12.0  # the leaf's height, down from the bumper's top, above most of the outlet's grille. Source: chosen.
 LEAF_APEX = 8.0  # the leaf's outer face off the corner face at its middle. Source: chosen, inside the keep-clear radius.
 LEAF_POINTS = 41
-# An M2 x 6 self-tapping screw through each hook into its rail keeps the
+FLOAT_SLOT = 1.0  # how much longer the free hook's slot is. Source: chosen, above leaf_travel() (about 0.65).
+# An M2 x 6 self-tapping screw through the fixed hook into its rail keeps the
 # bumper on its rails when the robot is turned over or shaken; it comes out
 # from outside to change the bumper. At this height, under the leaf; the
 # rail's pilot reaches into the cover's wall, leaving this much of it.
@@ -1136,9 +1139,10 @@ def corner_location(k: int) -> Location:
     return Location((sx * cx, sy * cy, 0), (0, 0, (-45.0, 45.0, 135.0, -135.0)[k]))
 
 
-def rail_profile(s0: float, grow: float = 0.0, n0: float = -EMBED) -> list[tuple[float, float]]:
+def rail_profile(s0: float, grow: float = 0.0, n0: float = -EMBED, longer: float = 0.0) -> list[tuple[float, float]]:
     """The dovetail's outline in (s, n), from n0 to its outer face, grown by
-    `grow` normal to each side."""
+    `grow` normal to each side, and swept `longer` towards -s (a free
+    hook's slot)."""
     k = (RAIL_HEAD - RAIL_NECK) / 2 / RAIL_D  # its half-width grows k per mm out
     shift = grow * math.sqrt(1 + k * k)  # a flank moved `grow` normal to itself, along s
 
@@ -1146,7 +1150,7 @@ def rail_profile(s0: float, grow: float = 0.0, n0: float = -EMBED) -> list[tuple
         return RAIL_NECK / 2 + k * n + shift
 
     n1 = RAIL_D + grow
-    return [(s0 - half(n0), n0), (s0 + half(n0), n0), (s0 + half(n1), n1), (s0 - half(n1), n1)]
+    return [(s0 - longer - half(n0), n0), (s0 + half(n0), n0), (s0 + half(n1), n1), (s0 - longer - half(n1), n1)]
 
 
 def xy_prism(pts, z0: float, z1: float) -> Solid:
@@ -1181,41 +1185,47 @@ def rails() -> Solid:
 
 
 def rail_pilots() -> Solid:
-    """The retaining screws' pilots, through each rail into the cover's
+    """The retaining screws' pilots, through each fixed hook's rail into the cover's
     wall: horizontal as the cover prints, so teardrops pointing down (up as
     printed)."""
     n0, n1 = -(WALL - RETAIN_WALL_LEFT), RAIL_D + 0.5
-    one = None
-    for s0 in (-RAIL_S, RAIL_S):
-        t = teardrop(PILOT_M2_D / 2, n1 - n0, s0, (n0 + n1) / 2, RETAIN_Z, "y", DOWN)
-        one = t if one is None else one + t
-    return at_corners(one)
+    return at_corners(teardrop(PILOT_M2_D / 2, n1 - n0, -RAIL_S, (n0 + n1) / 2, RETAIN_Z, "y", DOWN))
 
 
 def bumper_screws() -> list[Screw]:
-    """Each bumper's two retaining screws: the head on the hook's outer face,
-    driven in along -n from outside."""
+    """Each bumper's retaining screw: the head on the fixed hook's outer
+    face, driven in along -n from outside."""
     found = []
     n = RAIL_D + SLIDE + HOOK_BACK
     for k in range(4):
         a = math.radians((-45.0, 45.0, 135.0, -135.0)[k])
         cx, cy = (CORNER_CENTRE[0] * (1, -1, -1, 1)[k], CORNER_CENTRE[1] * (1, 1, -1, -1)[k])
         out = (-math.sin(a), math.cos(a), 0.0)  # n in the robot's frame
-        for side, s0 in (("a", -RAIL_S), ("b", RAIL_S)):
-            x = cx + s0 * math.cos(a) + n * out[0]
-            y = cy + s0 * math.sin(a) + n * out[1]
-            found.append(Screw(f"bumper {k + 1} screw {side}", (x, y, RETAIN_Z), out, shank=RETAIN_SCREW))
+        x = cx - RAIL_S * math.cos(a) + n * out[0]
+        y = cy - RAIL_S * math.sin(a) + n * out[1]
+        found.append(Screw(f"bumper {k + 1} screw", (x, y, RETAIN_Z), out, shank=RETAIN_SCREW))
     return found
+
+
+def leaf_arc() -> tuple[float, float, float]:
+    """The leaf's outer face: its radius, its centre's n, and its half-angle."""
+    sag = LEAF_APEX - (RAIL_D + SLIDE + HOOK_BACK)
+    radius = (RAIL_S ** 2 + sag ** 2) / (2 * sag)
+    return radius, LEAF_APEX - radius, math.asin(RAIL_S / radius)
+
+
+def leaf_travel() -> float:
+    """How far the free hook moves when the leaf is pressed flat: its centre
+    line's arc less its chord."""
+    radius, _, a = leaf_arc()
+    r = radius - LEAF_T / 2
+    return 2 * a * r - 2 * r * math.sin(a)
 
 
 def leaf_profile() -> list[tuple[float, float]]:
     """The leaf: a circular band between the hooks, its outer face through
     the hooks' outer faces at the rails and LEAF_APEX out at its middle."""
-    ne = RAIL_D + SLIDE + HOOK_BACK
-    sag = LEAF_APEX - ne
-    radius = (RAIL_S ** 2 + sag ** 2) / (2 * sag)
-    cn = LEAF_APEX - radius
-    a = math.asin(RAIL_S / radius)
+    radius, cn, a = leaf_arc()
     angles = [-a + 2 * a * i / (LEAF_POINTS - 1) for i in range(LEAF_POINTS)]
     outer = [(radius * math.sin(t), cn + radius * math.cos(t)) for t in angles]
     inner = [((radius - LEAF_T) * math.sin(t), cn + (radius - LEAF_T) * math.cos(t)) for t in reversed(angles)]
@@ -1227,17 +1237,24 @@ def bumper() -> Part:
     prints on its top (up -z): the leaf hangs from the top, and the slots'
     sloped ends face up as printed."""
     half = RAIL_HEAD / 2 + SLIDE + HOOK_WALL
+    ne = RAIL_D + SLIDE + HOOK_BACK
     shape = None
-    for s0 in (-RAIL_S, RAIL_S):
-        hook = box(s0 - half, s0 + half, SLIDE, RAIL_D + SLIDE + HOOK_BACK, BUMPER_Z0, BUMPER_Z1)
-        slot = xy_prism(rail_profile(s0, SLIDE, -1.0), BUMPER_Z0 - 1.0, BUMPER_Z1 + 1.0) & below_wedge(SLIDE * SQRT2)
-        hook = hook - slot - teardrop(RETAIN_CLEAR_D / 2, HOOK_BACK + 2.0, s0, RAIL_D + SLIDE + HOOK_BACK / 2,
-                                      RETAIN_Z, "y", DOWN)
+    for s0, longer in ((-RAIL_S, 0.0), (RAIL_S, FLOAT_SLOT)):
+        hook = box(s0 - longer - half, s0 + half, SLIDE, ne, BUMPER_Z0, BUMPER_Z1)
+        slot = xy_prism(rail_profile(s0, SLIDE, -1.0, longer), BUMPER_Z0 - 1.0, BUMPER_Z1 + 1.0) \
+            & below_wedge(SLIDE * SQRT2)
+        hook = hook - slot
+        if not longer:
+            hook = hook - teardrop(RETAIN_CLEAR_D / 2, HOOK_BACK + 2.0, s0, ne - HOOK_BACK / 2, RETAIN_Z, "y", DOWN)
         shape = hook if shape is None else shape + hook
     shape = shape + xy_prism(leaf_profile(), BUMPER_Z1 - LEAF_H, BUMPER_Z1)
     first = corner_location(0)
     copies = tuple(corner_location(k) * first.inverse() for k in (1, 2, 3))
-    return Part("bumper", shape.moved(first), "bumper", DOWN, "yellow", copies=copies)
+    s1 = RAIL_S - FLOAT_SLOT - half - 1.0  # the free end: its hook and the leaf's last millimetre
+    region = box(s1, s1 + 40.0, -5.0, LEAF_APEX + 5.0, BUMPER_Z0 - 5.0, BUMPER_Z1 + 5.0).moved(first)
+    a = math.radians(-45.0)
+    floating = Floating(region, (math.cos(a), math.sin(a), 0.0), (-math.sin(a), math.cos(a), 0.0), leaf_travel())
+    return Part("bumper", shape.moved(first), "bumper", DOWN, "yellow", copies=copies, floating=floating)
 
 
 def channel() -> AirChannel:

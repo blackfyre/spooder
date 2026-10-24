@@ -126,6 +126,13 @@ BUMPER_STEP = 5.0
 # below the layout's sliding fit (0.2).
 BUMPER_STOP = 0.5
 BUMPER_PLAY = 0.1
+# A bumper's free end, pulled off the cover anywhere along its travel,
+# meets the cover before it has gone this far: its rail keeps it on. Source:
+# chosen, beyond the layout's rails (3 mm deep); the pull is sampled every
+# BUMPER_PULL_STEP, the travel at BUMPER_TRAVEL_STEPS points.
+BUMPER_PULL = 5.0
+BUMPER_PULL_STEP = 0.25
+BUMPER_TRAVEL_STEPS = 5
 # A screw's head lies on a part when its centre is this near it, or (for a
 # screw with a shank, whose head centre lies over its hole) within its
 # shank's diameter. Source: chosen.
@@ -1063,6 +1070,61 @@ def check_bumpers(asm: Assembly) -> list[str]:
     return failures
 
 
+def check_bumper_ends(asm: Assembly) -> list[str]:
+    """A knock that flattens a bumper's leaf pushes its ends apart, so only
+    one end may be fixed: the other (`floating`) lies further along the
+    leaf, carries no screw into the cover, moves the leaf's full travel away from the fixed end meeting
+    nothing, and anywhere along that travel, pulled off the cover, meets
+    the cover within BUMPER_PULL (it stays hooked on)."""
+    failures = []
+    solids = list(labelled_solids(asm))
+    cover_parts = [p for p in asm.parts if p.role == "cover"]
+    cover_names = {p.name for p in cover_parts}
+    for part in asm.parts:
+        if part.role != "bumper":
+            continue
+        locs = [Location()] + list(part.copies)
+        for i, inst in enumerate(part.instances()):
+            label = part.name if i == 0 else f"{part.name} copy {i + 1}"
+            fl = part.floating
+            if fl is None:
+                failures.append(f"{label}: both ends are fixed: a knock that flattens its leaf pushes them apart, "
+                                "off their rails")
+                continue
+            origin = Vertex(0, 0, 0).moved(locs[i]).center()
+            d = Vertex(*fl.direction).moved(locs[i]).center() - origin
+            out = Vertex(*fl.outward).moved(locs[i]).center() - origin
+            region = fl.region.moved(locs[i])
+            free, fixed = inst & region, inst - region
+            if volume(free) <= VOLUME_TOL or volume(fixed) <= VOLUME_TOL:
+                failures.append(f"{label}: its free end's region does not split it in two")
+                continue
+            if (free.center() - fixed.center()).dot(d) <= 0:
+                failures.append(f"{label}: its free end does not move away from its fixed end")
+                continue
+            pinned = next((sc.name for sc in asm.screws if retains(sc, free, cover_parts)), None)
+            if pinned:
+                failures.append(f"{label}: {pinned} fixes its free end to the cover: a knock that flattens its leaf "
+                                "pries it off its rails")
+                continue
+            rest = [(lb, s) for lb, s in solids if lb != label]
+            covers = [s for lb, s in rest if base_name(lb) in cover_names]
+            for t in np.linspace(0.0, fl.travel, BUMPER_TRAVEL_STEPS):
+                at = free.moved(Location(tuple(d * float(t))))
+                hit = next((lb for lb, s in rest if common(at, s) > VOLUME_TOL), None) if t else None
+                if hit:
+                    failures.append(f"{label}: its leaf pressed flat pushes its free end {t:.2f} mm into {hit}: "
+                                    "the knock pries it off its rail")
+                    break
+                pulls = np.arange(BUMPER_PULL_STEP, BUMPER_PULL + 1e-9, BUMPER_PULL_STEP)
+                if not any(common(at.moved(Location(tuple(out * float(p)))), s) > VOLUME_TOL
+                           for p in pulls for s in covers):
+                    failures.append(f"{label}: its free end, {t:.2f} mm along, pulled up to {BUMPER_PULL} mm off the "
+                                    "cover meets nothing: it comes off its rail")
+                    break
+    return failures
+
+
 def head_on(screw, shape: Shape) -> bool:
     return Vertex(*screw.head).distance_to(shape) <= max(SCREW_ON, screw.shank[0])
 
@@ -1190,6 +1252,7 @@ def run_checks(asm: Assembly, frame: FrameMap | None = None) -> list[str]:
     failures += check_fans(asm)
     failures += check_cover(asm)
     failures += check_bumpers(asm)
+    failures += check_bumper_ends(asm)
     failures += check_captive(asm)
     failures += check_supports(asm)
     return failures

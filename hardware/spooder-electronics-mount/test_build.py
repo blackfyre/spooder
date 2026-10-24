@@ -21,6 +21,7 @@ import math
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 
 from build123d import Location
@@ -1213,11 +1214,47 @@ class Layout(unittest.TestCase):
 
     def test_the_bumpers_are_screwed_to_their_rails(self):
         screws = [s for s in self.asm.screws if s.name.startswith("bumper")]
-        self.assertEqual(len(screws), 8)
+        self.assertEqual(len(screws), 4)
         b = self.part("bumper")
         covers = [self.part("cover")]
         for inst in b.instances():
-            self.assertEqual(sum(C.retains(s, inst, covers) for s in screws), 2)
+            self.assertEqual(sum(C.retains(s, inst, covers) for s in screws), 1)
+
+    def test_a_bumper_has_one_free_end(self):
+        # Its leaf pressed flat, the free hook slides along its rail and stays on it.
+        self.assertLess(L.leaf_travel(), L.FLOAT_SLOT)
+        self.assertEqual(C.check_bumper_ends(self.asm), [])
+
+    def test_a_bumper_fixed_at_both_ends_fails(self):
+        # Task group 5's bumper: both hooks' slots fitted round their rails, so
+        # a knock forces the hooks apart against them.
+        asm = Assembly(parts=[self.part("cover"), replace(L.bumper(), floating=None)])
+        f = C.check_bumper_ends(asm)
+        self.assertTrue(fails(f, "bumper: both ends are fixed") and fails(f, "bumper copy 4: both ends"), f)
+        old = L.FLOAT_SLOT, L.RAIL_HEAD
+        try:
+            L.FLOAT_SLOT, L.RAIL_HEAD = 0.0, 5.4
+            asm = Assembly(parts=[L.cover(), L.bumper()])
+            self.assertTrue(fails(C.check_bumper_ends(asm), "bumper: its leaf pressed flat", "into cover"))
+        finally:
+            L.FLOAT_SLOT, L.RAIL_HEAD = old
+
+    def test_a_screw_through_the_free_end_fails(self):
+        b = L.bumper()
+        screw = L.bumper_screws()[0]
+        d = b.floating.direction
+        free = replace(screw, name="free screw", head=tuple(h + 2 * L.RAIL_S * c for h, c in zip(screw.head, d)))
+        asm = Assembly(parts=[self.part("cover"), b], screws=[screw, free])
+        self.assertTrue(fails(C.check_bumper_ends(asm), "bumper: free screw fixes its free end"))
+
+    def test_a_free_end_on_a_straight_rail_comes_off(self):
+        old = L.RAIL_HEAD
+        try:
+            L.RAIL_HEAD = L.RAIL_NECK
+            asm = Assembly(parts=[L.cover(), L.bumper()])
+            self.assertTrue(fails(C.check_bumper_ends(asm), "bumper: its free end", "comes off its rail"))
+        finally:
+            L.RAIL_HEAD = old
 
     def test_without_the_t_display_holder_the_lm2596_lifts_out(self):
         # The holder's plate keeps the LM2596 and its standoffs down.
