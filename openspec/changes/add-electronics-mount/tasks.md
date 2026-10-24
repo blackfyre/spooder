@@ -57,7 +57,7 @@
 
 ## 5. Bumpers and holders
 
-- [x] 5.1 Model the rails on the cover's corners and the PETG leaf-spring bumpers that slide onto them. They stand proud of the body and the lid and stay inside the keep-clear region. Verify the keep-clear and overhang checks pass, and a check that the bumpers' tops are above the lid and the screen.
+- [x] 5.1 Model the rails on the cover's corners and the PETG corner-guard bumpers that slide onto them. They stand proud of the body and the lid and stay inside the keep-clear region. Verify the keep-clear and overhang checks pass, and a check that the bumpers' tops are above the lid and the screen.
 - [x] 5.2 Model the T-Display holder on the deck: supported on the board's bare underside, located by lips, held down by the lid, and printable in its own orientation. Verify the holder's contact check, the overhang check and the screwdriver-path check pass.
 - [x] 5.3 Model the remaining holders in white: the LM2596 standoffs, the IMU bosses and the fan holders. Verify all checks pass.
 
@@ -70,7 +70,7 @@
 
 - [x] 7.1 Run `mise run cad` and `mise run cad-preview` from a clean checkout. Verify all checks pass, the export test passes, and the images are regenerated. Get a Codex review of physical and assembly problems, and answer every finding.
 - [ ] 7.2 Test prints (requires the user at the printer):
-  - a bumper on a rail section: it slides, holds and flexes back;
+  - a bumper on a rail section: it slides, holds, and its hollow shell gives and springs back;
   - a deck post with an insert: it holds an M3 screw at hand torque;
   - a fan in its holder;
   - the XT60 holder with the socket: plugged and unplugged ten times, the socket does not move.

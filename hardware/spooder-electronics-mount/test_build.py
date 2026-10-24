@@ -633,17 +633,20 @@ class CoverChecks(unittest.TestCase):
 
 
 def railed_cover() -> Part:
-    """The test cover with a rail on its +x wall, 2 x 4 mm, from z 36 to 49."""
+    """The test cover with a T rail on its +x wall, a 2 mm neck and a 5 mm
+    head, from z 36 to 49."""
     c = cover()
-    c.shape = c.shape + box(21.5, 24, -2, 2, 36, 49)
+    c.shape = c.shape + box(21.5, 23, -1, 1, 36, 49) + box(23, 24, -2.5, 2.5, 36, 49)
     return c
 
 
 def rail_bumper(lift: float = 0.0, slide: float = 0.2, top: float = 55.0, role: str = "bumper") -> Part:
     """A block round the rail, `slide` clear of it and of the wall, its slot
     closed `slide` over the rail's top."""
-    shape = box(22 + slide, 26.4, -4.4, 4.4, 38, top) - box(21, 24 + slide, -2 - slide, 2 + slide, 37, 49 + slide)
-    return Part("bumper", shape.moved(Location((0, 0, lift))), role, DOWN, "yellow")
+    slot = box(21, 23 + slide, -1 - slide, 1 + slide, 37, 49 + slide) \
+        + box(23 - slide, 24 + slide, -2.5 - slide, 2.5 + slide, 37, 49 + slide)
+    shape = box(22 + slide, 26.4, -4.4, 4.4, 38, top) - slot
+    return Part("bumper", shape.moved(Location((0, 0, lift))), role, DOWN, "yellow", outward=(1.0, 0.0, 0.0))
 
 
 RETAINER = Screw("bumper screw", (26.4, 0.0, 45.0), (1.0, 0.0, 0.0), shank=(2.0, 4.0))  # through it into the rail
@@ -1209,8 +1212,8 @@ class Layout(unittest.TestCase):
     def test_a_readme_missing_a_part_or_with_a_wrong_colour_fails(self):
         dropped = "\n".join(r for r in README.splitlines() if not r.startswith("| `print/spacer.stl`"))
         self.assertTrue(fails(readme_parts_mismatches(self.asm.parts, dropped), "print/spacer.stl", "not listed"))
-        recoloured = README.replace("| `print/bumper.stl` | a corner bumper | 4 | yellow |",
-                                    "| `print/bumper.stl` | a corner bumper | 4 | black |")
+        recoloured = README.replace("| `print/bumper.stl` | a corner guard (bumper) | 4 | yellow |",
+                                    "| `print/bumper.stl` | a corner guard (bumper) | 4 | black |")
         self.assertNotEqual(recoloured, README)
         self.assertTrue(fails(readme_parts_mismatches(self.asm.parts, recoloured), "print/bumper.stl", "colour"))
         turned_over = README.replace("lid-down: turn it over", "lid-down, as in the file")
@@ -1230,7 +1233,9 @@ class Layout(unittest.TestCase):
         b = C.bbox6(sz.shape)
         lid = box(b[0], b[1], b[2], b[3], L.LID_Z0, L.LID_Z1)
         cov = self.part("cover")
-        self.assertAlmostEqual(C.common(cov.shape, lid) + C.common(cov.inlays, lid), C.volume(lid), delta=0.5)
+        # Closed but for the panel lines engraved in its top.
+        lines = C.common(L.panel_lines(), lid)
+        self.assertAlmostEqual(C.common(cov.shape, lid) + C.common(cov.inlays, lid) + lines, C.volume(lid), delta=0.5)
         self.assertGreaterEqual(sz.held_down, 3.0)
         gap = min(f.bounding_box().min.Z for f in (cov.shape & box(*b[:4], b[5], L.LID_Z0)).solids()) - b[5]
         self.assertLess(gap, sz.held_down, "the hold-down blocks come nearer than its stops are tall")
@@ -1325,7 +1330,11 @@ class Layout(unittest.TestCase):
         self.assertGreater(len(cov.inlays.solids()), len(L.NAME), "the letters and the chevrons")
         self.assertLess(C.common(cov.shape, cov.inlays), C.VOLUME_TOL)
         layer = box(bi.min.X, bi.max.X, bi.min.Y, bi.max.Y, bi.min.Z, bi.max.Z)
-        self.assertAlmostEqual(C.common(cov.shape, layer) + C.common(cov.inlays, layer), C.volume(layer), delta=0.05)
+        # Engraved panel lines and the cover's screw holes are not filled.
+        lines = C.common(L.panel_lines(), layer)
+        lines += sum(C.common(L.cyl(L.M3_D / 2, x, y, L.LID_Z0 - 1, L.LID_Z1 + 1), layer) for x, y in L.COVER_SCREWS)
+        self.assertAlmostEqual(C.common(cov.shape, layer) + C.common(cov.inlays, layer) + lines, C.volume(layer),
+                               delta=0.05)
 
     def test_the_bumpers(self):
         # One part, copied to the four corners, printed on its top in yellow;
@@ -1399,41 +1408,42 @@ class Layout(unittest.TestCase):
         for inst in b.instances():
             self.assertEqual(sum(C.retains(s, inst, covers) for s in screws), 1)
 
-    def test_a_bumper_has_one_free_end(self):
-        # Its leaf pressed flat, the free hook slides along its rail and stays on it.
-        self.assertLess(L.leaf_travel(), L.FLOAT_SLOT)
-        self.assertEqual(C.check_bumper_ends(self.asm), [])
-
-    def test_a_bumper_fixed_at_both_ends_fails(self):
-        # Task group 5's bumper: both hooks' slots fitted round their rails, so
-        # a knock forces the hooks apart against them.
-        asm = Assembly(parts=[self.part("cover"), replace(L.bumper(), floating=None)])
-        f = C.check_bumper_ends(asm)
-        self.assertTrue(fails(f, "bumper: both ends are fixed") and fails(f, "bumper copy 4: both ends"), f)
-        old = L.FLOAT_SLOT, L.RAIL_HEAD
-        try:
-            L.FLOAT_SLOT, L.RAIL_HEAD = 0.0, 5.4
-            asm = Assembly(parts=[L.cover(), L.bumper()])
-            self.assertTrue(fails(C.check_bumper_ends(asm), "bumper: its leaf pressed flat", "into cover"))
-        finally:
-            L.FLOAT_SLOT, L.RAIL_HEAD = old
-
-    def test_a_screw_through_the_free_end_fails(self):
-        b = L.bumper()
-        screw = L.bumper_screws()[0]
-        d = b.floating.direction
-        free = replace(screw, name="free screw", head=tuple(h + 2 * L.RAIL_S * c for h, c in zip(screw.head, d)))
-        asm = Assembly(parts=[self.part("cover"), b], screws=[screw, free])
-        self.assertTrue(fails(C.check_bumper_ends(asm), "bumper: free screw fixes its free end"))
-
-    def test_a_free_end_on_a_straight_rail_comes_off(self):
+    def test_a_bumper_on_straight_rails_comes_off(self):
+        # Its rails' dovetails keep it on: on straight rails it pulls off.
         old = L.RAIL_HEAD
         try:
             L.RAIL_HEAD = L.RAIL_NECK
-            asm = Assembly(parts=[L.cover(), L.bumper()])
-            self.assertTrue(fails(C.check_bumper_ends(asm), "bumper: its free end", "comes off its rail"))
+            asm = Assembly(parts=[L.cover(), L.bumper()], screws=L.bumper_screws())
+            self.assertTrue(fails(C.check_bumpers(asm), "bumper: one end, pulled up to", "comes off its rail"))
         finally:
             L.RAIL_HEAD = old
+
+    def test_a_bumper_held_by_one_rail_fails(self):
+        # The unscrewed post's jaws cut away: the screwed post's dovetail
+        # must not hide that the other end peels off its rail.
+        b = self.part("bumper")
+        cut = box(L.RAIL_S - 8, L.RAIL_S + 9, -2, L.RAIL_D + L.SLIDE + 0.01, 39, 72).moved(L.corner_location(0))
+        asm = Assembly(parts=[self.part("cover"), replace(b, shape=b.shape - cut)], screws=L.bumper_screws())
+        f = C.check_bumpers(asm)
+        self.assertTrue(fails(f, "bumper: the other end", "comes off its rail"), f)
+        self.assertFalse(fails(f, "bumper: one end"), f)
+
+    def test_a_bumper_with_no_way_off_fails(self):
+        asm = Assembly(parts=[self.part("cover"), replace(self.part("bumper"), outward=None)])
+        self.assertTrue(fails(C.check_bumpers(asm), "bumper copy 3: it declares no way off the cover"))
+
+    def test_the_cover_s_armour(self):
+        # Plates stand PLATE_T proud of the side walls; the panel lines and
+        # bolt heads are engraved INLAY_DEPTH into the lid's flat top.
+        cov = self.part("cover")
+        across_x = C.bbox6(cov.shape & box(0, 100, -1, 1, *L.PLATE_Z))  # the right wall's middle
+        across_y = C.bbox6(cov.shape & box(-1, 1, -100, 0, *L.PLATE_Z))  # the rear wall's middle
+        self.assertAlmostEqual(across_x[1], L.BOX_X + L.PLATE_T, places=3)
+        self.assertAlmostEqual(across_y[2], -L.BOX_Y - L.PLATE_T, places=3)
+        cut = L.panel_lines()
+        self.assertLess(C.common(cov.shape, cut), C.VOLUME_TOL)
+        self.assertLess(C.common(cov.inlays, cut), C.VOLUME_TOL)
+        self.assertAlmostEqual(cut.bounding_box().min.Z, L.LID_Z1 - L.INLAY_DEPTH, places=6)
 
     def test_without_the_t_display_holder_the_lm2596_lifts_out(self):
         # The holder's plate keeps the LM2596 and its standoffs down.

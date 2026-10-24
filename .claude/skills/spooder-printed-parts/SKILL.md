@@ -74,7 +74,7 @@ No part may need support.
 - **Faces on the bed get no flat recesses:** a recess there bridges over air.
   - Bevel windows at 45° instead (`extrude(..., taper=45)`).
   - Engraving whose strokes are under 3 mm wide is fine (the lettering, the chevrons).
-- **Styling on the cover is recessed, never raised:** a raised detail on the lid would keep the lid off the bed.
+- **Styling on the lid is inlaid or engraved, never raised:** a raised detail would keep the lid off the bed, and an engraving's strokes stay under 3 mm (a bridge). On the walls, raised armour plates print lid-down with 45° edges all round.
 - **Things that lean out lean at 45°:**
   - gussets under arms;
   - 45° undersides on pegs and lips;
@@ -109,7 +109,7 @@ No part may need support.
 ## Assembly and service
 
 - **Keep everything electrical on the deck,** so the cover is a bare shell that lifts off after its screws, with nothing to unplug.
-- **A spring fixed at both ends pries its mounts.** A leaf or arch pressed flat pushes its ends apart, several times the load on a shallow one, so fix one end and let the other slide (the bumpers' free hook); a check moves the free end through the spring's travel.
+- **A spring fixed at both ends pries its mounts.** A leaf or arch pressed flat pushes its ends apart, several times the load on a shallow one, so fix one end and let the other slide, with a check that moves the free end through the spring's travel. A hollow shell (the bumpers: 3 walls, no infill) gives without pushing on its mounts.
 - **Hold parts captive by geometry where possible.** The SZBK07's stops are taller than the lid's gap above it, so the cover holds it; tape only holds it with the cover off.
 - **Check access for every connector and adjuster:**
   - USB-C plugs reach through the wall: receptacle 6 mm or less from the outer face, with a 14 × 13 opening;

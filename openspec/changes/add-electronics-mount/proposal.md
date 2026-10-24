@@ -27,8 +27,8 @@ The sensors planned in `add-body-sensing` and the leg end-stops need room reserv
 - **Cooling:** passive, ready for fans. Air comes in low on one side and leaves high on the other, past the SZBK07. There is a 30 mm exhaust fan position (blowing out), an optional 30 mm intake position, both in holders on the deck, and no roof vents.
 - **Printing and look:**
   - everything in PETG on a Bambu P1P with an AMS, without supports;
-  - a faceted, industrial body;
-  - yellow PETG leaf-spring bumpers that are replaceable;
+  - a faceted body styled as a rugged sci-fi case, with armour plates and panel lines;
+  - yellow PETG corner guards as bumpers, printed hollow, that are replaceable;
   - a black cover with flush yellow inlays on the lid, exported as a multi-colour 3MF.
 - **Documentation:** the hardware-check skill's wiring names the LM2596 as the logic buck that feeds both boards on their pins, its dropout near an empty pack, and the fan supply.
 

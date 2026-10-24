@@ -38,7 +38,7 @@ from build123d import Axis, Location, Plane, Polygon, Solid, extrude
 
 import measurements as M
 from model import (FANS, IMU, J6, LM2596_OUTPUT_ROUTE, SCHOTTKY, SENSOR_HEADER, SERVO_2040, SIDES, SZBK07, AirChannel,
-                   Assembly, Box6, Exposure, Fan, Floating, Held, ImuPad, Opening, Part, Route, Screw, Support, Terminal, Vent, box,
+                   Assembly, Box6, Exposure, Fan, Held, ImuPad, Opening, Part, Route, Screw, Support, Terminal, Vent, box,
                    box6, teardrop, turned)
 
 UP = (0.0, 0.0, 1.0)
@@ -377,6 +377,28 @@ NAME_ADVANCE = 8.0
 CHEVRONS = ((-12.0, 22.0), (-12.0, 28.0), (-12.0, 34.0))
 CHEVRON_ARM = 8.0
 INLAY_STROKE = 2.0
+# Yellow hazard stripes inlaid along the lid's rear edge: 45-degree strokes
+# INLAY_STROKE wide across, at this pitch, within the band (x0, x1, y0, y1).
+# Source: chosen, clear of the rear cover screw.
+HAZARD_BAND = (-30.0, 26.0, -52.0, -42.0)
+HAZARD_PITCH = 5.0
+# Armour plates on the side walls: raised PLATE_T with 45-degree edges all
+# round, between the guards' wraps and above the groove, under the top
+# chamfer; the inlet's grille is cut through the left one. (length along the
+# wall, robot-frame centre of the wall, turn). Source: chosen.
+PLATE_T = 1.6
+PLATE_Z = (41.0, 64.0)
+PLATES = ((44.0, (BOX_X, 0.0), 0.0), (44.0, (-BOX_X, 0.0), 180.0), (50.0, (0.0, BOX_Y), 90.0), (50.0, (0.0, -BOX_Y), -90.0))
+# Panel lines engraved in the lid, PANEL_LINE wide and INLAY_DEPTH deep (a
+# bridge as printed), ending PANEL_END short of the top chamfer: (x0, x1,
+# y0, y1) each. One runs along the left of the window's bevel, two across
+# it, clear of the inlays and the cover's screws. Source: chosen.
+PANEL_LINE = 1.0
+PANEL_END = 1.5
+PANEL_LINES = ((33.5, 34.5, -80.0, 80.0), (-80.0, 34.0, -37.5, -36.5), (-80.0, 34.0, 45.5, 46.5))
+# Hex bolt heads engraved at the panels' corners: across corners. Source: chosen, under a bridge.
+BOLT_D = 2.6
+BOLTS = ((30.5, -33.5), (30.5, 42.5), (-48.0, -33.5), (-40.0, 42.5), (30.5, -40.5), (30.5, 49.5))
 # Letters on a 6 x 10 grid, as rectangles (x0, y0, x1, y1). Source: chosen.
 LETTERS = {
     "S": ((0, 8, 6, 10), (0, 4, 2, 10), (0, 4, 6, 6), (4, 0, 6, 6), (0, 0, 6, 2)),
@@ -1079,7 +1101,7 @@ def letter(ch: str, x: float, y: float) -> Solid:
 
 
 def inlays():
-    """The name and the chevrons, flush in the lid's top."""
+    """The name, the chevrons and the hazard stripes, flush in the lid's top."""
     width = (len(NAME) - 1) * NAME_ADVANCE + 6 * NAME_SCALE
     x = NAME_CENTRE[0] - width / 2
     y = NAME_CENTRE[1] - 5 * NAME_SCALE
@@ -1089,10 +1111,44 @@ def inlays():
         out = s if out is None else out + s
     k = INLAY_STROKE * SQRT2  # a 45-degree stroke's height
     a = CHEVRON_ARM
+    z0 = LID_Z1 - INLAY_DEPTH
     for cx, cy in CHEVRONS:
         pts = [(cx - a, cy), (cx, cy + a), (cx + a, cy), (cx + a, cy - k), (cx, cy + a - k), (cx - a, cy - k)]
-        face = Plane.XY.offset(LID_Z1 - INLAY_DEPTH) * Polygon(*pts, align=None)
-        out = out + extrude(face, amount=INLAY_DEPTH, dir=(0, 0, 1)).solid()
+        out = out + xy_prism(pts, z0, LID_Z1)
+    x0, x1, y0, y1 = HAZARD_BAND
+    band = box(x0, x1, y0, y1, z0, LID_Z1)
+    rise = y1 - y0
+    x = x0 - rise
+    while x < x1:
+        out = out + (xy_prism([(x, y0), (x + k, y0), (x + k + rise, y1), (x + rise, y1)], z0, LID_Z1) & band)
+        x += HAZARD_PITCH
+    return out
+
+
+def plates() -> Solid:
+    """The armour plates, on the side walls."""
+    out = None
+    for length, (x, y), turn in PLATES:
+        p = box(-EMBED, PLATE_T, -length / 2, length / 2, *PLATE_Z)
+        p = p.chamfer(PLATE_T - 0.01, None, [e for e in p.edges() if abs(e.bounding_box().min.X - PLATE_T) < 1e-6
+                                             and abs(e.bounding_box().max.X - PLATE_T) < 1e-6])
+        p = p.moved(Location((x, y, 0), (0, 0, turn)))
+        out = p if out is None else out + p
+    return out
+
+
+def panel_lines() -> Solid:
+    """The lid's engraved panel lines and bolt heads."""
+    z0 = LID_Z1 - INLAY_DEPTH
+    flat = grown_octagon(-(COVER_CHAMFER + PANEL_END), z0, LID_Z1 + 1.0)
+    out = None
+    for x0, x1, y0, y1 in PANEL_LINES:
+        c = box(x0, x1, y0, y1, z0, LID_Z1 + 1.0) & flat
+        out = c if out is None else out + c
+    r = BOLT_D / 2
+    for x, y in BOLTS:
+        out = out + xy_prism([(x + r * math.cos(math.radians(60 * i)), y + r * math.sin(math.radians(60 * i)))
+                              for i in range(6)], z0, LID_Z1 + 1.0)
     return out
 
 
@@ -1117,7 +1173,8 @@ def window_cutter() -> Solid:
 
 def cover() -> Part:
     """The cover: a faceted shell standing on the deck's rim, its top edge
-    chamfered, a groove round its walls, the bumpers' rails on its corner faces, the window over the T-Display, the
+    chamfered, a groove round its walls, armour plates on its side walls, the
+    guards' rails on its corner faces, panel lines in its lid, the window over the T-Display, the
     vents, the XT60's notch, the screw holes, hold-down blocks over the
     SZBK07's corners and the intake fan, and the flush inlays. It prints lid-down."""
     outer = octagon(BOX_X, BOX_Y, BOX_DIAG, COVER_Z0, LID_Z1)
@@ -1126,7 +1183,7 @@ def cover() -> Part:
     d = GROOVE_DEPTH
     shape = shape - (octagon(BOX_X + 1, BOX_Y + 1, BOX_DIAG + SQRT2, *GROOVE_Z)
                      - octagon(BOX_X - d, BOX_Y - d, BOX_DIAG - d * SQRT2, GROOVE_Z[0] - 1, GROOVE_Z[1] + 1))
-    shape = shape + rails() - rail_pilots()
+    shape = shape + rails() - rail_pilots() + plates() - panel_lines()
     for xa, xb in ((SZ_BOX[0], SZ_BOX[0] + SZ_HOLD[0]), (SZ_BOX[1] - SZ_HOLD[0], SZ_BOX[1])):
         for ya, yb in ((SZ_BOX[2], SZ_BOX[2] + SZ_HOLD[1]), (SZ_BOX[3] - SZ_HOLD[1], SZ_BOX[3])):
             shape = shape + box(xa, xb, ya, yb, SZ_BOX[5] + SZ_HOLD_GAP, LID_Z0 + EMBED)
@@ -1136,7 +1193,7 @@ def cover() -> Part:
     for x, y in COVER_SCREWS:
         shape = shape - cyl(M3_D / 2, x, y, LID_Z0 - 1, LID_Z1 + 1)
     iy0, iy1, iz0, iz1 = inlet_span()
-    shape = shape - vent_slots(-(iy0 + iy1) / 2, iz0, iz1, (BOX_X - WALL - 1, BOX_X + 1), 180)  # turned to face -x
+    shape = shape - vent_slots(-(iy0 + iy1) / 2, iz0, iz1, (BOX_X - WALL - 1, BOX_X + PLATE_T + 1), 180)  # turned to face -x
     ov0, ov1, oz0, oz1 = outlet_span()
     shape = shape - vent_slots((ov0 + ov1) / 2, oz0, oz1, (EXH_U1 + 0.1, BOX_DIAG / SQRT2 + 1), DIAG)
     ny0, ny1, nz1 = XT_NOTCH
@@ -1149,16 +1206,16 @@ def cover() -> Part:
 
 # Each corner face carries two vertical rails, a dovetail near each end of
 # the face and clear of the outlet's grille in the front-right one; a yellow
-# PETG bumper slides down onto them. The bumper is a hook round each rail,
-# joined by a curved leaf that stands off the face and flexes in a knock;
-# the hooks stand past the side walls and the bumper's top above the lid.
-# A knock that flattens the leaf pushes its ends apart, so only the -s hook
-# is fixed (screwed to its rail); the +s hook's slot is FLOAT_SLOT longer
-# towards -s, so that hook slides outwards along its rail's dovetail, which
-# still keeps it on. The rails' tops are 45-degree wedges flush with the top
-# chamfer, and the bumper's slots end in the same slope, which is its stop.
-# Every corner's bumper is the same part, turned: the corner faces are
-# alike. Source: chosen (design.md "Bumpers", "Assumptions", task group 5).
+# PETG corner guard slides down onto them. The guard wraps the corner: a post
+# over each end of the face, round its rail, that wraps onto the side walls
+# above the inlet's grille, and a cap over the top chamfer above the outlet's
+# grille, joining them; the middle of the face stays open for the outlet.
+# It prints hollow (3 walls, no infill, the README), so its shell gives in a
+# knock. Its posts are ridged across in V grooves. The rails' tops are
+# 45-degree wedges flush with the top chamfer, and the guard's slots end in
+# the same slope, which is its stop. Every corner's guard is the same part,
+# turned: the corner faces are alike. Source: chosen (design.md "Bumpers",
+# "Assumptions", task group 5).
 #
 # In a corner's frame: s along the face, n out of it, z up; the face's centre
 # at the origin (corner_location()).
@@ -1166,27 +1223,33 @@ CORNER_HALF = (BOX_X + BOX_Y - BOX_DIAG) * SQRT2 / 2  # half the corner face's l
 CORNER_CENTRE = ((BOX_X + BOX_DIAG - BOX_Y) / 2, (BOX_DIAG - BOX_X + BOX_Y) / 2)  # the front-right face's centre
 RAIL_S = 21.0  # each rail's centre along the face, its neck on the face. Source: chosen.
 RAIL_NECK = 3.0  # the dovetail's width at the face. Source: chosen.
-RAIL_HEAD = 6.4  # its width at its outer face. Source: chosen, so the free hook's longer slot still hooks on.
+RAIL_HEAD = 6.4  # its width at its outer face. Source: chosen.
 RAIL_D = 3.0  # how far it stands off the face. Source: chosen.
 RAIL_Z0 = 40.0  # its foot, above the groove. Source: chosen.
 RAIL_TOP = LID_Z1 - COVER_CHAMFER  # where the top chamfer begins: the wedge ends flush with it
 SLIDE = 0.2  # sliding fit round the rail, PETG on PETG, normal to each face. Source: chosen, above the skill's 0.15 for TPU.
-HOOK_WALL = 1.2  # the hook's wall beside the rail's head. Source: chosen, three perimeters.
-HOOK_BACK = 1.6  # its wall outside the rail. Source: chosen.
-BUMPER_Z0 = 44.0  # the hooks' foot. Source: chosen, 25 mm along the rails.
-BUMPER_RISE = 3.5  # how far the bumpers' tops stand above the lid's. Source: chosen, above the cover's screw heads.
+HOOK_WALL = 1.2  # the guard's wall beside the rail's head. Source: chosen, three perimeters.
+HOOK_BACK = 1.8  # its wall outside the rail. Source: chosen.
+BUMPER_RISE = 3.5  # how far the guards' tops stand above the lid's. Source: chosen, above the cover's screw heads.
 BUMPER_Z1 = LID_Z1 + BUMPER_RISE
-LEAF_T = 1.5  # Source: design.md "Bumpers" (1.2 to 1.6 mm).
-LEAF_H = 12.0  # the leaf's height, down from the bumper's top, above most of the outlet's grille. Source: chosen.
-LEAF_APEX = 8.0  # the leaf's outer face off the corner face at its middle. Source: chosen, inside the keep-clear radius.
-LEAF_POINTS = 41
-FLOAT_SLOT = 1.0  # how much longer the free hook's slot is. Source: chosen, above leaf_travel() (about 0.65).
-# An M2 x 6 self-tapping screw through the fixed hook into its rail keeps the
-# bumper on its rails when the robot is turned over or shaken; it comes out
-# from outside to change the bumper. At this height, under the leaf; the
-# rail's pilot reaches into the cover's wall, leaving this much of it.
-# Source: chosen; the pilot as the IMU's (PILOT_M2_D), the clearance the
-# skill's M2.5 clearance (2.9) less 0.5.
+GUARD_T = RAIL_D + SLIDE + HOOK_BACK  # its thickness off the corner face and the side walls
+GUARD_S = RAIL_S - RAIL_HEAD / 2 - SLIDE - HOOK_WALL  # the posts' inner edges along the face
+GUARD_JAW = 3.4  # how far the posts reach past the face's ends, round the rails' heads. Source: chosen, HOOK_WALL past them.
+GUARD_Z0 = RAIL_Z0  # the posts' foot
+GUARD_WRAP = 6.0  # how far it wraps along the side walls. Source: chosen.
+GUARD_WRAP_Z0 = 57.0  # the wraps' foot, above the inlet's grille (55.85). Source: chosen.
+GUARD_CAP_Z0 = 69.0  # the cap's foot, above the outlet's grille (68.45). Source: chosen.
+GUARD_CAP_IN = 4.4  # how far the cap reaches in from the walls, over the chamfer and clear of the cover's screw heads. Source: chosen.
+GUARD_BEVEL = 2.0  # the 45-degree bevel round its top. Source: chosen.
+# The posts' V grooves: 1 mm deep with 45-degree flanks, between ridges
+# centred at these heights, clear of the retaining screw's head. Source: chosen.
+RIDGE_Z = (43.0, 47.0, 57.0, 61.0, 65.0)
+RIDGE_DEPTH = 1.0
+# An M2 x 6 self-tapping screw through one post into its rail keeps the
+# guard on its rails when the robot is turned over or shaken; it comes out
+# from outside to change the guard. The rail's pilot reaches into the
+# cover's wall, leaving this much of it. Source: chosen; the pilot as the
+# IMU's (PILOT_M2_D), the clearance the skill's M2.5 clearance (2.9) less 0.5.
 RETAIN_Z = 52.0
 RETAIN_SCREW = (2.0, 6.0)  # its shank's diameter and length
 RETAIN_CLEAR_D = 2.4
@@ -1200,10 +1263,9 @@ def corner_location(k: int) -> Location:
     return Location((sx * cx, sy * cy, 0), (0, 0, (-45.0, 45.0, 135.0, -135.0)[k]))
 
 
-def rail_profile(s0: float, grow: float = 0.0, n0: float = -EMBED, longer: float = 0.0) -> list[tuple[float, float]]:
+def rail_profile(s0: float, grow: float = 0.0, n0: float = -EMBED) -> list[tuple[float, float]]:
     """The dovetail's outline in (s, n), from n0 to its outer face, grown by
-    `grow` normal to each side, and swept `longer` towards -s (a free
-    hook's slot)."""
+    `grow` normal to each side."""
     k = (RAIL_HEAD - RAIL_NECK) / 2 / RAIL_D  # its half-width grows k per mm out
     shift = grow * math.sqrt(1 + k * k)  # a flank moved `grow` normal to itself, along s
 
@@ -1211,7 +1273,7 @@ def rail_profile(s0: float, grow: float = 0.0, n0: float = -EMBED, longer: float
         return RAIL_NECK / 2 + k * n + shift
 
     n1 = RAIL_D + grow
-    return [(s0 - longer - half(n0), n0), (s0 + half(n0), n0), (s0 + half(n1), n1), (s0 - longer - half(n1), n1)]
+    return [(s0 - half(n0), n0), (s0 + half(n0), n0), (s0 + half(n1), n1), (s0 - half(n1), n1)]
 
 
 def xy_prism(pts, z0: float, z1: float) -> Solid:
@@ -1221,7 +1283,7 @@ def xy_prism(pts, z0: float, z1: float) -> Solid:
 
 def below_wedge(offset: float = 0.0) -> Solid:
     """Everything in a corner's frame with n + z at most RAIL_TOP + offset:
-    under the rails' 45-degree tops (offset 0), or the bumper's slots' (its
+    under the rails' 45-degree tops (offset 0), or the guard's slots' (its
     SLIDE normal to them)."""
     t = RAIL_TOP + offset
     return yz_prism([(-10.0, 0.0), (20.0, 0.0), (20.0, t - 20.0), (-10.0, t + 10.0)], -40.0, 40.0)
@@ -1246,7 +1308,7 @@ def rails() -> Solid:
 
 
 def rail_pilots() -> Solid:
-    """The retaining screws' pilots, through each fixed hook's rail into the cover's
+    """The retaining screws' pilots, through each screwed post's rail into the cover's
     wall: horizontal as the cover prints, so teardrops pointing down (up as
     printed)."""
     n0, n1 = -(WALL - RETAIN_WALL_LEFT), RAIL_D + 0.5
@@ -1254,68 +1316,76 @@ def rail_pilots() -> Solid:
 
 
 def bumper_screws() -> list[Screw]:
-    """Each bumper's retaining screw: the head on the fixed hook's outer
+    """Each guard's retaining screw: the head on the screwed post's outer
     face, driven in along -n from outside."""
     found = []
-    n = RAIL_D + SLIDE + HOOK_BACK
     for k in range(4):
         a = math.radians((-45.0, 45.0, 135.0, -135.0)[k])
         cx, cy = (CORNER_CENTRE[0] * (1, -1, -1, 1)[k], CORNER_CENTRE[1] * (1, 1, -1, -1)[k])
         out = (-math.sin(a), math.cos(a), 0.0)  # n in the robot's frame
-        x = cx - RAIL_S * math.cos(a) + n * out[0]
-        y = cy - RAIL_S * math.sin(a) + n * out[1]
+        x = cx - RAIL_S * math.cos(a) + GUARD_T * out[0]
+        y = cy - RAIL_S * math.sin(a) + GUARD_T * out[1]
         found.append(Screw(f"bumper {k + 1} screw", (x, y, RETAIN_Z), out, shank=RETAIN_SCREW))
     return found
 
 
-def leaf_arc() -> tuple[float, float, float]:
-    """The leaf's outer face: its radius, its centre's n, and its half-angle."""
-    sag = LEAF_APEX - (RAIL_D + SLIDE + HOOK_BACK)
-    radius = (RAIL_S ** 2 + sag ** 2) / (2 * sag)
-    return radius, LEAF_APEX - radius, math.asin(RAIL_S / radius)
+def grown_octagon(grow: float, z0: float, z1: float) -> Solid:
+    """The box's footprint grown `grow` out from every wall (in, if negative)."""
+    return octagon(BOX_X + grow, BOX_Y + grow, BOX_DIAG + grow * SQRT2, z0, z1)
 
 
-def leaf_travel() -> float:
-    """How far the free hook moves when the leaf is pressed flat: its centre
-    line's arc less its chord."""
-    radius, _, a = leaf_arc()
-    r = radius - LEAF_T / 2
-    return 2 * a * r - 2 * r * math.sin(a)
+def cover_outside(grow: float) -> Solid:
+    """The cover's outside as a solid, grown `grow` normal to its walls, its
+    top and its top chamfer."""
+    top = LID_Z1 + grow
+    body = grown_octagon(grow, COVER_Z0 - 1.0, top)
+    return body.chamfer(COVER_CHAMFER + grow * (2 - SQRT2), None, top_edges(body, top))
 
 
-def leaf_profile() -> list[tuple[float, float]]:
-    """The leaf: a circular band between the hooks, its outer face through
-    the hooks' outer faces at the rails and LEAF_APEX out at its middle."""
-    radius, cn, a = leaf_arc()
-    angles = [-a + 2 * a * i / (LEAF_POINTS - 1) for i in range(LEAF_POINTS)]
-    outer = [(radius * math.sin(t), cn + radius * math.cos(t)) for t in angles]
-    inner = [((radius - LEAF_T) * math.sin(t), cn + (radius - LEAF_T) * math.cos(t)) for t in reversed(angles)]
-    return outer + inner
+def ridges() -> Solid:
+    """The V grooves round the guards' outside: below and above each ridge
+    in RIDGE_Z, cut RIDGE_DEPTH into GUARD_T with 45-degree flanks."""
+    h = RIDGE_DEPTH * 2  # each ridge's band: its flat top RIDGE_DEPTH out past the guard, sloping in to its ends
+    out = None
+    for zc in RIDGE_Z:
+        z0, z1 = zc - h, zc + h
+        crest = grown_octagon(GUARD_T + RIDGE_DEPTH, z0, z1)
+        crest = crest.chamfer(h - 0.02, None, top_edges(crest, z0) + top_edges(crest, z1))
+        band = grown_octagon(GUARD_T + 10.0, z0, z1) - crest
+        out = band if out is None else out + band
+    return out
 
 
 def bumper() -> Part:
-    """The front-right corner's bumper, copied to the other three corners. It
-    prints on its top (up -z): the leaf hangs from the top, and the slots'
-    sloped ends face up as printed."""
-    half = RAIL_HEAD / 2 + SLIDE + HOOK_WALL
-    ne = RAIL_D + SLIDE + HOOK_BACK
-    shape = None
-    for s0, longer in ((-RAIL_S, 0.0), (RAIL_S, FLOAT_SLOT)):
-        hook = box(s0 - longer - half, s0 + half, SLIDE, ne, BUMPER_Z0, BUMPER_Z1)
-        slot = xy_prism(rail_profile(s0, SLIDE, -1.0, longer), BUMPER_Z0 - 1.0, BUMPER_Z1 + 1.0) \
-            & below_wedge(SLIDE * SQRT2)
-        hook = hook - slot
-        if not longer:
-            hook = hook - teardrop(RETAIN_CLEAR_D / 2, HOOK_BACK + 2.0, s0, ne - HOOK_BACK / 2, RETAIN_Z, "y", DOWN)
-        shape = hook if shape is None else shape + hook
-    shape = shape + xy_prism(leaf_profile(), BUMPER_Z1 - LEAF_H, BUMPER_Z1)
+    """The front-right corner's guard, copied to the other three corners. It
+    prints on its top (up -z): the posts and wraps rise from the cap, and the
+    slots' sloped ends face up as printed."""
     first = corner_location(0)
+    z1 = BUMPER_Z1
+
+    def corner_box(s0: float, s1: float, n0: float, n1: float, z0: float) -> Solid:
+        return box(s0, s1, n0, n1, z0, z1 + 1.0).moved(first)
+
+    outside = grown_octagon(GUARD_T, GUARD_Z0, z1)
+    outside = outside.chamfer(GUARD_BEVEL, None, top_edges(outside, z1))
+    # The corner's quarter of the box: the face and GUARD_WRAP of each side wall.
+    quarter = box(BOX_DIAG - BOX_Y - GUARD_WRAP, 200.0, BOX_DIAG - BOX_X - GUARD_WRAP, 200.0, GUARD_Z0 - 1.0, z1 + 1.0)
+    posts = (outside & corner_box(GUARD_S, CORNER_HALF + GUARD_JAW, 0.0, 2 * GUARD_T, GUARD_Z0 - 1.0)) \
+        + (outside & corner_box(-CORNER_HALF - GUARD_JAW, -GUARD_S, 0.0, 2 * GUARD_T, GUARD_Z0 - 1.0))
+    wraps = ((outside - grown_octagon(0.0, GUARD_Z0 - 1.0, z1 + 1.0)) & quarter
+             & box(-200.0, 200.0, -200.0, 200.0, GUARD_WRAP_Z0, z1 + 1.0)) \
+        - corner_box(-GUARD_S, GUARD_S, -40.0, 40.0, GUARD_Z0 - 1.0)
+    cap = (outside - grown_octagon(-GUARD_CAP_IN, GUARD_Z0 - 1.0, z1 + 1.0)) & quarter \
+        & box(-200.0, 200.0, -200.0, 200.0, GUARD_CAP_Z0, z1 + 1.0)
+    shape = (posts + wraps + cap) - cover_outside(SLIDE) - ridges()
+    for s0 in (-RAIL_S, RAIL_S):
+        slot = xy_prism(rail_profile(s0, SLIDE, -1.0), GUARD_Z0 - 1.0, z1 + 1.0) & below_wedge(SLIDE * SQRT2)
+        shape = shape - slot.moved(first)
+    shape = shape - teardrop(RETAIN_CLEAR_D / 2, HOOK_BACK + 2.0, -RAIL_S, GUARD_T - HOOK_BACK / 2, RETAIN_Z,
+                             "y", DOWN).moved(first)
     copies = tuple(corner_location(k) * first.inverse() for k in (1, 2, 3))
-    s1 = RAIL_S - FLOAT_SLOT - half - 1.0  # the free end: its hook and the leaf's last millimetre
-    region = box(s1, s1 + 40.0, -5.0, LEAF_APEX + 5.0, BUMPER_Z0 - 5.0, BUMPER_Z1 + 5.0).moved(first)
     a = math.radians(-45.0)
-    floating = Floating(region, (math.cos(a), math.sin(a), 0.0), (-math.sin(a), math.cos(a), 0.0), leaf_travel())
-    return Part("bumper", shape.moved(first), "bumper", DOWN, "yellow", copies=copies, floating=floating)
+    return Part("bumper", shape, "bumper", DOWN, "yellow", copies=copies, outward=(-math.sin(a), math.cos(a), 0.0))
 
 
 def channel() -> AirChannel:
