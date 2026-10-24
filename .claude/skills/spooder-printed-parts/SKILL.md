@@ -5,12 +5,13 @@ description: Workflow and rules for Spooder's own 3D-printed parts, generated as
 
 # Spooder printed parts
 
-Printed parts are code: one build123d script per part set, which generates the geometry from named measurements, checks it and only then writes the print and CAD files. A part set lives in its own `hardware/<name>/` folder with the script, a preview renderer and a README covering printing, hardware, assembly and the measurements to check; the electronics mount (`add-electronics-mount`) is the first. The names in backticks below (`teardrop()`, `frame_height()`, `overhangs()`, `PRINT_UP`, `BRIDGE` and so on) are the conventions such a script uses.
+Printed parts are code: one build123d script per part set, which generates the geometry from named measurements, checks it and only then writes the print and CAD files. A part set lives in its own `hardware/<name>/` folder with the script, a preview renderer and a README covering printing, hardware, assembly and the measurements to check; the electronics mount (`add-electronics-mount`) is the first. The names in backticks below (`teardrop()`, `FrameMap`, `check_overhangs()`, `Part.print_up`, `BRIDGE` and so on) are the mount's, in its `model.py`, `layout.py` and `checks.py`; a new part set follows the same conventions.
 
 ## Toolchain
 
-- **build123d 0.13.0**, pinned in the script's inline metadata with `[tool.uv] exclude-newer` (older build123d breaks on a newer ocpsvg). Add numpy, trimesh and matplotlib the same way, at exact versions.
-- **Run it with** `uv run --quiet --python 3.12 <script>`, wrapped in mise tasks (the mount's: `mise run cad`, `mise run cad-preview`). `--check` checks without writing files.
+- **build123d 0.13.0**, pinned in the script's inline metadata (`requires-python = "==3.12.*"`) with `[tool.uv] exclude-newer` (older build123d breaks on a newer ocpsvg). Add numpy, trimesh and matplotlib the same way, at exact versions, and lock each script with `uv lock --script` into its `<script>.lock`.
+- **Run it with** `uv run --locked --quiet --script <script>`, wrapped in mise tasks (the mount's: `mise run cad`, which runs `reference_check.py`, `build.py --test` and `build.py`; `mise run cad-preview`). `--check` checks without writing files.
+- **The build writes nothing when a check fails,** and exports into a staging folder that it re-reads before replacing `print/` and `step/`.
 - **Previews:** matplotlib, with every part's triangles in one `Poly3DCollection`. Separate collections are drawn in the wrong depth order.
 - **Never name a script after a standard-library module.** An `inspect.py` next to the script shadows the real one.
 
@@ -29,7 +30,8 @@ flowchart LR
 ```
 
 - **Every size is a named constant at the top of the script**, with its source in a comment (drawing, datasheet, STEP model, measured).
-  - Unverified values go in the README's "Measure before printing" list, with the name of the constant to change.
+  - Unverified values go in the README's "Measure before printing" list, with the name of the constant to change. That includes every size of a bought part the layout or the checks use that no reference file in the repository gives, however standard it looks (a board's height with its connectors, a module's 1.6 mm board): reviews flagged such assumed values twice in the mount. `test_measurements.py` requires each listed value to be read by `layout.py` or `checks.py`, or named in `REFERENCE_ONLY`.
+  - A layout that relies on a property of a measured value (terminals on the short ends, holes that pass the screw) checks it, as `layout.measurement_failures()` does, so a measurement that breaks the layout fails the build.
 - **Look at the renders, not only the check output.** The open assembly shows the held parts in blue and the wiring zones in yellow. Send the user a screenshot at milestones.
 - **Codex review:**
   - give it the diff against the previous version, the reference files and the goals, and ask for physical and assembly problems the checks cannot see;
@@ -43,14 +45,14 @@ flowchart LR
 
 - **Model in the robot's frame:** the frame top's coordinates, mm, +y forward, the frame top at z 25.75. Export parts in their assembled position, so they load into an assembly with `hardware/aecert-hexapod-v1/stl/`.
   - The README gives each part's print orientation.
-  - `PRINT_UP` in the script records it for the checks.
+  - `Part.print_up` records it for the checks (the robot-frame direction that is up as printed).
 - **Reference models:**
   - Place vendor STEP models by a rotation, never a mirror, and turn their solids into boxes for the checks.
   - Drop solids that don't exist on the real board, such as header pins on a board with soldered wires, and record that in the docstring.
   - For a board with no model (the Servo 2040), build boxes from the drawing's dimensions (`hardware/pimoroni-servo2040/README.md`).
 - **The frame top STL is the truth for what lies under the deck.**
   - The ring is solid at |x| ≥ 52 and along the front and rear edges; most of the rest is open.
-  - Query the STL with `frame_height()` (a point-in-triangle height map), never guess.
+  - Query the STL through its height map (`FrameMap`, from `reference_check.height_map()`), never guess.
 - **Leg keep-clear region:** r ≤ 78.8 mm above the frame top, plus the front and rear tabs (|x| ≤ 24, |y| ≤ 79). Nothing printed goes outside it.
 
 ## Printing rules
@@ -58,15 +60,16 @@ flowchart LR
 **Orientation first.** Choose each part's print orientation before detailing it, then design every feature for that orientation:
 - the deck prints flat;
 - the cover lid-down (up is −z);
-- the cradle on the back of its portal (up is +y);
-- the bumpers upright.
+- the T-Display holder on its back, its rear face on the bed (up is +y);
+- the bumpers on their tops;
+- the spacers, standoffs, pad and fan holders as they sit in the robot.
 
 No part may need support.
 
 - **The 45° rule:** no face may look down more steeply than 45° unless it can bridge, i.e. it is at most 3 mm wide (`BRIDGE`) and hangs from material within 3 mm of every point of it. A narrow arm held at one end is a cantilever, not a bridge: give it a 45° underside.
 - **Holes running horizontally as printed are teardrops**, pointed up as printed: `teardrop(r, length, x, y, z, axis, up)`.
   - On a lid-down part, "up" is −z.
-  - A hole that is vertical in the robot can be horizontal as printed (the cradle's feet).
+  - A hole that is vertical in the robot can be horizontal as printed (on the T-Display holder, printed on its back).
   - Vertical holes stay round.
 - **Faces on the bed get no flat recesses:** a recess there bridges over air.
   - Bevel windows at 45° instead (`extrude(..., taper=45)`).
@@ -79,27 +82,28 @@ No part may need support.
 - **Every feature rises from the bed face, or from something below it as printed.** If a feature would start in mid-air:
   - extend it down to the bed;
   - add a 45° slope under it;
-  - or drop it if it's only a nicety (the cradle's USB-end front lip).
-- **Split a part when one orientation can't serve all its features.** The T-Display cradle is separate from the deck because its arms would be cantilevers if printed with the deck.
+  - or drop it if it's only a nicety.
+- **Split a part when one orientation can't serve all its features.** The T-Display holder and the fan holders are separate from the deck, sitting loose in pockets in it, held there by what lies over them.
 - **Each part is one solid.** Joining two pieces needs real overlap, not a shared edge.
   - A 0.3 mm clearance gap between a lip and the arm it hangs from leaves a floating island.
   - Merge lid openings that are less than 2 mm apart, so no sliver of lid is left between them.
 - **Coplanar contacts:** leave 0.05 mm, or the boolean leaves sliver overlaps.
-- **Bed size:** 220 mm.
+- **Bed size:** 256 mm (`BED`), at some turn about the vertical.
 
 ## Fits and fasteners
 
 | Use | Value |
 |---|---|
 | Clearance round a held part, per side (`FIT`) | 0.3 |
-| Sliding fit, TPU on a PLA rail | 0.15 (measured normal to the slope too) |
+| Sliding fit, PETG on a PETG rail (`SLIDE`) | 0.2, normal to each face (0.15 for a TPU bumper) |
 | Walls | 2.4 |
 | M3 clearance | 3.4; ISO 7380 button-head counterbore 6.4 × 2.0 |
 | M3 heat-set insert (`M3_INSERT`) | Ø4.4 × 5, the frame's size; a teardrop when horizontal |
-| M2.5 self-tapping into PLA | pilot 2.2, clearance 2.9 |
-| Board standoffs | 5 mm (Servo 2040) |
+| M2.5 self-tapping into PETG | pilot 2.2 (`PILOT_M25_D`), clearance 2.9 |
+| M2 self-tapping into PETG | pilot 1.6 (`PILOT_M2_D`) |
+| Board standoffs | as the stack under the board needs (the Servo 2040's clear the LSM6DSO's pad under it: `S2_STANDOFF`) |
 
-- **Screws that are undone in service go into heat-set inserts.** Self-tapping is for fit-once parts (boards, the cradle's feet).
+- **Screws that are undone in service go into heat-set inserts.** Self-tapping is for fit-once parts (boards and modules). An exception needs its reason in the change's design: the bumpers' M2 screws are self-tapping because an M2 insert would cut through the rail's 3 mm neck, and a bumper is replaced only when it breaks.
 - **Every screw needs a straight driver path,** checked with a Ø4 cylinder above the head.
 
 ## Assembly and service
@@ -130,7 +134,8 @@ No part may need support.
 - wiring zones are clear;
 - tie holes and slots have room under them on the frame;
 - the cover encloses everything except what is meant to show through it;
-- part-specific checks: the rail's wedge and slot clearance, cradle contact at both ends of the board, captive stops, screwdriver paths.
+- part-specific checks: the bumpers' reach, retention, stop and removal, the holder's bearing on the T-Display's bare spots, captive stops, holders kept in their pockets, screwdriver paths, the fans' seats and the air channel;
+- the export: each distinct part once, re-read and compared with the built part.
 
 ## build123d pitfalls
 

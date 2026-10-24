@@ -13,6 +13,7 @@ How a reviewer (Codex, a review agent or a person) reviews a change here. The `d
 | Desktop calibrator | it shows a state the robot is not in, sends without control, or writes an export that does not round-trip |
 | Tests, golden files | they pass for the wrong reason, or a golden file was regenerated to match a bug |
 | Docs, specs, skills | they lie: a path, symbol, value or behaviour that the code does not have |
+| Printed parts (`hardware/spooder-electronics-mount/`) | a part needs support or does not fit the bed, a check passes geometry it should fail (it samples past the bad case), a size the layout uses is assumed without being listed to measure, or an exported file differs from the checked part |
 | Tooling, mise tasks, the workflow | they change the wrong tree, lose uncommitted work, or resolve an unpinned dependency |
 
 ## Severity
@@ -37,7 +38,7 @@ Start with the count: "N findings: I important, n nits, p pre-existing", or "Not
 ## Paths to skip
 
 - `external/` (pinned SDKs; their pins in `.gitmodules` and the submodule commits are reviewed);
-- `hardware/` (upstream's parts, copied unchanged);
+- `hardware/`'s reference folders (`aecert-hexapod-v1/`, `lilygo-t-display/`, `pimoroni-servo2040/`, `mg996r/`: copied unchanged), and the generated `print/`, `step/` and `images/` of `hardware/spooder-electronics-mount/` (its Python is reviewed);
 - `.archify/`, `docs/images/`, `desktop/assets/` renders;
 - `test/golden/` contents, except to check that a regeneration is deliberate and matches the change;
 - `firmware/bridge/main/fonts/` (generated).
@@ -52,7 +53,9 @@ Look for these first; each has happened here:
 - a leg entering its cycle part-way through and jumping onto the path;
 - a servo enabled without a pulse going to mid-travel;
 - non-ASCII debug text on the USB port, which carries binary frames too;
-- a counter baseline missed after a link gap, replaying a request.
+- a counter baseline missed after a link gap, replaying a request;
+- a spec scenario or task with no measurable acceptance (no limit, conditions or units that can fail), or a requirement no task verifies;
+- a printed part's size taken as given (a board's height, a module's thickness) without a source in the repository or a place in "Measure before printing".
 
 ## Security
 

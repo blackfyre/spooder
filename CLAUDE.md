@@ -42,15 +42,17 @@ mise run virtual-robot-run  # run it, USB terminal linked at build/virtual-robot
 mise run desktop-sim      # both: the virtual robot in this terminal, the calibrator on its port
 mise run e2e             # build it, then the desktop end-to-end tests against it
 mise run bridge-screenshots  # render the bridge screen's pages to docs/images/bridge-*.png
+mise run cad             # check the electronics mount, then write its print/ and step/ files
+mise run cad-preview     # render the electronics mount to hardware/spooder-electronics-mount/images/
 mise run vulncheck       # govulncheck of desktop/ against desktop/vulncheck-baseline.txt (shrink-only)
 mise run worktree-add <name>     # delivery worktree .claude/worktrees/<name> on deliver/<name>, from origin/main
 mise run worktree-remove <name>  # remove it and its local branch
 mise run clean
 ```
 
-**Verification gates:** `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build` and `mise run e2e`. Hardware behaviour can only be checked on the boards (the `spooder-hardware-check` skill).
+**Verification gates:** `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e` and, when `hardware/spooder-electronics-mount/` changes, `mise run cad`. Hardware behaviour can only be checked on the boards (the `spooder-hardware-check` skill).
 
-**CI** (`.github/workflows/ci.yml`) runs the same gates on a clean Ubuntu runner on every push to `main` and `deliver/*` and every pull request, and nightly with `mise run vulncheck`. It is an independent check, not a merge gate: the delivery workflow's own gates decide merges. Actions are pinned to commit SHAs.
+**CI** (`.github/workflows/ci.yml`) runs the same gates, except `mise run cad`, on a clean Ubuntu runner on every push to `main` and `deliver/*` and every pull request, and nightly with `mise run vulncheck`. It is an independent check, not a merge gate: the delivery workflow's own gates decide merges. Actions are pinned to commit SHAs.
 
 **Flash both boards together** when the link protocol changes (`protocol::VERSION`, now 3). A mismatched pair fails safe: each side discards the other's frames, so the link looks lost and the robot sleeps.
 
