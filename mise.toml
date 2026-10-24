@@ -149,6 +149,24 @@ run = [
   "build/bridge-screenshots/bridge-screenshots docs/images",
 ]
 
+# The electronics mount (hardware/spooder-electronics-mount): build123d
+# scripts run with uv, each locked in its <script>.lock. cad checks the
+# reference data, runs the unit tests, then checks the parts and writes their
+# print and CAD files only if every check passes.
+[tasks.cad]
+description = "Check the electronics mount and write its print (STL, 3MF) and STEP files"
+dir = "hardware/spooder-electronics-mount"
+run = [
+  "uv run --locked --quiet --script reference_check.py",
+  "uv run --locked --quiet --script build.py --test",
+  "uv run --locked --quiet --script build.py",
+]
+
+[tasks.cad-preview]
+description = "Render the electronics mount on the frame top to hardware/spooder-electronics-mount/images"
+dir = "hardware/spooder-electronics-mount"
+run = "uv run --locked --quiet --script preview.py"
+
 [tasks.virtual-robot-run]
 description = "Build and run the virtual robot, its USB port linked at build/virtual-robot/usb"
 depends = ["virtual-robot"]

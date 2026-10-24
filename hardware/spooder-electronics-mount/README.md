@@ -2,18 +2,50 @@
 
 Spooder's own printed mount for its electronics on the frame top: a deck screwed to the frame's inserts, a cover, corner bumpers and small holders. It is generated as code and checked before export (the `spooder-printed-parts` skill); the OpenSpec change `add-electronics-mount` describes it.
 
-This folder is being built. So far it holds the measurements the parts will be built from:
+This folder is being built: the generator and its checks are in place, and the part set is still empty (the deck, the cover, the bumpers and the holders follow).
 
 | File | What it is |
 |---|---|
 | `measurements.py` | every size, as a named constant with its source in a comment |
-| `reference_check.py` | re-derives the reference data in `measurements.py` from the frame top STL, the T-Display STEP model and the Servo 2040 drawing, and fails on any mismatch; its dependencies are locked in `reference_check.py.lock` |
+| `reference_check.py` | re-derives the reference data in `measurements.py` from the frame top STL, the T-Display STEP model and the Servo 2040 drawing, and fails on any mismatch |
+| `build.py` | generates the parts, runs every check, and only when all pass writes the print and CAD files and re-reads them |
+| `model.py` | the part set's model (printed parts, held parts, cable routes, deck openings, screws, the air channel) and geometry helpers such as `box()` and `teardrop()` |
+| `checks.py` | the checks, each rule's number named with its source |
+| `export.py` | the export, and the re-reading of what it wrote |
+| `preview.py` | renders the assembly on the frame top to `images/` |
+| `test_build.py` | shows each check failing on a bad shape and passing on a good one, and tests the export |
 | `test_measurements.py` | checks that every constant has a source and that the table below lists each nominal value |
 
+The scripts pin their dependencies inline (build123d, numpy, trimesh, matplotlib and, for the reference check, pillow), locked in `<script>.lock` by `uv lock --script`:
+
 ```sh
-uv run --locked --quiet hardware/spooder-electronics-mount/reference_check.py
-cd hardware/spooder-electronics-mount && python3 -m unittest -v test_measurements
+mise run cad          # reference check, unit tests, then build.py: check and write
+mise run cad-preview  # images/assembly.png and images/top.png
+uv run --locked --quiet --script hardware/spooder-electronics-mount/build.py --check  # check, write nothing
 ```
+
+### What the build checks
+
+Every check runs on what the part set declares; an empty set passes. When any check fails, the build names every failure and writes nothing.
+
+- **One solid** per part, and distinct part names.
+- **Fit:** nothing outside the legs' keep-clear region (r ≤ 78.8 mm, or the tabs |x| ≤ 24, |y| ≤ 79), enforced from the frame floor up; nothing below the frame floor (z 20); each part within the 256 mm bed in its print orientation, at some turn about the vertical.
+- **Insert holes:** a clear M3 hole (Ø3.4) through the deck on each of the eight frame inserts, with material round it for the screw head.
+- **Overlaps** between printed parts, their copies and inlays, and held parts.
+- **Enclosure:** rays along ±x, ±y and +z from every held part's surface meet the cover, except from the regions declared exposed (the T-Display's screen and buttons, the XT60's mating face), which must meet nothing of it.
+- **Routes:** no printed or held part enters a reserved cable route, except the Schottky diode, wholly inside the LM2596's output route and in no other.
+- **Frame clearance:** each tie hole, slot and pass-through runs clear through the deck and has at least 1.5 mm of free space above the frame top's model under it.
+- **Overhangs** in each part's print orientation: no face looks down more steeply than 45° unless it lies on the bed or is a planar bridge at most 3 mm wide; a curved downward face never passes, so a horizontal hole must be a teardrop.
+- **Screwdriver paths:** a Ø4 cylinder from each screw head outwards along its axis meets no part fitted before the screw is driven.
+- **Air channel:** connected boxes from the space behind the inlet's grille past the SZBK07 to the space behind the outlet's, entered by no part (the fans left out, as the passive case has none), whose cross-section along each box and across each junction is nowhere smaller than the inlet's net open area.
+
+### Output
+
+In the frame top's coordinates, each distinct part once (the four bumpers are one file):
+- `print/<part>.stl`, or `print/cover.3mf` with the body and the inlays as separate objects for the AMS;
+- `step/<part>.step`.
+
+The build deletes files there that belong to no current part, and re-reads what it wrote: one print file and one STEP file per part, each with the built part's bounding box, and the deck's eight insert holes found again in its STEP. The files are byte-for-byte repeatable.
 
 ## Measure before printing
 

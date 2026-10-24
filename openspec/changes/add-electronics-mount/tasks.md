@@ -21,8 +21,8 @@
 
 ## 2. Generator and checks
 
-- [ ] 2.1 Create `hardware/spooder-electronics-mount/` with a build script and preview renderer (build123d, numpy, trimesh and matplotlib pinned inline, run with `uv`), wired to `mise run cad` and `mise run cad-preview`. Verify both tasks run on an empty part set.
-- [ ] 2.2 Implement the checks:
+- [x] 2.1 Create `hardware/spooder-electronics-mount/` with a build script and preview renderer (build123d, numpy, trimesh and matplotlib pinned inline, run with `uv`), wired to `mise run cad` and `mise run cad-preview`. Verify both tasks run on an empty part set.
+- [x] 2.2 Implement the checks:
   - one solid per part;
   - the keep-clear region, nothing below the frame floor, the 256 mm bed;
   - the insert holes;
@@ -35,7 +35,7 @@
   - the air channel from the inlet past the SZBK07 to the outlet, clear and with no cross-section smaller than the inlet's net open area.
 
   The build writes no files when any check fails. Verify each check fails on a deliberately bad shape and passes on a good one.
-- [ ] 2.3 Implement the export: each distinct part once as STL (the cover as 3MF) and once as STEP, in the frame top's coordinates. Verify a test that counts the files per distinct part, and that re-imports each STEP and finds the deck's holes on the eight insert positions and each part's bounding box equal to the built part's.
+- [x] 2.3 Implement the export: each distinct part once as STL (the cover as 3MF) and once as STEP, in the frame top's coordinates. Verify a test that counts the files per distinct part, and that re-imports each STEP and finds the deck's holes on the eight insert positions and each part's bounding box equal to the built part's.
 
 ## 3. Deck and layout
 
