@@ -81,4 +81,5 @@ mise run clean
   - `spooder-firmware-shape`: layout, loop, J6 pins, the protection layer, the link and the bridge.
   - `spooder-leg-kinematics`: the movement reference.
   - `spooder-hardware-check`: flashing both boards, wiring, power, bring-up, the gamepad controls, setup mode with the portal calibration workflow, and bench calibration with the desktop calibrator.
+  - `spooder-printed-parts`: printed parts as checked build123d code: the loop, print orientation, supportless rules, fits, wiring zones, the checks and build123d pitfalls.
 - A CodeGraph index lives in `.codegraph/` (git-ignored). Refresh it with `codegraph sync` after large changes.
