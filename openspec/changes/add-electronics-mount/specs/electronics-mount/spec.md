@@ -15,7 +15,7 @@ The mount's parts SHALL be generated from named measurements by a build script. 
 
 #### Scenario: All checks pass
 - **WHEN** every check passes
-- **THEN** the build writes each distinct part once, as a print file and a CAD file
+- **THEN** the build writes each distinct part once, as a print file and a CAD file, each in the frame top's coordinates
 
 ### Requirement: Fit to the frame and the legs
 Above the frame top, every part SHALL stay inside the region the legs never enter: within 78.8 mm of the body's centre, or within the front and rear tabs (|x| ≤ 24 mm, |y| ≤ 79 mm). No part SHALL reach below the frame top's recessed floor. The deck SHALL fasten to the frame top's eight M3 heat-set inserts, with its screw holes on the measured insert positions.
@@ -29,7 +29,7 @@ Above the frame top, every part SHALL stay inside the region the legs never ente
 - **THEN** each of the eight insert positions has a clear M3 hole through the deck
 
 ### Requirement: What the mount holds
-The mount SHALL hold the Servo 2040, the T-Display, the SZBK07 converter, one LM2596 module, the XT60 socket and the inline fuse holder, each located with clearance and retained so it cannot shift in use. The LM2596 SHALL be screwed down through its mounting holes. No held part SHALL overlap a printed part or another held part. The cover SHALL enclose every held part except the T-Display's screen and buttons, which SHALL show through the lid. The XT60 socket's mating face SHALL be reachable from outside with the cover on, and SHALL bear the force of plugging and unplugging without moving.
+The mount SHALL hold the Servo 2040, the T-Display, the SZBK07 converter, one LM2596 module, the XT60 socket, the inline fuse holder and the Schottky diode, each located with clearance and retained so it cannot shift in use. The LM2596 SHALL be screwed down through its mounting holes. The Schottky diode, carried inline on the LM2596's output lead, SHALL be tied down at a tie point on that lead's route. No held part SHALL overlap a printed part or another held part. The cover SHALL enclose every held part except the T-Display's screen and buttons, which SHALL show through the lid. The XT60 socket's mating face SHALL be reachable from outside with the cover on, and SHALL bear the force of plugging and unplugging without moving.
 
 #### Scenario: No collisions
 - **WHEN** the parts and the held parts' outlines are checked
@@ -41,20 +41,24 @@ The mount SHALL hold the Servo 2040, the T-Display, the SZBK07 converter, one LM
 
 ### Requirement: Sensor provisions
 The mount SHALL reserve:
-- a flat pad with two screw bosses for an IMU breakout (LSM6DSO or ADXL345), within 30 mm of the body's centre, away from the SZBK07, with a route to the Servo 2040's J6 header;
+- a flat pad with two screw bosses for the LSM6DSO IMU breakout that `add-body-sensing` reads, within 30 mm of the body's centre, with at least 10 mm between the breakout's outline and the SZBK07's outline, and with a route to the Servo 2040's J6 header;
 - a pass-through for four wires from the inside of the mount to below the frame top, for a distance sensor under the body;
 - an entry for six end-stop signal wires and a shared ground, with a route to the Servo 2040's sensor header.
 
 #### Scenario: IMU pad
 - **WHEN** the deck is checked
-- **THEN** the IMU pad lies within 30 mm of the body's centre, and its breakout outline overlaps no held part
+- **THEN** the IMU pad lies within 30 mm of the body's centre, its breakout outline overlaps no held part, and at least 10 mm separates that outline from the SZBK07's outline
 
 #### Scenario: Pass-through over open frame
 - **WHEN** the pass-through is checked against the frame top's model
 - **THEN** it opens onto free space below the deck
 
+#### Scenario: End-stop entry
+- **WHEN** the end-stop entry is checked
+- **THEN** it takes seven wires, and its reserved route reaches the Servo 2040's sensor header from the side the header takes its wires from
+
 ### Requirement: Cable routes
-Each cable run SHALL have a reserved route that no printed or held part enters. The runs are:
+Each cable run SHALL have a reserved route that no printed or held part enters, except the Schottky diode, which lies inside the route of the LM2596's output to J6 and nowhere else. That route SHALL be wide enough along its length to carry the diode in its heat-shrink. The runs are:
 - XT60 to the fuse and the SZBK07's input;
 - the SZBK07's output to the Servo 2040's EXT terminal;
 - the fused supply to the LM2596;
@@ -67,7 +71,7 @@ Each route SHALL reach its terminal from the side that terminal takes its wires 
 
 #### Scenario: Routes kept clear
 - **WHEN** the routes are checked
-- **THEN** no printed or held part overlaps any reserved route
+- **THEN** no printed or held part other than the Schottky diode overlaps any reserved route, and the diode lies wholly inside the route of the LM2596's output to J6 and overlaps no other route
 
 #### Scenario: Ties over open frame
 - **WHEN** each tie hole and slot is checked against the frame top's model
@@ -80,20 +84,28 @@ The cover SHALL be fastened with M3 screws into heat-set inserts. It SHALL lift 
 - **WHEN** the cover's screws are removed
 - **THEN** the cover lifts straight off, and nothing has to be unplugged
 
+#### Scenario: Running with the cover off
+- **WHEN** the cover is off and the battery is plugged in
+- **THEN** a USB-C cable plugs into the Servo 2040 without touching any part, the T-Display's screen and buttons are uncovered, and the robot runs
+
 #### Scenario: Screwdriver access
 - **WHEN** each screw position is checked
 - **THEN** a 4 mm cylinder along the screw's axis, out to the outside, meets no part
 
 ### Requirement: Cooling
-The cover SHALL have an air inlet low on one side and an outlet high on the opposite side, with the SZBK07 in the path between them. The outlet SHALL take a 30 mm fan blowing outwards, and the inlet SHALL take an optional 30 mm fan blowing inwards. Both vents SHALL work passively when no fan is fitted. The lid SHALL have no openings above the SZBK07, whose heatsinks are live.
+The cover SHALL have an air inlet low on one side and an outlet high on the opposite side, with the SZBK07 in the path between them. The outlet SHALL take a 30 mm fan blowing outwards, and the inlet SHALL take an optional 30 mm fan blowing inwards. Each fan SHALL sit in a holder on the deck behind its vent, so the cover carries no fan. Both vents SHALL work passively when no fan is fitted: a reserved air channel, whose free cross-section is nowhere smaller than the inlet's net open area, SHALL run from the inlet past the SZBK07's heatsinks to the outlet. The lid SHALL have no openings above the SZBK07, whose heatsinks are live.
 
 #### Scenario: No fans fitted
-- **WHEN** the mount is assembled without fans
-- **THEN** air can pass in through the inlet, past the SZBK07, and out through the outlet
+- **WHEN** the mount is assembled without fans and the air channel is checked
+- **THEN** no printed or held part enters the channel from the inlet, past the SZBK07, to the outlet, and the channel's cross-section is nowhere smaller than the inlet's net open area
 
 #### Scenario: Exhaust fan fitted
 - **WHEN** a 30 x 30 x 10 mm fan is fitted at the outlet
-- **THEN** it seats without colliding with any part, blows out of the cover, and the cover still lifts off with nothing to unplug
+- **THEN** it seats in its deck holder without colliding with any part, blows out of the cover, and the cover still lifts off with nothing to unplug
+
+#### Scenario: Converter stays cool
+- **WHEN** the robot walks for 10 minutes with the cover on, at a room temperature of 20 to 25 °C
+- **THEN** the SZBK07's heatsink reads at most 70 °C, with the exhaust fan fitted if it reads more without
 
 #### Scenario: Nothing falls onto the heatsinks
 - **WHEN** the lid is checked

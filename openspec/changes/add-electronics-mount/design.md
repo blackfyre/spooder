@@ -44,9 +44,11 @@ The USB-C ports need no wall, because both boards are reached by opening the cov
 - **Alternative:** a board fixed at a wall for external USB access. It was rejected once opening the cover became acceptable, because it bent the cable runs round the box.
 
 ### Everything electrical on the deck
-The cover carries nothing electrical: no T-Display and no fan with a fixed lead. The T-Display sits in a holder on the deck, under a window in the lid. A fan on the cover's wall connects through a 2-pin plug, or sits in a holder on the deck behind its grille, whichever the measurements favour.
+The cover carries nothing electrical: no T-Display and no fan. The T-Display sits in a holder on the deck, under a window in the lid. Each fan sits in a holder on the deck behind its vent's grille.
 
 - **Why:** running open is routine, and the cover must lift off with nothing to unplug.
+- **Alternative:** a fan on the cover's wall with a 2-pin plug, rejected because the plug would have to be pulled to lift the cover off.
+- **The Schottky diode** is an axial part carried inline on the LM2596's output lead in heat-shrink, tied down at a tie point on that route, rather than in a holder of its own. It is the one held part allowed inside a reserved route, its own: a deliberate exception to the `spooder-printed-parts` skill's rule that no held part enters a wiring zone, because the diode is part of that run's wiring.
 
 ### Fastening: M3 screws into heat-set inserts
 There are as few screws as hold the cover square, about four. They sit through the walls or down through the lid, wherever the bumpers leave a straight path. The inserts go in the deck's posts, and horizontal insert holes are teardrops.
@@ -63,7 +65,7 @@ flowchart LR
     IN["Inlet, low<br/>(optional 30 mm fan, blowing in)"] --> SZ["SZBK07 heatsinks"] --> OUT["Outlet, high, opposite side<br/>(30 mm fan, blowing out)"]
 ```
 
-The outlet sits high on the opposite side because warm air rises, so the passive draught and the exhaust fan both work the same way. An exhausting fan lowers the pressure in the box, so air also enters at small gaps: the XT60 window, the lead slots, the seam. That is harmless, because the inlet is the largest opening. The fans run on 5 V from the LM2596.
+The outlet sits high on the opposite side because warm air rises, so the passive draught and the exhaust fan both work the same way. The passive path is reserved as an air channel whose free cross-section is nowhere smaller than the inlet's net open area (the grille's openings, not its outline); the build checks that no part enters it. An exhausting fan lowers the pressure in the box, so air also enters at small gaps: the XT60 window, the lead slots, the seam. That is harmless, because the inlet is the largest opening. The fans run on 5 V from the LM2596.
 
 ### Bumpers: PETG leaf springs on rails
 Each corner has a rail on the cover, and a bumper slides down it: a curved PETG leaf about 1.2–1.6 mm thick, standing off the corner. Its depth and stand-off are set so the bumpers stand proud of the body and the lid, while staying inside the keep-clear region.
@@ -108,17 +110,24 @@ Each new check is first shown to fail on a deliberately bad shape. What can't be
 ## Risks / Trade-offs
 
 - **[Unmeasured part sizes]** The SZBK07 varies by batch (about 60 × 53–54 × 27–28 mm), and its terminal ends are assumed. The LM2596's hole spacing varies too. → The first build uses nominal values (task 1.0). Measure before printing (task 1.1, a hardware task that keeps the change unarchived until done). Every size is one constant, and the checks re-validate after a change.
-- **[The LM2596's dropout]** It needs its input about 1.5 V above its output. Near empty (about 6.4 V), the 5 V rail sags to about 4.9 V, and to about 4.6 V after the Schottky diode. → The RP2040's regulator copes. The power protection's minimum voltage should trip before that matters. Document it in the hardware-check skill.
+- **[The LM2596's dropout]** It needs its input about 1.5 V above its output. Near empty (about 6.4 V), the 5 V rail sags to about 4.9 V, and to about 4.6 V after the Schottky diode. → The power protection does not cover this: it watches the servo rail behind the SZBK07, not the pack, and the battery sense is not read yet. The boards' own regulators are expected to cope at 4.6 V; task 7.3 measures J6's 5 V with a bench supply at 6.4 V and the fans running, and the hardware-check skill documents the sag.
 - **[PETG bumpers crack]** A leaf spring can crack under a hard impact. → Bumpers are replaceable, and the test print checks their flex. TPU stays a drop-in later.
 - **[The cover warps]** Tall PETG walls on an open-frame P1P can warp. → Chamfered corners, a brim if needed, and no draughts.
-- **[Heat]** The real load of the SZBK07 is unknown. → The fan positions are ready. Measure the converter's temperature after a 10-minute walk.
-- **[The IMU near the converter]** Heat and switching noise can disturb the IMU. → The IMU pad is placed at a minimum distance from the SZBK07, and is checked.
+- **[Heat]** The real load of the SZBK07 is unknown. → The fan positions are ready. Measure the heatsink after a 10-minute walk at full speed (task 7.3). The limit is 70 °C, a margin below PETG's softening near 80 °C (an assumption, not a datasheet value for the converter).
+- **[The IMU near the converter]** Heat and switching noise can disturb the IMU. → At least 10 mm between the breakout's outline and the SZBK07's, checked by the build. The distance is an assumption that fits within the 30 mm of the centre; it can grow if the layout allows.
+- **[Sensor inputs]** The Servo 2040's sensor header has six inputs, and the hardware-check skill plans the battery sense on one of them, so six end-stops and the battery sense need seven. → The mount only reserves the wires' entry and route; assigning inputs belongs to the change that adds the end-stops.
 
 ## Migration Plan
 
-The uncommitted prototype in `hardware/spooder-electronics-mount/` is replaced, not built on. Its reusable lessons are the checks and the build123d pitfalls, which the implementation reapplies. Nothing on the robot changes until the parts are printed and fitted. Rollback means not printing.
+`hardware/spooder-electronics-mount/` is created new: no prototype is in the repository. The lessons from an earlier, uncommitted attempt are recorded in the `spooder-printed-parts` skill (its checks and build123d pitfalls), which the implementation follows. Nothing on the robot changes until the parts are printed and fitted. Rollback means not printing.
+
+## Assumptions
+
+Decided without the user while delivering, and open to change:
+- the IMU pad's 10 mm separation from the SZBK07, and the 70 °C heatsink limit (see Risks);
+- the pad is sized for the LSM6DSO that `add-body-sensing` reads. An ADXL345 breakout may fit the same bosses mechanically, but no firmware reads it;
+- the Schottky diode is a DO-41 part (such as a 1N5819) inline in heat-shrink, until measured.
 
 ## Open Questions
 
 - **The exact placement** of each part, within the principles above, follows from the measurements in task group 1.
-- **The fan's mounting:** on the cover's wall with a plug, or in a holder on the deck. This depends on the measured clearances; either satisfies the spec.
