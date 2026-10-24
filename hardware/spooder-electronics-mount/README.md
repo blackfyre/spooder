@@ -13,7 +13,7 @@ The sizes are nominal until the bought parts are measured: read "Measure before 
 | `model.py` | the part set's model (printed parts, held parts, cable routes and their terminals, deck openings, screws, the air channel, vents, fan positions, the IMU's pad) and geometry helpers such as `box()`, `turned()` and `teardrop()` |
 | `checks.py` | the checks, each rule's number named with its source |
 | `export.py` | the export, and the re-reading of what it wrote |
-| `preview.py` | renders the assembly on the frame top to `images/`: open (`assembly.png`, `top.png`) and closed (`closed.png`) |
+| `preview.py` | renders the assembly on the frame top to `images/`: open (`assembly.png`, `top.png`) and closed (`closed.png`); and each part in its print orientation on a build plate (`images/print/<part>.png`) |
 | `test_build.py` | shows each check failing on a bad shape and passing on a good one, tests the export, and tests the layout as built |
 | `test_measurements.py` | checks that every constant has a source and that the table below lists each nominal value |
 
@@ -21,7 +21,7 @@ The scripts pin their dependencies inline (build123d, numpy, trimesh, matplotlib
 
 ```sh
 mise run cad          # reference check, unit tests, then build.py: check and write
-mise run cad-preview  # images/assembly.png, images/top.png and images/closed.png
+mise run cad-preview  # images/assembly.png, images/top.png, images/closed.png and images/print/*.png
 uv run --locked --quiet --script hardware/spooder-electronics-mount/build.py --check  # check, write nothing
 ```
 
@@ -42,7 +42,7 @@ Everything prints in PETG. Each file holds one copy of its part, in the robot's 
 | `print/exhaust-fan-holder-right.stl` | the exhaust fan's right column and cheek | 1 | white | standing, its foot on the bed, as in the file |
 | `print/t-display-holder.stl` | the T-Display's holder, a portal over the LM2596 | 1 | white | on its back: its rear face (−y) on the bed |
 
-The CAD files are `step/<part>.step`, the same names. The overhang check uses each part's print orientation above; the cover's 3MF is one object of two parts, so assign the yellow filament to the inlays in the slicer.
+`images/print/<part>.png` shows each part as it stands on the plate. The CAD files are `step/<part>.step`, the same names. The overhang check uses each part's print orientation above; the cover's 3MF is one object of two parts, so assign the yellow filament to the inlays in the slicer.
 
 ## Printing
 

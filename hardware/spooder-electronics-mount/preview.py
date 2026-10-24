@@ -21,7 +21,9 @@ does, without checking or exporting it, and draws:
 - images/top.png, the open assembly from straight above, with the legs'
   keep-clear region;
 - images/closed.png, the assembly with the cover and its bumpers on, from
-  above and in front.
+  above and in front;
+- images/print/<part>.png, each distinct printed part turned to its print
+  orientation (its `print_up` up) and standing on a grey build plate.
 
 Printed parts are drawn in their colours, held parts in blue, the reserved
 routes and the air channel in translucent yellow, and the frame top in grey.
@@ -56,6 +58,8 @@ COLOURS = {"black": (0.17, 0.17, 0.17, 1.0), "yellow": (0.95, 0.76, 0.0, 1.0), "
 HELD = (0.23, 0.49, 0.85, 1.0)
 ZONE = (0.95, 0.83, 0.23, 0.30)
 FRAME = (0.69, 0.69, 0.69, 1.0)
+PLATE = (0.80, 0.80, 0.82, 1.0)
+PLATE_MARGIN = 10.0  # the plate drawn round a part's footprint, mm
 # name: (elevation, azimuth, with the cover)
 VIEWS = {"assembly": (35, -60, False), "top": (90, -90, False), "closed": (35, -60, True)}
 LIGHT = np.array([0.3, -0.5, 0.8]) / np.linalg.norm([0.3, -0.5, 0.8])
@@ -134,9 +138,62 @@ def render(asm: Assembly, outdir: Path) -> list[Path]:
     return written
 
 
+def to_print(up) -> np.ndarray:
+    """The rotation that turns `up` (a robot-frame direction) to +z."""
+    u = np.asarray(up, dtype=float) / np.linalg.norm(up)
+    z = np.array([0.0, 0.0, 1.0])
+    c = float(u @ z)
+    if c < -1 + 1e-9:  # upside down: half a turn about x
+        return np.diag([1.0, -1.0, -1.0])
+    v = np.cross(u, z)
+    k = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+    return np.eye(3) + k + k @ k / (1 + c)
+
+
+def render_print(asm: Assembly, outdir: Path) -> list[Path]:
+    """Each distinct printed part in its print orientation, on a build plate."""
+    outdir.mkdir(parents=True, exist_ok=True)
+    written = []
+    for part in asm.parts:
+        rot = to_print(part.print_up)
+        groups = [(triangles([part.shape]), COLOURS.get(part.colour, COLOURS["white"]))]
+        if part.inlays is not None:
+            groups.append((triangles([part.inlays]), COLOURS["yellow"]))
+        groups = [(t @ rot.T, c) for t, c in groups if len(t)]
+        pts = np.concatenate([t.reshape(-1, 3) for t, _ in groups])
+        lo, hi = pts.min(axis=0), pts.max(axis=0)
+        shift = np.array([-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2]])  # centred, on the plate
+        groups = [(t + shift, c) for t, c in groups]
+        hx, hy = (hi[0] - lo[0]) / 2 + PLATE_MARGIN, (hi[1] - lo[1]) / 2 + PLATE_MARGIN
+        plate = np.array([[[-hx, -hy, 0], [hx, -hy, 0], [hx, hy, 0]], [[-hx, -hy, 0], [hx, hy, 0], [-hx, hy, 0]]])
+        tris = np.concatenate([t for t, _ in groups])
+        colours = np.concatenate([shaded(t, c) for t, c in groups])
+        half = max(hx, hy, hi[2] - lo[2]) * 0.75
+        fig = plt.figure(figsize=(6, 6), dpi=100)
+        ax = fig.add_subplot(projection="3d", proj_type="ortho", computed_zorder=False)
+        # The plate in a collection of its own, drawn first: everything
+        # stands on it and the view is from above, so it is always behind.
+        ax.add_collection3d(Poly3DCollection(plate, facecolors=[PLATE], edgecolors="none", linewidths=0))
+        ax.add_collection3d(Poly3DCollection(tris, facecolors=colours, edgecolors="none", linewidths=0))
+        zc = (hi[2] - lo[2]) / 2
+        ax.set_xlim(-half, half)
+        ax.set_ylim(-half, half)
+        ax.set_zlim(zc - half, zc + half)
+        ax.set_box_aspect((1, 1, 1))
+        ax.view_init(elev=30, azim=-60)
+        ax.set_axis_off()
+        ax.set_title(f"{part.name}: print orientation", fontsize=10)
+        fig.subplots_adjust(0, 0, 1, 0.95)
+        path = outdir / f"{part.name}.png"
+        fig.savefig(path, metadata={"Software": None})
+        plt.close(fig)
+        written.append(path)
+    return written
+
+
 def main() -> int:
     asm = build()
-    for path in render(asm, HERE / "images"):
+    for path in render(asm, HERE / "images") + render_print(asm, HERE / "images" / "print"):
         print(f"wrote {path.relative_to(HERE)}")
     return 0
 
