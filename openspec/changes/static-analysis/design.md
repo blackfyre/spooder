@@ -51,7 +51,7 @@ Every other option searched (alignment of assignments, declarations, macros, ope
 
 One value was not taken from the count: `PenaltyExcessCharacter: 10` changes 12 fewer lines (967), but only by letting clang-format write lines past the 120-column limit (a 124-column `if` in the virtual robot, for one), which makes the limit meaningless. It keeps the LLVM value, so the limit holds.
 
-With the four data tables fenced by `// clang-format off`/`on` (the logo bitmap in `firmware/bridge/main/logo.h`, `POWER_LIMITS` in `firmware/servo2040/src/config.h`, and the target and pose tables of the leg-pose and centre-of-gravity golden tests, which clang-format would pack into columns), the reformat changes **803 lines** across 59 files. The largest are `core/movement/vectors.h` (one-line accessors written as blocks), `core/protocol/protocol.h` (trailing-comment alignment) and `firmware/bridge/main/main.c` (the Bluepad32 template's four-space indent and attached braces).
+With the four data tables fenced by `// clang-format off`/`on` (the logo bitmap in `firmware/bridge/main/logo.h`, `POWER_LIMITS` in `firmware/servo2040/src/config.h`, and the target and pose tables of the leg-pose and centre-of-gravity golden tests, which clang-format would pack into columns), the reformat changes **803 lines** across 61 files. The largest are `core/movement/vectors.h` (one-line accessors written as blocks), `core/protocol/protocol.h` (trailing-comment alignment) and `firmware/bridge/main/main.c` (the Bluepad32 template's four-space indent and attached braces).
 
 ### Exclusions through `.clang-format-ignore`
 clang-format (18 and later) honours a `.clang-format-ignore` at the root, so the exclusions hold in editors as well as in the lint task:
@@ -95,6 +95,8 @@ A `lint` job on `ubuntu-24.04` with the same pinned checkout and mise actions as
 - The narrowing-conversion checks are `bugprone-narrowing-conversions` only; the `cppcoreguidelines-*` alias is not enabled as well, to avoid double reports.
 - `tools/vulncheck.sh` scans the packages the calibrator imports, so staticcheck's modules in `go.sum` do not change its baseline; if they do, the baseline task is answered in the staticcheck task.
 - `tools/lint.sh` fails closed: without a root `.clang-format` (or `.clang-tidy`) the formatting check (or clang-tidy) fails rather than falling back to a default style or skipping, so the task fails between task 1.1 and tasks 2.1 and 3.1, which add the configurations. It also fails when the `clang-format` or `clang-tidy` on `PATH` is not the version pinned in `mise.toml`, so running the script outside `mise run lint` cannot use another LLVM.
+- `.git-blame-ignore-revs` names the reformat commit by its hash on `deliver/static-analysis`. The merge to `main` must keep that commit (a fast-forward or merge, not a squash); if a rebase rewrites it, the hash in the file is updated in the same rebase.
+- Until task 3.1 adds `.clang-tidy`, `mise run lint` exits non-zero by design (the clang-tidy half fails closed), so task 2.2's checks read the formatting half of its output: the files it names, or none.
 - clang-tidy's findings in `core/` will be few enough to fix or suppress by hand within this change. If a single check yields many findings of one harmless pattern, it is disabled with a reason rather than rewritten across the code.
 
 ## Risks / Trade-offs

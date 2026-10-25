@@ -1,0 +1,5 @@
+# Commits git blame skips (git config blame.ignoreRevsFile .git-blame-ignore-revs;
+# GitHub reads this file by itself).
+
+# static-analysis: Reformat the C++ with clang-format (layout only)
+4c702edc1718277102884536092340ab0aadcf84
