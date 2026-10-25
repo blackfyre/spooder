@@ -75,6 +75,8 @@ The status pages are unchanged, so `mise run bridge-screenshots` output does not
 - Plain `git describe` (annotated tags only, none exist yet), not `--tags`, so a lightweight tag does not change the form.
 - The bridge shows the identity on its start-up log (the brief allows the boot logo or an existing page) rather than on the link page, keeping the status pages and their screenshots unchanged.
 - The robot repeats the banner on each USB connect, because the first-tick line is normally lost before the console enumerates; this is the reading of "print it in the boot banner" that makes it visible.
+- `cmake/build_identity.cmake` runs `git` from `PATH` (an optional `-DGIT_EXECUTABLE` overrides it) through `execute_process` rather than `find_program`, so a `PATH` without git gives `unknown` instead of a system path being searched. It compares and writes the file itself rather than with `file(CONFIGURE)`, so `@` or `${` in a tag cannot be substituted.
+- `fit` applies the banner's printable rule and `unknown` too (the screen font has no glyphs outside ASCII) but not the 40-character cut, so a long identity still ends in its hash and `-dirty` on screen. `BANNER_SIZE` (64) holds the longest banner, `spooder bridge: build ` with 40 characters and the newline.
 
 ## Follow-ups
 
