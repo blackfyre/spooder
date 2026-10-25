@@ -15,8 +15,8 @@
 
 ## 4. Documentation and gates
 
-- [ ] 4.1 Update the `spooder-hardware-check` skill (the robot banner on connect, the bridge console line and the start-up log line), `core/CLAUDE.md` (the new module) and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec deltas.
-- [ ] 4.2 Run the gates: `mise run test`, `mise run build` with and without `--serial`, `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build` and `mise run e2e`. Verify that all pass.
+- [x] 4.1 Update the `spooder-hardware-check` skill (the robot banner on connect, the bridge console line and the start-up log line), `core/CLAUDE.md` (the new module) and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec deltas.
+- [x] 4.2 Run the gates: `mise run test`, `mise run build` with and without `--serial`, `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build` and `mise run e2e`. Verify that all pass.
 
 ## 5. On the boards
 

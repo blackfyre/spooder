@@ -125,6 +125,7 @@ mise run monitor-bridge                       # Bluepad32 console; type `help`
 ## What the board shows
 
 **Serial (USB):**
+- `spooder robot: build <id>` on the first tick and each time a USB host connects after none was (so a console opened after boot sees it), before any other line of that tick. `<id>` is `git describe --always --dirty --abbrev=12` of the checkout built from (`-dirty`: uncommitted changes to tracked files; `unknown`: no git), with any byte outside printable ASCII shown as `?` and cut at 40 characters (so a long annotated tag can hide the hash and `-dirty`); compare it with the checkout, under the same rules, to tell a stale or mismatched flash;
 - once per second: `supply <A> A (avg <A> A), <V> V; output on|off; mode <n>; faults 0x..`;
 - `output allowed: starting movement` when the body starts (boot, or restart after a fault);
 - `movement stopped: waiting for the fault to clear and a new request` when a fault cuts output;
@@ -203,7 +204,7 @@ Robot on the bench supply with **no servos** until step 4; default (link) robot 
 
 The status screen has three pages: **drive** (the mode chip, voltage and current with bars, height and speed, stride and stick mode, `OUT ON`/`OUT OFF`; a white tick on the current bar holds the recent peak and on the voltage bar the recent low, for 3 s before easing back; a value turns amber for a second when it sets a new high or a deeper sag), **power** (the last 60 s of voltage and current as 10 Hz traces, with the lowest voltage and highest current) and **link** (frames per second each side accepts and rejects, the telemetry's age, the source the robot follows, the pad and its battery). A short press of the left button (GPIO0) shows the next page; the dots at the bottom mark the page. The header (mode, `PAD`, link state) and the status strip (`NO FAULTS`, or the e-stop, every latched fault, `LINK LOST`, `SOURCE CONFLICT`, `USB IN CONTROL`, filled orange or amber) are on every page.
 
-1. **Bridge alone, on USB.** The header shows `NO PAD` and `LOST`, the strip `LINK LOST`. The console prints the Bluepad32 banner.
+1. **Bridge alone, on USB.** The header shows `NO PAD` and `LOST`, the strip `LINK LOST`. The console prints `spooder bridge: build <id>` (the same form and rules as the robot's banner), then the Bluepad32 banner. The start-up log on the screen, after the logo, begins with `Build <id>` (`Build ..` and the id's end when it is longer than 22 characters), then `Boot`.
 2. **Link on a bench cable.** Wire the three link wires.
    - Within a second the header shows `LINK` and the robot's mode, the strip `NO FAULTS`, and the drive page the supply voltage and current and `OUT ON`/`OUT OFF`. `USB IN CONTROL` or `SOURCE CONFLICT` in the strip means a USB host claims control too.
    - The link page shows about 50 frames per second accepted by the robot and about 10 by the bridge, none rejected.
@@ -228,7 +229,7 @@ Setup mode turns the bridge into a WiFi access point with a captive portal; Blue
 - **Enter:** power up or reset the bridge, and once the logo is up, hold the left button (GPIO0) for 1 s. Never hold it while pressing RST or plugging in: that enters the ROM download mode instead. The bridge restarts and shows `SETUP MODE`, the network name (`spooder-` and four hex digits), the password, `192.168.4.1`, `Portal: yes/no`, the link state, the e-stop and the body mode, with a joining QR code on the right.
 - **Leave:** Exit on the portal, or RST. Both restart into normal operation; a power-up always starts normally.
 - **Join:** scan the QR code with the phone's camera, or type the password. The password is made once and kept by the bridge. The phone's sign-in page opens the portal by itself (on Android, tap the "sign in to network" notification if it does not); otherwise browse to `http://192.168.4.1/`. One phone at a time.
-- **Console:** `mise run monitor-bridge` shows `spooder bridge: setup mode (Bluetooth off)` and the access point line; the Bluepad32 console is not running.
+- **Console:** `mise run monitor-bridge` shows `spooder bridge: build <id>`, then `spooder bridge: setup mode (Bluetooth off)` and the access point line; the Bluepad32 console is not running.
 
 **Calibration workflow** (robot on a stand, one servo, then one leg, then all):
 
