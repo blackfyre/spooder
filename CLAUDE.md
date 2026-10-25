@@ -31,7 +31,7 @@ mise run monitor-raw  # the raw console (pio device monitor, 115200): frames sho
 mise run build-bridge    # PlatformIO build of firmware/bridge (TTGO T-Display)
 mise run upload-bridge   # flash the bridge (BRIDGE_PORT, default /dev/ttyUSB0)
 mise run monitor-bridge  # the bridge's Bluepad32 console
-mise run test         # host-side Unity tests of core/ (PlatformIO native env)
+mise run test         # host-side Unity tests of core/ (PlatformIO native env), sanitised (ASan, UBSan), after a source-list check
 mise run desktop-build   # the desktop calibrator -> build/desktop/spooder-calibrator
 mise run desktop-run     # build and start it (run from the checkout: it exports there)
 mise run desktop-test    # gofmt, go vet and go test of desktop/

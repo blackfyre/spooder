@@ -5,7 +5,7 @@ Unity host tests of `core/`, one directory per area (`mise run test`, the Platfo
 `mise run test` runs, in order:
 1. the Python unit tests of the two scripts below (`test_check_test_sources`, `test_sanitizer_policy`), then the source-list check, `check_test_sources.py`;
 2. the Unity tests (`pio test -e native`);
-3. `test_sanitizers`, the sanitiser script's compiler selection against PlatformIO's own SCons (installed by step 2; the test fails, not skips, without it).
+3. `test_sanitizers`, the sanitiser script's compiler selection against PlatformIO's own SCons (installed by step 2; the test fails, not skips, without it);
 4. the bridge build's image-size check test (`firmware/bridge/scripts/test_image_size.py`).
 
 **Source-list check.** `[env:native]`'s `build_src_filter` must be `-<*>` and then one plain `+<…>` entry per `.cpp` file under `core/`, nothing else. The check fails naming each source missing from the filter, each entry with no file under `core/` and each entry of another form (a wildcard, `..`, a second exclusion). It checks the filter PlatformIO uses, so entries from `PLATFORMIO_BUILD_SRC_FILTER` (or the old `PLATFORMIO_SRC_FILTER`), which PlatformIO appends, are checked too. A new `core/` `.cpp` is added there by hand.
