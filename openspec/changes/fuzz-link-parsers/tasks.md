@@ -4,11 +4,12 @@
 
 - [ ] 1.1 Change `readVectors` in `golden_test.go` to take `testing.TB`, and add `FuzzDecoder` in `desktop/internal/protocol`, seeded with every golden frame from `test/golden/protocol_v3.txt` and the extra seeds of design D2, checking the properties of design D3 (bounded `Pending`, in-order byte accounting, each span decoding alone to the same frame, canonical re-encoding, byte-identical re-encoding of canonical spans). Verify `go test -run FuzzDecoder ./internal/protocol` passes in `desktop/`.
 - [ ] 1.2 Add a test that `Push` and `Next` allocate nothing on a stream of golden frames. Verify `go test -run Alloc ./internal/protocol` passes.
+- [ ] 1.3 Add the CRC-valid non-canonical seeds of design D2 to `FuzzDecoder`, and a plain test asserting each is accepted with the expected fields and re-encodes to the canonical bytes. Verify `go test -run 'NonCanonical|FuzzDecoder' ./internal/protocol` passes.
 
 ## 2. Split fuzz tests
 
-- [ ] 2.1 Add `FuzzSplitArbitrary` in `desktop/internal/link`, reading the input through `(*Link).read` on an in-memory port (design D4), seeded from the golden frames, checking the properties of design D4. Verify `go test -run FuzzSplitArbitrary ./internal/link` passes in `desktop/`.
-- [ ] 2.2 Add `FuzzSplitInterleaved`, building printable text lines and golden frames from the input as in design D4, checking that the frames and the text come back exactly. Verify `go test -run FuzzSplitInterleaved ./internal/link` passes.
+- [ ] 2.1 Add `FuzzSplitArbitrary` in `desktop/internal/link`, reading the input through `(*Link).read` on an in-memory port (design D4), seeded from the golden frames, checking the properties of design D4: frames equal to a bare decoder's, lines equal one for one to the reference model's, with the line-boundary seeds of design D2. Verify `go test -run FuzzSplitArbitrary ./internal/link` passes in `desktop/`.
+- [ ] 2.2 Add `FuzzSplitInterleaved`, building printable text lines and golden frames from the input as in design D4, keeping every text line shorter than `MaxLineLength` bytes, checking that the frames come back in order and the lines come back one for one. Verify `go test -run FuzzSplitInterleaved ./internal/link` passes.
 
 ## 3. Bounded runs and found bugs
 
