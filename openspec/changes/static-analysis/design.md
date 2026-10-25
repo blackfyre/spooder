@@ -43,9 +43,9 @@ Large data tables in hand-written headers (`firmware/bridge/main/logo.h`, the po
 
 ### The lint task
 `mise run lint` runs a script in `tools/` (like `vulncheck.sh`), which:
-1. lists the C++ files with `git ls-files` in the checked directories (`*.c`, `*.cpp`, `*.h`, `*.hpp`), so ignored and untracked build output never counts;
+1. lists the C++ files in the checked directories (`*.c`, `*.cpp`, `*.h`, `*.hpp`) with `git ls-files --cached --others --exclude-standard`, so a new file counts before it is staged and git-ignored build output never does;
 2. runs `clang-format --dry-run --Werror` on them, which reports each unformatted file and modifies nothing;
-3. writes the host compile database with `pio run -e native -t compiledb` (`compile_commands.json` in the PlatformIO build directory, the same flags as the host tests) and runs clang-tidy on each `core/` source in it.
+3. removes any old `compile_commands.json` at the project root, writes the host compile database with `pio run -e native -t compiledb` (PlatformIO writes it at the project root by default; same flags as the host tests), checks that it exists and lists every source in the `native` environment's `build_src_filter`, and runs clang-tidy on each `core/` source in it. `compile_commands.json` is added to `.gitignore`.
 
 It fails if either step fails. A developer fixes formatting with `clang-format -i` on the files named (documented in the root `CLAUDE.md`), not through the lint task.
 
@@ -55,7 +55,7 @@ It fails if either step fails. A developer fixes formatting with `clang-format -
 - `bugprone-narrowing-conversions` stays on (in clang-tidy 22 it is the primary name, `cppcoreguidelines-narrowing-conversions` its alias), with `WarnOnFloatingPointNarrowingConversion` kept;
 - `performance-*` without `performance-avoid-endl` (no streams in `core/`);
 - `readability-misleading-indentation`, `readability-duplicate-include`, `readability-inconsistent-declaration-parameter-name`, `readability-redundant-declaration`, `readability-non-const-parameter`, `readability-container-size-empty`;
-- `WarningsAsErrors: '*'`, `HeaderFilterRegex` matching `core/`, so headers in `core/` are reported once and `external/` and system headers never.
+- `WarningsAsErrors: '*'`, `HeaderFilterRegex` matching `core/`, so findings in `core/` headers are reported and those in `external/` and system headers never. A header included by several sources may report the same finding more than once; the gate only needs a non-zero exit, so no deduplication is done.
 
 A check that turns out to be mostly noise on `core/` is disabled in `.clang-tidy` with a comment giving the reason, rather than suppressing it line by line. A real but intentional finding (a deliberate narrowing in fixed-point protocol encoding, for example) gets `NOLINTNEXTLINE(check)` and a reason on the same comment.
 
@@ -67,6 +67,7 @@ A `lint` job on `ubuntu-24.04` with the same pinned checkout and mise actions as
 
 ## Assumptions
 
+- The formatting check covers untracked files that git does not ignore, so a developer sees drift before staging; CI sees only committed files, which is the same set on a clean checkout.
 - The brief names `firmware/bridge/src`; it does not exist, so `firmware/bridge/main` is the bridge's only source directory.
 - `core/movement/calibration_defaults.cpp` counts as generated (the desktop export writes it) and is excluded from formatting, even though the brief does not name it.
 - The host compile database for clang-tidy is PlatformIO's `native` environment, the one the host tests use; it lists exactly the core sources in `build_src_filter`. A `core/` source missing from that list is not analysed; adding it is a matter for the change that adds the source.
@@ -77,7 +78,7 @@ A `lint` job on `ubuntu-24.04` with the same pinned checkout and mise actions as
 ## Risks / Trade-offs
 
 - **Reformatting hides history** → it lands in one commit of its own, whose hash goes into `.git-blame-ignore-revs`.
-- **A fix for a finding changes behaviour** (a narrowing turned into an explicit cast is safe; changing a type is not) → fixes keep types and arithmetic as they are and make conversions explicit; the host tests, the golden-vector tests and the end-to-end tests must pass unchanged.
+- **A fix for a finding changes behaviour** (a narrowing turned into an explicit cast is safe; changing a type is not) → fixes keep types and arithmetic as they are and make a conversion explicit only where the value's range is shown to fit the target type (clang-tidy stops warning at an explicit cast, so the cast alone proves nothing); in the protection maths and the protocol encoding the bound is named in a comment beside the cast, and a conversion whose range is not bounded is reported as a finding, not cast; the host tests, the golden-vector tests and the end-to-end tests must pass unchanged.
 - **The PyPI wheels are third-party builds of LLVM** → they are pinned exactly and come from the long-standing `ssciwr` packaging; a later change can move to an official LLVM release archive if mise gains a pinned backend for it.
 - **clang-tidy of `core/` sees only host flags** → code under `#ifdef` for the RP2040 or ESP32 is not analysed; that is a follow-up below.
 

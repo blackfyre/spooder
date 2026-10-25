@@ -36,6 +36,7 @@ None. No firmware, link or calibrator behaviour changes.
   - `desktop/go.mod`, `desktop/go.sum`: the staticcheck tool directive;
   - C++ sources in the formatted directories (layout only, in its own commit), and `core/` and `desktop/` sources where a finding is fixed;
   - `.github/workflows/ci.yml`: a lint job;
+  - `.gitignore`: the root `compile_commands.json`;
   - `CLAUDE.md`, `desktop/CLAUDE.md`, `CHANGELOG.md`.
 - **Dependencies:** the `clang-format` and `clang-tidy` 22.1.8 wheels from PyPI (through mise's pipx backend and `uv`), and staticcheck 2026.2.2 (`honnef.co/go/tools` v0.8.2).
 - **Risk:** low. Formatting and fixes for findings must not change behaviour; the existing gates (host tests, both firmware builds, the desktop tests and the end-to-end tests) confirm it. No flashing is needed beyond the usual check that the firmwares still build.
