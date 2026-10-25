@@ -32,9 +32,10 @@ mise run build-bridge    # PlatformIO build of firmware/bridge (TTGO T-Display)
 mise run upload-bridge   # flash the bridge (BRIDGE_PORT, default /dev/ttyUSB0)
 mise run monitor-bridge  # the bridge's Bluepad32 console
 mise run test         # host-side Unity tests of core/ (PlatformIO native env), sanitised (ASan, UBSan), after a source-list check; and the bridge and robot build checks' tests
+mise run lint         # C++ formatting check and clang-tidy on core/; reformat with clang-format -i on the files it names
 mise run desktop-build   # the desktop calibrator -> build/desktop/spooder-calibrator
 mise run desktop-run     # build and start it (run from the checkout: it exports there)
-mise run desktop-test    # gofmt, go vet and go test of desktop/
+mise run desktop-test    # gofmt, go vet, staticcheck and go test of desktop/
 mise run fuzz           # fuzz the desktop's link decoder and text/frame split (--time per target, default 60s)
 mise run desktop-deps    # name the missing Linux packages for the Gio build
 mise run desktop-install # the launcher and icon for this user (Linux); desktop-icons re-renders the icon
@@ -51,7 +52,7 @@ mise run worktree-remove <name>  # remove it and its local branch
 mise run clean
 ```
 
-**Verification gates:** `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e` and, when `hardware/spooder-electronics-mount/` changes, `mise run cad`. Compiler warnings in Spooder's own sources are errors in the robot build, the bridge build and the host tests (each area's `CLAUDE.md` says how); SDK warnings are not. Hardware behaviour can only be checked on the boards (the `spooder-hardware-check` skill).
+**Verification gates:** `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e` and, when `hardware/spooder-electronics-mount/` changes, `mise run cad`. Compiler warnings in Spooder's own sources are errors in the robot build, the bridge build and the host tests (each area's `CLAUDE.md` says how); SDK warnings are not. Hardware behaviour can only be checked on the boards (the `spooder-hardware-check` skill).
 
 **CI** (`.github/workflows/ci.yml`) runs the same gates, except `mise run cad`, on a clean Ubuntu runner on every push to `main` and `deliver/*` and every pull request, and nightly with `mise run vulncheck`. It is an independent check, not a merge gate: the delivery workflow's own gates decide merges. Actions are pinned to commit SHAs.
 

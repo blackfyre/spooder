@@ -1,6 +1,6 @@
 # desktop/
 
-The desktop calibrator, a Go module (`github.com/blackfyre/spooder/desktop`) with a Gio UI, kept apart so Gio and cgo never reach the firmware builds. Gates: `mise run desktop-test` (gofmt, go vet, go test), `mise run desktop-build` and `mise run e2e`.
+The desktop calibrator, a Go module (`github.com/blackfyre/spooder/desktop`) with a Gio UI, kept apart so Gio and cgo never reach the firmware builds. Gates: `mise run desktop-test` (gofmt, go vet, staticcheck, go test), `mise run desktop-build` and `mise run e2e`.
 
 **Dependencies.** Gio needs cgo and the Wayland, X11 and EGL development packages on Linux. On Fedora: `sudo dnf install wayland-devel libxkbcommon-devel libxkbcommon-x11-devel libX11-devel libXcursor-devel libXfixes-devel mesa-libEGL-devel vulkan-headers`. `desktop-build` and `desktop-test` run `desktop-deps` first, which prints the `dnf` line for whatever is missing. Opening the robot's port needs membership of the `dialout` group.
 
