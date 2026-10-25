@@ -293,7 +293,8 @@ void test_combined_stroke_stays_within_the_stride_limit_and_reachable()
         for (float ground : grounds)
           for (bool fixed : FIXED)
           {
-            GaitInput both = steering(d, rotate, ground), walk = steering(d, 0, ground), turn = steering(Vector2(), rotate, ground);
+            GaitInput both = steering(d, rotate, ground), walk = steering(d, 0, ground),
+                      turn = steering(Vector2(), rotate, ground);
             both.fixedStride = walk.fixedStride = turn.fixedStride = fixed;
             float scale = 1;
             bool full = fullLength(p, walk) && fullLength(p, turn);
@@ -345,8 +346,8 @@ void test_long_strides_shrink_to_reach()
 
 // Schematic coxa pivots (the desktop legs pane's and test_gesture's), until the
 // body geometry is measured (add-gestures part two).
-static const Vector2 PIVOTS[LEG_COUNT] = {
-    Vector2(-70, 120), Vector2(-90, 0), Vector2(-70, -120), Vector2(70, -120), Vector2(90, 0), Vector2(70, 120)};
+static const Vector2 PIVOTS[LEG_COUNT] = {Vector2(-70, 120), Vector2(-90, 0), Vector2(-70, -120),
+                                          Vector2(70, -120), Vector2(90, 0),  Vector2(70, 120)};
 
 // A leg-frame foot in the body frame (x right, y forward).
 static Vector2 toBody(int leg, Vector3 foot)
@@ -419,7 +420,8 @@ void test_walking_keeps_the_body_over_its_support()
   // intent, not the physical margin.
   const Gait STABLE[] = {Gait::Tri, Gait::Wave, Gait::Quad};
   const float MARGIN_MM = 20;
-  const Vector2 directions[] = {Vector2(0, 100), Vector2(0, -100), Vector2(100, 0), Vector2(-100, 0), Vector2(70.7f, 70.7f), Vector2()};
+  const Vector2 directions[] = {Vector2(0, 100),  Vector2(0, -100),      Vector2(100, 0),
+                                Vector2(-100, 0), Vector2(70.7f, 70.7f), Vector2()};
   const float ROTATES[] = {0, -100, -40, 40, 100};
   const float grounds[] = {-60, -60 - 1.7f * 100}; // body height 0 and 100
   for (Gait g : STABLE)

@@ -131,7 +131,7 @@ struct LinkEndpoint
 struct RobotState
 {
   InputMode inputMode = InputMode::Links;
-  float tripCurrentA = 0;      // for the LED load bar
+  float tripCurrentA = 0; // for the LED load bar
   float sustainedCurrentA = 0;
 
   body::BodyState body = {};

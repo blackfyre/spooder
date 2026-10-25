@@ -5,7 +5,10 @@ using namespace power_history;
 
 static History h;
 
-void setUp() { h = History(); }
+void setUp()
+{
+  h = History();
+}
 void tearDown() {}
 
 // Feeds one reading per 20 ms tick for @p ms, starting at @p fromMs.
@@ -74,9 +77,9 @@ void test_lost_link_is_a_gap()
     (c.present ? present : gaps)++;
   TEST_ASSERT_EQUAL_INT(10 + 10, gaps); // 10 s unrecorded + 10 s lost
   TEST_ASSERT_EQUAL_INT(40, present);
-  TEST_ASSERT_FALSE(cols[0].present);   // before the first sample
-  TEST_ASSERT_TRUE(cols[59].present);   // the newest
-  TEST_ASSERT_FALSE(cols[35].present);  // inside the lost 10 s
+  TEST_ASSERT_FALSE(cols[0].present);  // before the first sample
+  TEST_ASSERT_TRUE(cols[59].present);  // the newest
+  TEST_ASSERT_FALSE(cols[35].present); // inside the lost 10 s
   TEST_ASSERT_TRUE(cols[25].present);
 }
 

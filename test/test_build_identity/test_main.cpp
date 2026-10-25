@@ -29,7 +29,10 @@ void test_empty_and_null_id_are_unknown()
 void test_non_printable_bytes_become_question_marks()
 {
   // 0xA5 is the link's frame start; a tab, a newline, DEL and a UTF-8 byte.
-  banner(line, sizeof line, "robot", "a\xA5" "b\tc\nd\x7F" "e\xC3\xA9");
+  banner(line, sizeof line, "robot",
+         "a\xA5"
+         "b\tc\nd\x7F"
+         "e\xC3\xA9");
   TEST_ASSERT_EQUAL_STRING("spooder robot: build a?b?c?d?e??\n", line);
   for (const char *p = line; *p != '\0'; p++)
   {

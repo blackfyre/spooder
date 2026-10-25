@@ -19,17 +19,17 @@ namespace led_pattern
 {
 
 constexpr int LED_COUNT = 6;
-constexpr int MAIN_LEDS = 5;    // LEDs 0-4
-constexpr int INPUT_LED = 5;    // LED 5
+constexpr int MAIN_LEDS = 5; // LEDs 0-4
+constexpr int INPUT_LED = 5; // LED 5
 
 enum class Input : uint8_t
 {
-  Serial,          // USB serial hook
-  LinkConnected,   // bridge link up, gamepad connected: the bridge in control
-  LinkNoGamepad,   // bridge link up, no gamepad
-  LinkStale,       // no valid frames from the bridge
-  UsbConnected,    // a USB host with a connected controller in control
-  SourceConflict,  // the bridge and a USB host both claim control: asleep
+  Serial,         // USB serial hook
+  LinkConnected,  // bridge link up, gamepad connected: the bridge in control
+  LinkNoGamepad,  // bridge link up, no gamepad
+  LinkStale,      // no valid frames from the bridge
+  UsbConnected,   // a USB host with a connected controller in control
+  SourceConflict, // the bridge and a USB host both claim control: asleep
 };
 
 enum class BodyMode : uint8_t // mirrors body::Mode order
@@ -45,11 +45,11 @@ enum class BodyMode : uint8_t // mirrors body::Mode order
 struct State
 {
   uint32_t nowMs;
-  uint16_t faults;       // protection::Fault bits; 0 = none
-  bool supplyAccepted;   // protection allows output
+  uint16_t faults;     // protection::Fault bits; 0 = none
+  bool supplyAccepted; // protection allows output
   bool bodyRunning;
   BodyMode mode;
-  int gait;              // gait::Gait index
+  int gait; // gait::Gait index
   float currentA;
   float tripCurrentA;
   float sustainedCurrentA;

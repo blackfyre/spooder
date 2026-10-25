@@ -135,10 +135,14 @@ static void drawLogo()
     for (int x = 0; x < logo::WIDTH; x++)
       if (logo::pixel(x, y))
       {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
+        if (x < minX)
+          minX = x;
+        if (x > maxX)
+          maxX = x;
+        if (y < minY)
+          minY = y;
+        if (y > maxY)
+          maxY = y;
       }
   lcd.fillScreen(TFT_BLACK);
   if (maxX < 0)
@@ -303,11 +307,11 @@ void update(uint32_t nowMs, bool gamepadConnected, uint8_t gamepadBattery, page_
   status_screen::updateRates(rates, nowMs, linkStatus.telemetryFresh, linkStatus.telemetry, linkStatus.validFrames,
                              linkStatus.discardedFrames);
   peak_hold::update(currentPeak, peak_hold::Extreme::Max, peak_hold::CURRENT_FALL_MA_PER_S,
-                    peak_hold::CURRENT_WARN_MARGIN_MA, nowMs,
-                    linkStatus.telemetryFresh, linkStatus.telemetry.currentMa);
+                    peak_hold::CURRENT_WARN_MARGIN_MA, nowMs, linkStatus.telemetryFresh,
+                    linkStatus.telemetry.currentMa);
   peak_hold::update(voltageLow, peak_hold::Extreme::Min, peak_hold::VOLTAGE_RISE_MV_PER_S,
-                    peak_hold::VOLTAGE_WARN_MARGIN_MV, nowMs,
-                    linkStatus.telemetryFresh, linkStatus.telemetry.voltageMv);
+                    peak_hold::VOLTAGE_WARN_MARGIN_MV, nowMs, linkStatus.telemetryFresh,
+                    linkStatus.telemetry.voltageMv);
 
   if (!startupDone(nowMs, linkStatus.emergencyStop))
     return;

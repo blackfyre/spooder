@@ -49,7 +49,8 @@ static status_screen::Inputs healthy()
 static void benchMinute(power_history::History &h)
 {
   uint32_t t = 0;
-  auto at = [&](uint32_t untilMs, auto currentMa) {
+  auto at = [&](uint32_t untilMs, auto currentMa)
+  {
     for (; t < untilMs; t += 20)
     {
       uint16_t ma = (uint16_t)currentMa(t);

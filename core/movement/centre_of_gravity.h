@@ -19,12 +19,12 @@ using kinematics::LEG_COUNT;
 
 // Masses in grams. The servo and the battery are weighed; the rest are
 // estimates from typical parts until the rebuilt robot is weighed.
-constexpr float BODY_G = 420;        // frame, Servo 2040, BEC, wiring; no battery
-constexpr float BATTERY_G = 284;     // 2S 5000 mAh, weighed
-constexpr float SERVO_G = 55;        // MG996R with horn and screws, weighed; one per joint
-constexpr float COXA_LINK_G = 30;    // halfway along the coxa
-constexpr float FEMUR_LINK_G = 45;   // halfway along the femur
-constexpr float TIBIA_LINK_G = 50;   // TIBIA_LINK_AT of the way from the knee to the foot
+constexpr float BODY_G = 420;      // frame, Servo 2040, BEC, wiring; no battery
+constexpr float BATTERY_G = 284;   // 2S 5000 mAh, weighed
+constexpr float SERVO_G = 55;      // MG996R with horn and screws, weighed; one per joint
+constexpr float COXA_LINK_G = 30;  // halfway along the coxa
+constexpr float FEMUR_LINK_G = 45; // halfway along the femur
+constexpr float TIBIA_LINK_G = 50; // TIBIA_LINK_AT of the way from the knee to the foot
 constexpr float TIBIA_LINK_AT = 0.4f;
 
 // Where the body's and the battery's masses sit.
@@ -33,8 +33,8 @@ const Vector3 BATTERY_AT(0, 0, 0);
 
 // Schematic coxa pivots (the desktop legs pane's), until the body geometry
 // is measured (add-gestures part two). The mount angles are gait's.
-const Vector2 PIVOTS[LEG_COUNT] = {
-    Vector2(-70, 120), Vector2(-90, 0), Vector2(-70, -120), Vector2(70, -120), Vector2(90, 0), Vector2(70, 120)};
+const Vector2 PIVOTS[LEG_COUNT] = {Vector2(-70, 120), Vector2(-90, 0), Vector2(-70, -120),
+                                   Vector2(70, -120), Vector2(90, 0),  Vector2(70, 120)};
 
 // A foot higher than this above the lowest foot is off the ground.
 constexpr float CONTACT_MM = 10;

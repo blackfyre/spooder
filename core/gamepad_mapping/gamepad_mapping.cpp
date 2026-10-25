@@ -149,8 +149,10 @@ Desired update(Mapper &m, const PadState &pad, uint32_t nowMs)
       {
         uint16_t button;
         uint8_t gesture;
-      } GESTURE_BUTTONS[] = {{BUTTON_A, protocol::GESTURE_SAY_HI}, {BUTTON_B, protocol::GESTURE_WIGGLE},
-                             {BUTTON_X, protocol::GESTURE_DANCE},  {BUTTON_Y, protocol::GESTURE_ATTACK},
+      } GESTURE_BUTTONS[] = {{BUTTON_A, protocol::GESTURE_SAY_HI},
+                             {BUTTON_B, protocol::GESTURE_WIGGLE},
+                             {BUTTON_X, protocol::GESTURE_DANCE},
+                             {BUTTON_Y, protocol::GESTURE_ATTACK},
                              {BUTTON_R2, protocol::GESTURE_BALL}};
       for (const auto &g : GESTURE_BUTTONS)
         if (pressed & g.button)

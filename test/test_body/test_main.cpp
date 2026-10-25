@@ -190,7 +190,7 @@ static void walkFor(uint32_t stepMs, Vector3 out[LEG_COUNT], Vector2 translate =
   walk.rotate = rotate;
   walk.gait = gaitIndex;
   walk.speed = speed;
-  run(walk, 20);  // enter Walk on an aligned step
+  run(walk, 20); // enter Walk on an aligned step
   run(walk, 2000, stepMs);
   for (int i = 0; i < LEG_COUNT; i++)
     out[i] = s.feet[i];
@@ -498,7 +498,7 @@ void test_offset_change_resolves_a_still_leg()
   TEST_ASSERT_FLOAT_WITHIN(1e-3, femur + 5, s.angles[1].femur);
   TEST_ASSERT_EQUAL_FLOAT(otherFemur, s.angles[0].femur);
   run(command(RequestedMode::Sleep), 20);
-  TEST_ASSERT_FALSE(s.legUpdated[1]); // re-solved once only
+  TEST_ASSERT_FALSE(s.legUpdated[1]);           // re-solved once only
   setOffsets(s, 1, Vector3(o.x, o.y + 5, o.z)); // unchanged: no re-solve
   run(command(RequestedMode::Sleep), 20);
   TEST_ASSERT_FALSE(s.legUpdated[1]);
@@ -721,7 +721,8 @@ static float largestChange(const JointAngles *a, const JointAngles *b)
 {
   float m = 0;
   for (int i = 0; i < LEG_COUNT; i++)
-    m = fmaxf(m, fmaxf(fabsf(a[i].coxa - b[i].coxa), fmaxf(fabsf(a[i].femur - b[i].femur), fabsf(a[i].tibia - b[i].tibia))));
+    m = fmaxf(
+        m, fmaxf(fabsf(a[i].coxa - b[i].coxa), fmaxf(fabsf(a[i].femur - b[i].femur), fabsf(a[i].tibia - b[i].tibia))));
   return m;
 }
 
@@ -781,8 +782,8 @@ void test_walking_stays_within_the_budget()
           float fastest = fastestJoint(c, 3000, budget, BUDGET_TOLERANCE, &steps, &over);
           TEST_ASSERT_TRUE(s.mode == Mode::Walk);
           char msg[96];
-          snprintf(msg, sizeof msg, "gait %d speed %.0f height %.0f rotate %.0f: %.2f x budget", g, speed, height, rotate,
-                   fastest / budget);
+          snprintf(msg, sizeof msg, "gait %d speed %.0f height %.0f rotate %.0f: %.2f x budget", g, speed, height,
+                   rotate, fastest / budget);
           TEST_ASSERT_TRUE_MESSAGE(fastest <= budget * WORST_MISS, msg);
         }
   TEST_ASSERT_TRUE(over <= steps * MAX_MISSED_SHARE);

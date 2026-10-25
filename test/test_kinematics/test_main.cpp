@@ -47,7 +47,8 @@ void test_target_near_the_straight_knee_is_rejected()
   // straight: the joint angles change without bound there.
   JointAngles a = {1, 2, 3};
   TEST_ASSERT_FALSE(solveLeg(Vector3(COXA_LENGTH + MAX_KNEE_SPAN + 1, 0, 0), NO_OFFSETS, a));
-  TEST_ASSERT_FALSE(solveLeg(Vector3(200, 0, -250), NO_OFFSETS, a)); // 296 mm from the femur joint, 320 mm from the coxa pivot
+  TEST_ASSERT_FALSE(
+      solveLeg(Vector3(200, 0, -250), NO_OFFSETS, a)); // 296 mm from the femur joint, 320 mm from the coxa pivot
   TEST_ASSERT_EQUAL_FLOAT(2, a.femur);
 }
 
@@ -121,7 +122,7 @@ void test_straight_knee_past_the_tibia_travel_is_fitted()
 void test_direction_past_the_coxa_travel_is_fitted()
 {
   const Vector3 offsets(30, 45, 0); // the coxa reaches -30 deg at most
-  Vector3 target(150, -150, -60);  // -45 deg
+  Vector3 target(150, -150, -60);   // -45 deg
   JointAngles a;
   TEST_ASSERT_TRUE(solveLegInRange(target, offsets, a));
   TEST_ASSERT_TRUE(inTravel(a));

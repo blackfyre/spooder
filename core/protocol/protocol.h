@@ -61,17 +61,17 @@ constexpr uint8_t FLAG_EMERGENCY_STOP = 1u << 1;
 // Bridge to robot, every 20 ms: the complete desired state, never events.
 struct Command
 {
-  uint8_t mode;               // RequestedMode value
-  int8_t translateX;          // -100..100
-  int8_t translateY;          // -100..100, + = forward
-  int8_t rotate;              // -100..100
-  uint8_t height;             // 0..100
-  uint8_t speed;              // 0..100
-  uint8_t gait;               // gait::Gait index
-  uint8_t stride;             // StrideMode value
-  uint8_t flags;              // FLAG_*
-  uint8_t clearCounter;       // incremented once per fault-clear request
-  uint8_t modeRequestCounter; // incremented on every explicit mode request
+  uint8_t mode;                  // RequestedMode value
+  int8_t translateX;             // -100..100
+  int8_t translateY;             // -100..100, + = forward
+  int8_t rotate;                 // -100..100
+  uint8_t height;                // 0..100
+  uint8_t speed;                 // 0..100
+  uint8_t gait;                  // gait::Gait index
+  uint8_t stride;                // StrideMode value
+  uint8_t flags;                 // FLAG_*
+  uint8_t clearCounter;          // incremented once per fault-clear request
+  uint8_t modeRequestCounter;    // incremented on every explicit mode request
   uint8_t gesture;               // GESTURE_* id of the latest gesture request (0 = none)
   uint8_t gestureRequestCounter; // incremented on every gesture request
 };
@@ -101,10 +101,10 @@ constexpr uint8_t TELEMETRY_BRIDGE_GAMEPAD = 1u << 4;
 // Robot to every link, every 100 ms.
 struct Telemetry
 {
-  uint8_t bodyMode;  // body::Mode value
+  uint8_t bodyMode; // body::Mode value
   uint8_t gait;
   bool outputsOn;
-  uint16_t faults;   // protection::Fault bits
+  uint16_t faults; // protection::Fault bits
   uint16_t voltageMv;
   uint16_t currentMa;
   uint16_t validFrames;     // command frames accepted (wraps)
@@ -114,8 +114,8 @@ struct Telemetry
   uint8_t tofStatus;
   int16_t pitchCentideg;
   int16_t rollCentideg;
-  uint8_t flags;            // TELEMETRY_* bits
-  uint8_t gesture;          // GESTURE_* id being played, 0 when none
+  uint8_t flags;   // TELEMETRY_* bits
+  uint8_t gesture; // GESTURE_* id being played, 0 when none
   // The bridge link's decoder counts, on every link (bytes 23-26, reserved
   // and zero before; an older robot reports zero).
   uint16_t bridgeValidFrames;
@@ -128,12 +128,12 @@ constexpr uint8_t CALIBRATION_REVERSED = 1u << 0;
 // Front-end to robot: the complete calibration wanted for one joint.
 struct CalibrationSet
 {
-  uint8_t requestId;      // a repeat on the same link is a retransmission
-  uint8_t joint;          // 0..17, servo output order
+  uint8_t requestId; // a repeat on the same link is a retransmission
+  uint8_t joint;     // 0..17, servo output order
   int16_t offsetCentideg;
   uint16_t pulse0Us;
   uint16_t pulse180Us;
-  uint8_t flags;          // CALIBRATION_* bits
+  uint8_t flags; // CALIBRATION_* bits
 };
 
 enum class CalibrationResult : uint8_t
@@ -174,7 +174,7 @@ struct PoseJoint
 // Robot to the USB host only, at 10 Hz: what the robot commands each joint.
 struct Pose
 {
-  uint8_t flags; // POSE_* bits
+  uint8_t flags;                        // POSE_* bits
   PoseJoint joints[CALIBRATION_JOINTS]; // servo output order
 };
 
@@ -182,18 +182,18 @@ struct Pose
 // telemetry window (five ticks), and its configured limits.
 struct Diagnostics
 {
-  uint16_t motionSharePermille;  // smallest share the joint speed budget allowed; 1000 = full
-  uint16_t backstopTicks;        // ticks the output rate backstop held a joint back (wraps)
-  uint16_t tickMaxUs;            // the control tick's longest working time
-  uint16_t tickMeanUs;           // and its mean
-  uint16_t averageCurrentMa;     // protection's average over its sustained window
-  uint16_t tripCurrentMa;        // configured limits
+  uint16_t motionSharePermille; // smallest share the joint speed budget allowed; 1000 = full
+  uint16_t backstopTicks;       // ticks the output rate backstop held a joint back (wraps)
+  uint16_t tickMaxUs;           // the control tick's longest working time
+  uint16_t tickMeanUs;          // and its mean
+  uint16_t averageCurrentMa;    // protection's average over its sustained window
+  uint16_t tripCurrentMa;       // configured limits
   uint16_t sustainedCurrentMa;
   uint16_t minMv;
   uint16_t maxMv;
   uint16_t brownoutMv;
-  uint16_t budgetDegPerS;        // the servo profile's joint speed budget
-  uint16_t ratedDegPerS;         // and its rated no-load speed (the backstop)
+  uint16_t budgetDegPerS; // the servo profile's joint speed budget
+  uint16_t ratedDegPerS;  // and its rated no-load speed (the backstop)
 };
 
 /**

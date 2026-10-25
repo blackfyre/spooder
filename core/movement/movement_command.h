@@ -24,13 +24,13 @@ enum class StrideMode : uint8_t
 struct MovementCommand
 {
   RequestedMode mode = RequestedMode::Stand;
-  Vector2 translate;        // magnitude 0..100
-  float rotate = 0;         // -100..100
-  float height = 0;         // body height dial, 0..100; higher raises the body
-  float speed = 44;         // speed dial, 0..100
-  int gait = 0;             // index into gait::Gait; unknown values are ignored
+  Vector2 translate; // magnitude 0..100
+  float rotate = 0;  // -100..100
+  float height = 0;  // body height dial, 0..100; higher raises the body
+  float speed = 44;  // speed dial, 0..100
+  int gait = 0;      // index into gait::Gait; unknown values are ignored
   StrideMode stride = StrideMode::Dynamic;
-  uint32_t issuedAtMs = 0;  // millis() when the controller produced the command
+  uint32_t issuedAtMs = 0; // millis() when the controller produced the command
   // Gesture requests: each change of gestureSeq requests `gesture` (a
   // gesture::Gesture id) once. The body takes the first value it sees as the
   // baseline, so a restart never replays an old request.

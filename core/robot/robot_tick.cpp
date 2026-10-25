@@ -236,8 +236,8 @@ static void sendTelemetry(RobotState &s, const protection::Reading &r, const pro
   }
 }
 
-static led_pattern::State ledState(const RobotState &s, uint32_t now, const protection::Result &prot,
-                                   bool bodyRunning, float currentA, led_pattern::Input source)
+static led_pattern::State ledState(const RobotState &s, uint32_t now, const protection::Result &prot, bool bodyRunning,
+                                   float currentA, led_pattern::Input source)
 {
   led_pattern::State l;
   l.nowMs = now;
@@ -281,8 +281,8 @@ static void reportFaults(uint16_t faults, const protection::Reading &r, Hardware
       logf(hw, "fault latched: %s (%.2f A, %.2f V)\n", faultName(bit), r.currentA, r.voltageV);
 }
 
-static void reportStatus(const RobotState &s, const protection::Reading &r, const protection::Result &p,
-                         bool outputsOn, bool bodyRunning, Hardware &hw)
+static void reportStatus(const RobotState &s, const protection::Reading &r, const protection::Result &p, bool outputsOn,
+                         bool bodyRunning, Hardware &hw)
 {
   logf(hw, "supply %.2f A (avg %.2f A), %.2f V%s; output %s; body %s, mode %d; faults 0x%02x\n", r.currentA,
        p.averageCurrentA, r.voltageV, p.supplyValid ? "" : " (out of range or absent)", outputsOn ? "on" : "off",
@@ -369,7 +369,8 @@ static void reportBackstop(RobotState &s, Hardware &hw)
   if (s.backstopTicks == s.backstopReported)
     return;
   static const char *const JOINT_NAMES[kinematics::JOINTS_PER_LEG] = {"coxa", "femur", "tibia"};
-  int leg = s.backstopWorstJoint / kinematics::JOINTS_PER_LEG, joint = s.backstopWorstJoint % kinematics::JOINTS_PER_LEG;
+  int leg = s.backstopWorstJoint / kinematics::JOINTS_PER_LEG,
+      joint = s.backstopWorstJoint % kinematics::JOINTS_PER_LEG;
   logf(hw, "output rate backstop: %lu ticks held back; most: leg %d %s, %.1f deg behind\n",
        (unsigned long)s.backstopTicks, leg, JOINT_NAMES[joint], s.backstopWorstDeg);
   s.backstopReported = s.backstopTicks;
@@ -506,7 +507,7 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
     // off, no leg's servo position is known.
     if (hw.servosOn())
       s.legsOn = s.legsOn + SWITCH_ON_LEGS_PER_TICK < kinematics::LEG_COUNT ? s.legsOn + SWITCH_ON_LEGS_PER_TICK
-                                                                             : kinematics::LEG_COUNT;
+                                                                            : kinematics::LEG_COUNT;
     else
     {
       s.legsOn = SWITCH_ON_LEGS_PER_TICK;

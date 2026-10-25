@@ -22,7 +22,10 @@ static State healthy(BodyMode mode)
   return s;
 }
 
-static bool lit(const Rgb &c) { return c.r || c.g || c.b; }
+static bool lit(const Rgb &c)
+{
+  return c.r || c.g || c.b;
+}
 static int litCount(int from, int to)
 {
   int n = 0;
@@ -31,7 +34,10 @@ static int litCount(int from, int to)
       n++;
   return n;
 }
-static bool isRedOnly(const Rgb &c) { return c.r > 0 && c.g == 0 && c.b == 0; }
+static bool isRedOnly(const Rgb &c)
+{
+  return c.r > 0 && c.g == 0 && c.b == 0;
+}
 
 void setUp() {}
 void tearDown() {}
@@ -52,7 +58,7 @@ void test_fault_overrides_everything_and_is_brighter()
 
 void test_each_fault_has_a_distinct_colour()
 {
-  const uint16_t faults[] = {protection::OVERCURRENT, protection::BROWNOUT, protection::OVERVOLTAGE,
+  const uint16_t faults[] = {protection::OVERCURRENT,       protection::BROWNOUT,     protection::OVERVOLTAGE,
                              protection::SUSTAINED_CURRENT, protection::UNDERVOLTAGE, protection::EMERGENCY_STOP};
   Rgb seen[6];
   for (int i = 0; i < 6; i++)

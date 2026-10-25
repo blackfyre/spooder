@@ -18,7 +18,7 @@ constexpr float GROUND_PER_HEIGHT = -1.7f;
 
 // Time-based rates (design D5), converted from the original per-loop values
 // at a 20 ms reference step. Tune on hardware.
-constexpr float STAND_RATE = 1250;            // progress units per second
+constexpr float STAND_RATE = 1250; // progress units per second
 constexpr float TRANSLATE_TAU_S = 0.25f;
 constexpr float ROTATE_TAU_S = 0.16f;
 constexpr float HEIGHT_TAU_S = 0.5f;
@@ -26,9 +26,9 @@ constexpr float SPEED_TAU_S = 0.25f;
 constexpr float STRIDE_MODE_TAU_S = 0.25f;
 constexpr float SLEEP_TAU_S = 0.33f;
 constexpr float SLEEP_SNAP_MM = 1;
-constexpr float CALIBRATION_RATE = 50;        // mm per second
+constexpr float CALIBRATION_RATE = 50; // mm per second
 constexpr float CALIBRATION_INBETWEEN_Z = -20;
-constexpr float STAND_LIFT_CLEARANCE = 50;    // minimum lift of the in-between point
+constexpr float STAND_LIFT_CLEARANCE = 50; // minimum lift of the in-between point
 constexpr float AT_POSITION_MM = 0.01f;
 // Internal sub-step: the state machine advances in these increments.
 constexpr uint32_t INTEGRATION_STEP_US = 5000;
@@ -399,9 +399,9 @@ static void stepCalibrate(BodyState &s, float dtS)
         setFoot(s, i, Vector3(f.x, f.y, stepToward(f.z, CALIBRATION_INBETWEEN_Z, maxStep)));
       continue;
     }
-    setFoot(s, i, Vector3(stepToward(f.x, CALIBRATION_POSE.x, maxStep),
-                          stepToward(f.y, CALIBRATION_POSE.y, maxStep),
-                          stepToward(f.z, CALIBRATION_POSE.z, maxStep)));
+    setFoot(s, i,
+            Vector3(stepToward(f.x, CALIBRATION_POSE.x, maxStep), stepToward(f.y, CALIBRATION_POSE.y, maxStep),
+                    stepToward(f.z, CALIBRATION_POSE.z, maxStep)));
   }
 }
 
@@ -817,8 +817,7 @@ void step(BodyState &s, const MovementCommand &rawCmd, uint32_t nowMs)
         // change at no time, the part-way change and the full change, which
         // also fits a piece whose fast part comes early or late.
         float mid = largestJointChange(s, halfway);
-        next = mid >= target ? share * target / mid
-                             : share + (1 - share) * (target - mid) / fmaxf(change - mid, 1e-6f);
+        next = mid >= target ? share * target / mid : share + (1 - share) * (target - mid) / fmaxf(change - mid, 1e-6f);
       }
       // The last run gets a margin, being the last chance to keep within.
       if (run + 1 == MAX_BUDGET_RUNS)

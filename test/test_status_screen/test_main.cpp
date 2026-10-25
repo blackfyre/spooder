@@ -149,7 +149,7 @@ void test_robot_e_stop_fault_is_named_once()
 void test_every_fault_and_source_combination_is_named_and_fits()
 {
   const uint16_t bits[] = {protection::OVERCURRENT, protection::SUSTAINED_CURRENT, protection::UNDERVOLTAGE,
-                           protection::BROWNOUT, protection::OVERVOLTAGE, protection::EMERGENCY_STOP};
+                           protection::BROWNOUT,    protection::OVERVOLTAGE,       protection::EMERGENCY_STOP};
   const char *names[] = {"OVERCURRENT", "OVERLOAD", "LOW V", "BROWN-OUT", "HIGH V", "E-STOP"};
   const uint8_t flags[] = {0, protocol::TELEMETRY_SOURCE_CONFLICT, protocol::TELEMETRY_USB_IN_CONTROL};
   for (uint8_t f : flags)
@@ -248,7 +248,7 @@ void test_held_extremes_mark_the_bars()
   in.voltageLow.value = 5250;
   composePage(in, Page::Drive, view);
   TEST_ASSERT_TRUE(view.drive.currentBar.held);
-  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.3f, view.drive.currentBar.heldFraction);  // 4.5 of 15 A
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.3f, view.drive.currentBar.heldFraction); // 4.5 of 15 A
   TEST_ASSERT_TRUE(view.drive.voltageBar.held);
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.25f, view.drive.voltageBar.heldFraction); // 5.25 V on 4.5..7.5
   TEST_ASSERT_TRUE(view.drive.current.tone == Tone::Normal);
@@ -383,9 +383,9 @@ void test_healthy_link_rates()
   uint32_t bridgeOk = 0;
   for (uint32_t now = 0; now <= 3000; now += 20)
   {
-    t.validFrames++;               // 50 command frames per second
+    t.validFrames++; // 50 command frames per second
     if (now % 100 == 0)
-      bridgeOk++;                  // 10 telemetry frames per second
+      bridgeOk++; // 10 telemetry frames per second
     updateRates(m, now, true, t, bridgeOk, 0);
   }
   TEST_ASSERT_TRUE(m.rates.robotValid);
@@ -447,9 +447,9 @@ void test_battery_percent()
 // Glyph widths of the screen font (LovyanGFX fonts::Font2, widtbl_f16) for
 // characters 32..127.
 static const uint8_t FONT2_WIDTHS[96] = {
-    6, 3, 4, 9, 8, 9, 9, 3, 7, 7, 8, 6, 3, 6, 5, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 3, 3, 6, 6, 6, 8,
+    6, 3, 4, 9, 8, 9, 9, 3, 7, 7, 8, 6, 3, 6,  5, 7, 8, 8, 8, 8, 8, 8, 8, 8,  8, 8, 3, 3, 6, 6, 6, 8,
     9, 8, 8, 8, 8, 8, 8, 8, 8, 4, 8, 8, 7, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 10, 8, 8, 8, 4, 7, 4, 7, 9,
-    4, 7, 7, 7, 7, 7, 6, 7, 7, 4, 5, 6, 4, 8, 7, 8, 7, 8, 6, 6, 5, 7, 8, 8, 6, 7, 7, 5, 3, 5, 8, 6,
+    4, 7, 7, 7, 7, 7, 6, 7, 7, 4, 5, 6, 4, 8,  7, 8, 7, 8, 6, 6, 5, 7, 8, 8,  6, 7, 7, 5, 3, 5, 8, 6,
 };
 
 static int textWidthPx(const char *text)

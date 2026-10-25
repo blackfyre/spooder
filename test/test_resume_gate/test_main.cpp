@@ -5,7 +5,10 @@ using namespace protection;
 
 static ResumeGate g;
 
-void setUp() { g = ResumeGate(); }
+void setUp()
+{
+  g = ResumeGate();
+}
 void tearDown() {}
 
 void test_no_fault_passes_request_through()

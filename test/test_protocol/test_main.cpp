@@ -8,7 +8,10 @@ using namespace protocol;
 
 static Decoder dec;
 
-void setUp() { dec = Decoder(); }
+void setUp()
+{
+  dec = Decoder();
+}
 void tearDown() {}
 
 static Command sampleCommand()

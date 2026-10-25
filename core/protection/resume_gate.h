@@ -13,7 +13,7 @@ namespace protection
 
 struct ResumeGate
 {
-  bool waiting;          // a fault latched since the last fresh request
+  bool waiting; // a fault latched since the last fresh request
   uint32_t requestSeqAtLatch;
 };
 

@@ -18,7 +18,10 @@ static Result result(bool allowOutput, uint16_t faults, uint16_t newly = 0)
 static const Result SETTLING = result(false, NONE);
 static const Result HEALTHY = result(true, NONE);
 
-void setUp() { sv = Supervisor(); }
+void setUp()
+{
+  sv = Supervisor();
+}
 void tearDown() {}
 
 void test_boot_starts_body_once_supply_settles()

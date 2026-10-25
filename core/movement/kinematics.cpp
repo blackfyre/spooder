@@ -129,7 +129,8 @@ bool solveLegInRange(Vector3 &target, Vector3 offsets, JointAngles &out)
   // Femur: the elevation about the femur joint, at that distance.
   float elevation = atan2f(z, l1);
   float phi1 = acosf(clampf((h * h + a2 * a2 - a3 * a3) / (2 * h * a2), -1, 1));
-  float elLo = toRadians(RANGE_INSET_DEG - offsets.y) - phi1, elHi = toRadians(180 - RANGE_INSET_DEG - offsets.y) - phi1;
+  float elLo = toRadians(RANGE_INSET_DEG - offsets.y) - phi1,
+        elHi = toRadians(180 - RANGE_INSET_DEG - offsets.y) - phi1;
   if (elevation < elLo || elevation > elHi)
   {
     elevation = clampf(elevation, elLo, elHi);

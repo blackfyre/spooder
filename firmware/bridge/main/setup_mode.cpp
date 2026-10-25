@@ -167,8 +167,8 @@ static void handleState()
   static Json j;
   j.len = 0;
   j.overflow = false;
-  j.add("{\"portal\":%d,\"req\":\"%s\",\"estop\":%d,\"link\":%d", view.connected ? 1 : 0,
-        modeName(view.desired.mode), link.emergencyStop ? 1 : 0, link.telemetryFresh ? 1 : 0);
+  j.add("{\"portal\":%d,\"req\":\"%s\",\"estop\":%d,\"link\":%d", view.connected ? 1 : 0, modeName(view.desired.mode),
+        link.emergencyStop ? 1 : 0, link.telemetryFresh ? 1 : 0);
   const protocol::Telemetry &t = link.telemetry;
   j.add(",\"tel\":{\"mode\":%u,\"out\":%d,\"mv\":%u,\"ma\":%u,\"faults\":%u,\"flags\":%u}", t.bodyMode,
         t.outputsOn ? 1 : 0, t.voltageMv, t.currentMa, t.faults, t.flags);
@@ -292,9 +292,9 @@ static void startServer()
   server->on("/api/exit", HTTP_POST, handleExit);
   // Captive-portal checks (Android, Apple, Windows) and every other path go
   // to the portal, so a joining phone opens it by itself.
-  static const char *const PROBES[] = {"/generate_204", "/gen_204",       "/hotspot-detect.html",
-                                       "/connecttest.txt", "/ncsi.txt",   "/redirect",
-                                       "/canonical.html", "/success.txt", "/library/test/success.html"};
+  static const char *const PROBES[] = {"/generate_204",    "/gen_204",     "/hotspot-detect.html",
+                                       "/connecttest.txt", "/ncsi.txt",    "/redirect",
+                                       "/canonical.html",  "/success.txt", "/library/test/success.html"};
   for (const char *p : PROBES)
     server->on(p, redirectToPortal);
   server->onNotFound(redirectToPortal);

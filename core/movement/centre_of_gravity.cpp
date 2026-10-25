@@ -45,7 +45,8 @@ Estimate estimate(const kinematics::JointAngles legs[LEG_COUNT], bool battery)
 {
   Vector3 moment = BODY_AT * BODY_G;
   float mass = BODY_G;
-  auto add = [&](Vector3 at, float g) {
+  auto add = [&](Vector3 at, float g)
+  {
     moment = moment + at * g;
     mass += g;
   };

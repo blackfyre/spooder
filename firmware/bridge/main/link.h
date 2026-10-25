@@ -23,10 +23,10 @@ constexpr uint32_t TELEMETRY_TIMEOUT_MS = 1000;
 
 struct Status
 {
-  bool telemetryFresh;          // a valid telemetry frame within the timeout
+  bool telemetryFresh;           // a valid telemetry frame within the timeout
   protocol::Telemetry telemetry; // the newest one (meaningful when fresh)
   uint32_t telemetryAgeMs;       // since the newest one arrived
-  bool emergencyStop;           // the bridge's own e-stop toggle
+  bool emergencyStop;            // the bridge's own e-stop toggle
   uint32_t validFrames;
   uint32_t discardedFrames;
   // The newest calibration report (the robot sends them in Calibrate). The

@@ -20,8 +20,7 @@
 // The mapping's button bits are Bluepad32's.
 static_assert(gamepad_mapping::BUTTON_A == BUTTON_A && gamepad_mapping::BUTTON_B == BUTTON_B &&
                   gamepad_mapping::BUTTON_X == BUTTON_X && gamepad_mapping::BUTTON_Y == BUTTON_Y &&
-                  gamepad_mapping::BUTTON_L1 == BUTTON_SHOULDER_L &&
-                  gamepad_mapping::BUTTON_R1 == BUTTON_SHOULDER_R &&
+                  gamepad_mapping::BUTTON_L1 == BUTTON_SHOULDER_L && gamepad_mapping::BUTTON_R1 == BUTTON_SHOULDER_R &&
                   gamepad_mapping::BUTTON_THUMB_L == BUTTON_THUMB_L &&
                   gamepad_mapping::BUTTON_THUMB_R == BUTTON_THUMB_R,
               "button bits must match Bluepad32");
@@ -123,8 +122,14 @@ void loop()
   robot_link::Status link = robot_link::status();
 
   // Rumble on faults, the e-stop, link loss and refused gestures.
-  rumble::Inputs feel = {now, pad.connected, link.telemetryFresh, link.telemetry.faults, link.emergencyStop,
-                         desired.gestureRequestCounter, desired.gesture, link.telemetry.gesture};
+  rumble::Inputs feel = {now,
+                         pad.connected,
+                         link.telemetryFresh,
+                         link.telemetry.faults,
+                         link.emergencyStop,
+                         desired.gestureRequestCounter,
+                         desired.gesture,
+                         link.telemetry.gesture};
   rumble::Request r = rumble::update(rumbleState, feel);
   if (r.play && controller != nullptr)
     controller->playDualRumble(0, r.durationMs, r.weak, r.strong);

@@ -27,22 +27,24 @@ using robot_tick::Link;
 // usb_link::MAX_BYTES_PER_POLL).
 constexpr int MAX_BYTES_PER_TICK = 256;
 
-static const char USAGE[] =
-    "usage: virtual-robot [options]\n"
-    "  --link PATH         keep a symbolic link to the USB terminal at PATH\n"
-    "  --bridge-pty        open a terminal for the bridge link (UART1) too\n"
-    "  --bridge-link PATH  keep a symbolic link to the bridge terminal at PATH\n"
-    "  --speed N           tick N times faster than real time\n"
-    "  --stepped           tick only on 'step N' commands\n"
-    "  --supply V          initial supply voltage (default 6.0)\n"
-    "  --echo              copy the debug text to standard error\n"
-    "commands on standard input:\n"
-    "  supply V | current A | current auto | load K\n"
-    "  bridge off|idle|gamepad|clear | estop [on|off]\n"
-    "  unplug | plug | step N | status | quit\n";
+static const char USAGE[] = "usage: virtual-robot [options]\n"
+                            "  --link PATH         keep a symbolic link to the USB terminal at PATH\n"
+                            "  --bridge-pty        open a terminal for the bridge link (UART1) too\n"
+                            "  --bridge-link PATH  keep a symbolic link to the bridge terminal at PATH\n"
+                            "  --speed N           tick N times faster than real time\n"
+                            "  --stepped           tick only on 'step N' commands\n"
+                            "  --supply V          initial supply voltage (default 6.0)\n"
+                            "  --echo              copy the debug text to standard error\n"
+                            "commands on standard input:\n"
+                            "  supply V | current A | current auto | load K\n"
+                            "  bridge off|idle|gamepad|clear | estop [on|off]\n"
+                            "  unplug | plug | step N | status | quit\n";
 
 static volatile sig_atomic_t stopRequested = 0;
-static void onSignal(int) { stopRequested = 1; }
+static void onSignal(int)
+{
+  stopRequested = 1;
+}
 
 struct Options
 {
@@ -130,8 +132,8 @@ static void observe()
     const joint_calibration::Joint &b = lastApplied.joints[j];
     if (a.offsetDeg != b.offsetDeg || a.pulse0Us != b.pulse0Us || a.pulse180Us != b.pulse180Us ||
         a.reversed != b.reversed)
-      say("applied t=%u joint=%d offset=%.4f pulse0=%.3f pulse180=%.3f reversed=%d", nowMs, j, a.offsetDeg,
-          a.pulse0Us, a.pulse180Us, a.reversed ? 1 : 0);
+      say("applied t=%u joint=%d offset=%.4f pulse0=%.3f pulse180=%.3f reversed=%d", nowMs, j, a.offsetDeg, a.pulse0Us,
+          a.pulse180Us, a.reversed ? 1 : 0);
   }
   lastApplied = robot.applied;
   if (board.servos.on != lastOn)
@@ -314,7 +316,8 @@ static bool parseArgs(int argc, char **argv)
   for (int i = 1; i < argc; i++)
   {
     std::string a = argv[i];
-    auto value = [&](const char *name) -> const char * {
+    auto value = [&](const char *name) -> const char *
+    {
       if (i + 1 >= argc)
       {
         fprintf(stderr, "virtual-robot: %s needs a value\n", name);

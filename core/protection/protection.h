@@ -11,7 +11,7 @@ namespace protection
 enum Fault : uint16_t
 {
   NONE = 0,
-  OVERCURRENT = 1u << 0,       // above the trip current for its persistence time, or above the ceiling: output inhibited
+  OVERCURRENT = 1u << 0, // above the trip current for its persistence time, or above the ceiling: output inhibited
   SUSTAINED_CURRENT = 1u << 1, // window average above the sustained current: sleep
   UNDERVOLTAGE = 1u << 2,      // below the minimum voltage for the debounce time: sleep
   BROWNOUT = 1u << 3,          // below the brown-out voltage: output inhibited
@@ -83,8 +83,8 @@ struct State
   float bucketCharge[MAX_BUCKETS + 1];
   int bucketCount; // buckets per window
   int bucketIndex;
-  uint32_t bucketFillMs;  // time accumulated in the current bucket
-  uint32_t windowFillMs;  // total time covered, capped at the window length
+  uint32_t bucketFillMs; // time accumulated in the current bucket
+  uint32_t windowFillMs; // total time covered, capped at the window length
   float averageCurrentA;
 
   uint16_t faults;

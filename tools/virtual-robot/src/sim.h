@@ -31,7 +31,7 @@ struct Servos
   bool legSet[kinematics::LEG_COUNT] = {};
   bool on = false;
   bool inhibited = true;
-  int legsOn = 0; // legs released since output switched on
+  int legsOn = 0;    // legs released since output switched on
   float movingA = 0; // the moving draw of the last apply, while on (load 1)
 
   void apply(const body::BodyState &body, const joint_calibration::Table &calibration, int legsOn);

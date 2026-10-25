@@ -14,8 +14,7 @@ void setUp()
 void tearDown() {}
 
 // A link's input with a command that arrived `ageMs` ago.
-static Input link(bool connected, RequestedMode mode = RequestedMode::Walk, uint32_t requestSeq = 0,
-                  uint32_t ageMs = 0)
+static Input link(bool connected, RequestedMode mode = RequestedMode::Walk, uint32_t requestSeq = 0, uint32_t ageMs = 0)
 {
   Input in = {};
   in.linkSeen = true;

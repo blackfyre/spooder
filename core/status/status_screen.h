@@ -33,7 +33,7 @@ struct Line
   Tone tone;
 };
 
-constexpr int TEXT_CHARS = 28; // one field of a page
+constexpr int TEXT_CHARS = 28;       // one field of a page
 constexpr int STRIP_LINE_CHARS = 37; // the status strip: 222 px at its 6 px font
 constexpr int STRIP_LINES = 2;
 
@@ -98,26 +98,26 @@ struct Inputs
   uint8_t gamepadBattery; // Bluepad32's level, 0 = not reported
   bool emergencyStop;     // the bridge's own e-stop toggle
   gamepad_mapping::Desired desired;
-  bool telemetryFresh;    // robot values are current only while fresh
+  bool telemetryFresh; // robot values are current only while fresh
   protocol::Telemetry telemetry;
   uint32_t telemetryAgeMs;
   Rates rates;
   const power_history::History *history; // may be null: no history yet
-  peak_hold::Hold currentPeak; // the held highest current, mA
-  peak_hold::Hold voltageLow;  // the held lowest voltage, mV
+  peak_hold::Hold currentPeak;           // the held highest current, mA
+  peak_hold::Hold voltageLow;            // the held lowest voltage, mV
 };
 
 struct Header
 {
-  Text mode;      // body mode and gait, or the gesture playing
-  Text gamepad;   // connection and battery
-  Text link;      // link state
+  Text mode;    // body mode and gait, or the gesture playing
+  Text gamepad; // connection and battery
+  Text link;    // link state
 };
 
 struct Strip
 {
   char lines[STRIP_LINES][STRIP_LINE_CHARS + 1]; // the second often empty
-  Tone tone; // Bad and Warn fill the strip
+  Tone tone;                                     // Bad and Warn fill the strip
 };
 
 struct DriveBody
@@ -154,9 +154,9 @@ struct View
   page_button::Page page;
   Header header;
   Strip strip;
-  DriveBody drive;   // filled on the drive page
-  PowerBody power;   // on the power page
-  LinkBody link;     // on the link page
+  DriveBody drive; // filled on the drive page
+  PowerBody power; // on the power page
+  LinkBody link;   // on the link page
 };
 
 /**
@@ -173,11 +173,11 @@ constexpr int SETUP_TEXT_WIDTH_PX = 100; // left of the 135 px QR code
 
 struct SetupInputs
 {
-  const char *ssid;      // the access point's network name
+  const char *ssid; // the access point's network name
   const char *password;
-  const char *address;   // the portal's address
-  bool portalConnected;  // a portal page polled within the last second
-  bool emergencyStop;    // the bridge's own e-stop toggle
+  const char *address;  // the portal's address
+  bool portalConnected; // a portal page polled within the last second
+  bool emergencyStop;   // the bridge's own e-stop toggle
   bool telemetryFresh;
   protocol::Telemetry telemetry;
 };

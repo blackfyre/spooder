@@ -60,16 +60,16 @@ struct LegCycle
 // Body-level inputs to the foot path, already smoothed and scaled.
 struct GaitInput
 {
-  Vector2 translate;         // -100..100 per axis
-  float rotate;              // -100..100
-  float fixedStride;         // share of the fixed stride (constant stride/rotation length, input sets
-                             // direction only) blended with the dynamic one: 0 dynamic, 1 fixed
-  float distanceFromGround;  // foot height relative to the coxa pivot
-  float speedScale;          // global speed multiplier
-  float rotationScale;       // global rotation multiplier
+  Vector2 translate;        // -100..100 per axis
+  float rotate;             // -100..100
+  float fixedStride;        // share of the fixed stride (constant stride/rotation length, input sets
+                            // direction only) blended with the dynamic one: 0 dynamic, 1 fixed
+  float distanceFromGround; // foot height relative to the coxa pivot
+  float speedScale;         // global speed multiplier
+  float rotationScale;      // global rotation multiplier
 };
 
-constexpr float STANCE_DISTANCE = 190;   // foot distance from the coxa pivot when standing
+constexpr float STANCE_DISTANCE = 190; // foot distance from the coxa pivot when standing
 constexpr float LIFT_HEIGHT = 130;
 constexpr float LAND_HEIGHT = 70;
 constexpr float STRIDE_OVERSHOOT = 10;
@@ -112,8 +112,7 @@ float progressRate(const GaitParams &p, const GaitInput &in);
  * without evaluating the foot path. Call after every integration sub-step so
  * a phase shorter than a tick is not skipped. No-op below MIN_INPUT.
  */
-void trackPhase(int leg, float t, const GaitParams &p, const GaitInput &in,
-                LegCycle &cycle, Vector3 current);
+void trackPhase(int leg, float t, const GaitParams &p, const GaitInput &in, LegCycle &cycle, Vector3 current);
 
 /**
  * @brief Foot target for one leg at cycle position t (0..1).
@@ -121,8 +120,7 @@ void trackPhase(int leg, float t, const GaitParams &p, const GaitInput &in,
  * Updates @p cycle when the leg changes phase. Returns @p current unchanged
  * when the input weight is below MIN_INPUT.
  */
-Vector3 footTarget(int leg, float t, const GaitParams &p, const GaitInput &in,
-                   LegCycle &cycle, Vector3 current);
+Vector3 footTarget(int leg, float t, const GaitParams &p, const GaitInput &in, LegCycle &cycle, Vector3 current);
 
 } // namespace gait
 

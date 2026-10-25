@@ -6,7 +6,10 @@ namespace build_identity
 namespace
 {
 
-const char *orUnknown(const char *id) { return id == nullptr || id[0] == '\0' ? "unknown" : id; }
+const char *orUnknown(const char *id)
+{
+  return id == nullptr || id[0] == '\0' ? "unknown" : id;
+}
 
 char printable(char c)
 {

@@ -46,7 +46,7 @@ struct Inputs
   bool emergencyStop;            // the bridge's own toggle
   uint8_t gestureRequestCounter; // the bridge's latest gesture request
   uint8_t gesture;
-  uint8_t playingGesture;        // what telemetry reports playing
+  uint8_t playingGesture; // what telemetry reports playing
 };
 
 struct Request

@@ -10,11 +10,9 @@
 #include SPOODER_POWER_LIMITS_HEADER
 #endif
 
-#if !defined(SPOODER_TRIP_CURRENT_A) || !defined(SPOODER_TRIP_PERSIST_MS) ||           \
-    !defined(SPOODER_CEILING_CURRENT_A) || !defined(SPOODER_SUSTAINED_CURRENT_A) ||     \
-    !defined(SPOODER_SUSTAINED_WINDOW_MS) || !defined(SPOODER_MIN_V) ||                 \
-    !defined(SPOODER_UNDERVOLT_DEBOUNCE_MS) || !defined(SPOODER_BROWNOUT_V) ||          \
-    !defined(SPOODER_MAX_V)
+#if !defined(SPOODER_TRIP_CURRENT_A) || !defined(SPOODER_TRIP_PERSIST_MS) || !defined(SPOODER_CEILING_CURRENT_A) ||    \
+    !defined(SPOODER_SUSTAINED_CURRENT_A) || !defined(SPOODER_SUSTAINED_WINDOW_MS) || !defined(SPOODER_MIN_V) ||       \
+    !defined(SPOODER_UNDERVOLT_DEBOUNCE_MS) || !defined(SPOODER_BROWNOUT_V) || !defined(SPOODER_MAX_V)
 #error "configure power limits for your servos and supply: copy src/power_limits.example.h to src/power_limits.h"
 #endif
 

@@ -7,8 +7,8 @@ void setUp() {}
 void tearDown() {}
 
 // A report of a plain table: offset 90.00°, 500/2500 µs, normal direction.
-static protocol::CalibrationReport baseReport(uint8_t lastId = 7,
-                                              protocol::CalibrationResult result = protocol::CalibrationResult::Accepted)
+static protocol::CalibrationReport
+baseReport(uint8_t lastId = 7, protocol::CalibrationResult result = protocol::CalibrationResult::Accepted)
 {
   protocol::CalibrationReport r = {};
   r.lastRequestId = lastId;

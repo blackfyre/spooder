@@ -33,12 +33,9 @@ static const Keyframe SAY_HI[] = {
 // stand straight. The twist waits for the measured body geometry (part two):
 // a uniform sideways move of every foot is not a rigid rotation.
 static const Keyframe WIGGLE[] = {
-    {400, Vector3(25, 0, 8), 0, {NO_LIFT, NO_LIFT}},
-    {300, Vector3(-25, 0, -8), 0, {NO_LIFT, NO_LIFT}},
-    {300, Vector3(25, 0, 8), 0, {NO_LIFT, NO_LIFT}},
-    {300, Vector3(-25, 0, -8), 0, {NO_LIFT, NO_LIFT}},
-    {300, Vector3(25, 0, 8), 0, {NO_LIFT, NO_LIFT}},
-    {300, Vector3(-25, 0, -8), 0, {NO_LIFT, NO_LIFT}},
+    {400, Vector3(25, 0, 8), 0, {NO_LIFT, NO_LIFT}}, {300, Vector3(-25, 0, -8), 0, {NO_LIFT, NO_LIFT}},
+    {300, Vector3(25, 0, 8), 0, {NO_LIFT, NO_LIFT}}, {300, Vector3(-25, 0, -8), 0, {NO_LIFT, NO_LIFT}},
+    {300, Vector3(25, 0, 8), 0, {NO_LIFT, NO_LIFT}}, {300, Vector3(-25, 0, -8), 0, {NO_LIFT, NO_LIFT}},
     {400, Vector3(), 0, {NO_LIFT, NO_LIFT}},
 };
 
@@ -69,8 +66,8 @@ Vector3 plantedFoot(int leg, Vector3 standing, Vector3 shift, float twistMm)
   // The body moves by shift over feet that stay put, so each foot moves by
   // -shift relative to the body: projected onto the leg frame's axes.
   float a = gait::mountAngleDeg(leg) * (float)M_PI / 180.0f;
-  float ex = cosf(a), ey = sinf(a);         // leg x in the body frame
-  float yx = sinf(a), yy = -cosf(a);        // leg y: x turned clockwise
+  float ex = cosf(a), ey = sinf(a);  // leg x in the body frame
+  float yx = sinf(a), yy = -cosf(a); // leg y: x turned clockwise
   float dx = -shift.x, dy = -shift.y;
   return Vector3(standing.x + dx * ex + dy * ey, standing.y + dx * yx + dy * yy + twistMm, standing.z - shift.z);
 }

@@ -94,12 +94,12 @@ struct Player
 {
   Gesture gesture = Gesture::None;
   Stage stage = Stage::Keyframes;
-  int index = 0;             // keyframe in progress
-  uint32_t elapsedMs = 0;    // within the segment
-  uint32_t durationMs = 0;   // of the segment, rate limit included
-  Vector3 from[LEG_COUNT];   // feet at the segment's start
-  Vector3 to[LEG_COUNT];     // and end
-  Vector3 shift;             // the body shift reached by the last keyframe
+  int index = 0;           // keyframe in progress
+  uint32_t elapsedMs = 0;  // within the segment
+  uint32_t durationMs = 0; // of the segment, rate limit included
+  Vector3 from[LEG_COUNT]; // feet at the segment's start
+  Vector3 to[LEG_COUNT];   // and end
+  Vector3 shift;           // the body shift reached by the last keyframe
   float twistMm = 0;
   bool stopRequested = false;
   bool done = true;

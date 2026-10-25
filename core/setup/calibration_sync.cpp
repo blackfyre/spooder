@@ -83,8 +83,7 @@ bool next(Sync &s, uint32_t nowMs, protocol::CalibrationSet &out)
   for (int i = 0; i < JOINT_COUNT; i++)
   {
     // Orders compared by difference, so the counter may wrap.
-    if (s.entries[i].pending &&
-        (oldest < 0 || (int32_t)(s.entries[i].order - s.entries[oldest].order) < 0))
+    if (s.entries[i].pending && (oldest < 0 || (int32_t)(s.entries[i].order - s.entries[oldest].order) < 0))
       oldest = i;
   }
   if (oldest < 0)
@@ -122,8 +121,7 @@ void onReport(Sync &s, const protocol::CalibrationReport &r)
   }
   s.haveReport = true;
   s.report = r;
-  if (s.inFlight && r.lastRequestId == s.sent.requestId &&
-      r.result != (uint8_t)protocol::CalibrationResult::NoneYet)
+  if (s.inFlight && r.lastRequestId == s.sent.requestId && r.result != (uint8_t)protocol::CalibrationResult::NoneYet)
   {
     s.inFlight = false;
     if (!s.editedInFlight)

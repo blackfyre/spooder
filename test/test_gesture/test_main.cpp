@@ -37,8 +37,8 @@ static Vector2 legY(int leg)
 
 // Schematic coxa pivots (the desktop legs pane's), until the body geometry
 // is measured (add-gestures part two).
-static const Vector2 PIVOTS[kinematics::LEG_COUNT] = {
-    Vector2(-70, 120), Vector2(-90, 0), Vector2(-70, -120), Vector2(70, -120), Vector2(90, 0), Vector2(70, 120)};
+static const Vector2 PIVOTS[kinematics::LEG_COUNT] = {Vector2(-70, 120), Vector2(-90, 0), Vector2(-70, -120),
+                                                      Vector2(70, -120), Vector2(90, 0),  Vector2(70, 120)};
 
 static Vector2 toBody(int leg, Vector3 foot)
 {

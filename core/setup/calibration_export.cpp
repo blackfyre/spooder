@@ -48,8 +48,7 @@ int write(const protocol::CalibrationJoint joints[protocol::CALIBRATION_JOINTS],
     ok = append(size, &used,
                 snprintf(out + used, size - used, "  {%s%ld.%02ld, %u, %u, %s}, // leg %d %s\n", c < 0 ? "-" : "",
                          (long)(mag / 100), (long)(mag % 100), (unsigned)j.pulse0Us, (unsigned)j.pulse180Us,
-                         (j.flags & protocol::CALIBRATION_REVERSED) ? "true" : "false", i / 3 + 1,
-                         JOINT_NAMES[i % 3]));
+                         (j.flags & protocol::CALIBRATION_REVERSED) ? "true" : "false", i / 3 + 1, JOINT_NAMES[i % 3]));
   }
   ok = ok && append(size, &used, snprintf(out + used, size - used, "%s", FOOTER));
   if (!ok)

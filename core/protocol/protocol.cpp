@@ -150,9 +150,8 @@ int encodePose(const Pose &p, uint8_t seq, uint8_t *out)
 static uint16_t *diagnosticsFields(Diagnostics &d, int i)
 {
   uint16_t *fields[DIAGNOSTICS_PAYLOAD_SIZE / 2] = {
-      &d.motionSharePermille, &d.backstopTicks, &d.tickMaxUs,          &d.tickMeanUs,
-      &d.averageCurrentMa,    &d.tripCurrentMa, &d.sustainedCurrentMa, &d.minMv,
-      &d.maxMv,               &d.brownoutMv,    &d.budgetDegPerS,      &d.ratedDegPerS,
+      &d.motionSharePermille, &d.backstopTicks, &d.tickMaxUs, &d.tickMeanUs, &d.averageCurrentMa, &d.tripCurrentMa,
+      &d.sustainedCurrentMa,  &d.minMv,         &d.maxMv,     &d.brownoutMv, &d.budgetDegPerS,    &d.ratedDegPerS,
   };
   return fields[i];
 }

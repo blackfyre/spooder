@@ -119,6 +119,9 @@ bool sendFrame(const uint8_t *frame, int length)
   return queueFrame(frame, length);
 }
 
-uint32_t droppedBytes() { return rxDropped; }
+uint32_t droppedBytes()
+{
+  return rxDropped;
+}
 
 } // namespace link

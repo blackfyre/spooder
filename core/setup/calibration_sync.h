@@ -52,9 +52,9 @@ struct Sync
   bool inFlight = false;
   protocol::CalibrationSet sent = {}; // the set in flight
   uint32_t sentAtMs = 0;
-  bool editedInFlight = false;        // its joint was edited after sending
+  bool editedInFlight = false; // its joint was edited after sending
   bool haveLastId = false;
-  uint8_t lastId = 0;                 // the newest request id used
+  uint8_t lastId = 0; // the newest request id used
 };
 
 /**

@@ -149,7 +149,7 @@ void drawMarker(lgfx::LovyanGFX &g, int y0, page_button::Page page)
 void drawDrive(lgfx::LovyanGFX &g, int y0, const status_screen::DriveBody &d)
 {
   ground(g, BODY, y0);
-  constexpr int COL = 120;     // second column
+  constexpr int COL = 120; // second column
   constexpr int BAR_W = 106;
   if (d.sensors.text[0])
     text(g, mono10, d.sensors.text, toneColour(d.sensors.tone), bf::INK, PAD, y0 + 0);
@@ -178,7 +178,8 @@ static void trace(lgfx::LovyanGFX &g, const power_history::History *h, bool curr
   power_history::columns(*h, cw, cols);
   int inner = ht - 4;
   // A value's row, clamped to the well; higher values higher up.
-  auto rowOf = [&](uint16_t v) {
+  auto rowOf = [&](uint16_t v)
+  {
     int r = v <= low ? 0 : (int)((long)(v - low) * (inner - 1) / (high - low));
     if (r > inner - 1)
       r = inner - 1;

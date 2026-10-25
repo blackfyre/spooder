@@ -293,7 +293,7 @@ void test_clear_does_not_change_mode_request_counter()
 void test_left_stick_translates_with_y_forward()
 {
   pressButton(BUTTON_B); // crab: the left stick translates
-  pad.axisY = -511; // Bluepad32: up is negative
+  pad.axisY = -511;      // Bluepad32: up is negative
   Desired d = tick();
   TEST_ASSERT_EQUAL(100, d.translateY);
   TEST_ASSERT_EQUAL(0, d.translateX);
@@ -358,7 +358,7 @@ void test_steering_while_walking()
 
 void test_steering_while_reversing_is_mirrored()
 {
-  pad.axisY = pct(700); // back
+  pad.axisY = pct(700);  // back
   pad.axisX = -pct(700); // left
   Desired d = tick();
   TEST_ASSERT_EQUAL(0, d.translateX);
@@ -408,7 +408,7 @@ void test_right_stick_adds_rotation_in_both_modes_and_clamps()
 void test_stick_inside_dead_zone_is_zero()
 {
   pressButton(BUTTON_B); // crab, so left stick X would translate
-  pad.axisX = pct(50); // 5 %
+  pad.axisX = pct(50);   // 5 %
   Desired d = tick();
   TEST_ASSERT_EQUAL(0, d.translateX);
   pad.axisX = pct(35);
@@ -465,8 +465,10 @@ void test_l2_layer_requests_gestures_once_per_press()
   {
     uint16_t button;
     uint8_t gesture;
-  } cases[] = {{BUTTON_A, protocol::GESTURE_SAY_HI}, {BUTTON_B, protocol::GESTURE_WIGGLE},
-               {BUTTON_X, protocol::GESTURE_DANCE},  {BUTTON_Y, protocol::GESTURE_ATTACK},
+  } cases[] = {{BUTTON_A, protocol::GESTURE_SAY_HI},
+               {BUTTON_B, protocol::GESTURE_WIGGLE},
+               {BUTTON_X, protocol::GESTURE_DANCE},
+               {BUTTON_Y, protocol::GESTURE_ATTACK},
                {BUTTON_R2, protocol::GESTURE_BALL}};
   uint8_t counter = last.gestureRequestCounter;
   for (const auto &c : cases)

@@ -18,10 +18,7 @@ public:
 
   Vector2(float newX, float newY) : x(newX), y(newY) {}
 
-  float magnitude() const
-  {
-    return sqrtf(x * x + y * y);
-  }
+  float magnitude() const { return sqrtf(x * x + y * y); }
 
   /**
    * @brief Scales the vector to unit length. A zero vector is left unchanged.
@@ -36,20 +33,11 @@ public:
     }
   }
 
-  Vector2 operator+(Vector2 val) const
-  {
-    return Vector2(x + val.x, y + val.y);
-  }
+  Vector2 operator+(Vector2 val) const { return Vector2(x + val.x, y + val.y); }
 
-  Vector2 operator*(float val) const
-  {
-    return Vector2(x * val, y * val);
-  }
+  Vector2 operator*(float val) const { return Vector2(x * val, y * val); }
 
-  Vector2 operator*(Vector2 val) const
-  {
-    return Vector2(x * val.x, y * val.y);
-  }
+  Vector2 operator*(Vector2 val) const { return Vector2(x * val.x, y * val.y); }
 };
 
 /**
@@ -66,45 +54,21 @@ public:
 
   Vector3(float newX, float newY, float newZ) : x(newX), y(newY), z(newZ) {}
 
-  bool operator!=(Vector3 val) const
-  {
-    return (x != val.x || y != val.y || z != val.z);
-  }
+  bool operator!=(Vector3 val) const { return (x != val.x || y != val.y || z != val.z); }
 
-  bool operator==(Vector3 val) const
-  {
-    return (x == val.x && y == val.y && z == val.z);
-  }
+  bool operator==(Vector3 val) const { return (x == val.x && y == val.y && z == val.z); }
 
-  Vector3 operator*(float val) const
-  {
-    return Vector3(x * val, y * val, z * val);
-  }
+  Vector3 operator*(float val) const { return Vector3(x * val, y * val, z * val); }
 
-  Vector3 operator*(Vector3 val) const
-  {
-    return Vector3(x * val.x, y * val.y, z * val.z);
-  }
+  Vector3 operator*(Vector3 val) const { return Vector3(x * val.x, y * val.y, z * val.z); }
 
-  Vector3 operator/(Vector3 val) const
-  {
-    return Vector3(x / val.x, y / val.y, z / val.z);
-  }
+  Vector3 operator/(Vector3 val) const { return Vector3(x / val.x, y / val.y, z / val.z); }
 
-  Vector3 operator/(float val) const
-  {
-    return Vector3(x / val, y / val, z / val);
-  }
+  Vector3 operator/(float val) const { return Vector3(x / val, y / val, z / val); }
 
-  Vector3 operator+(Vector3 val) const
-  {
-    return Vector3(x + val.x, y + val.y, z + val.z);
-  }
+  Vector3 operator+(Vector3 val) const { return Vector3(x + val.x, y + val.y, z + val.z); }
 
-  Vector3 operator-(Vector3 val) const
-  {
-    return Vector3(x - val.x, y - val.y, z - val.z);
-  }
+  Vector3 operator-(Vector3 val) const { return Vector3(x - val.x, y - val.y, z - val.z); }
 
   /**
    * @brief Rotates the point around a pivot in the XY plane.
@@ -138,15 +102,9 @@ public:
     return sqrtf(dx * dx + dy * dy + dz * dz);
   }
 
-  float magnitude() const
-  {
-    return Vector3().distanceTo(*this);
-  }
+  float magnitude() const { return Vector3().distanceTo(*this); }
 
-  bool isFinite() const
-  {
-    return isfinite(x) && isfinite(y) && isfinite(z);
-  }
+  bool isFinite() const { return isfinite(x) && isfinite(y) && isfinite(z); }
 };
 
 /**

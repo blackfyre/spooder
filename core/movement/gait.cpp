@@ -328,16 +328,14 @@ static Vector3 blend(const Stride &st, Vector3 straightPoint, Vector3 rotatePoin
 // End of the ground path (start of the swing).
 static Vector3 propelEnd(const Stride &st)
 {
-  return blend(st,
-               placed(Vector3(st.v.x * st.side + STANCE_DISTANCE, -st.v.y * st.side, st.ground), st.leg),
+  return blend(st, placed(Vector3(st.v.x * st.side + STANCE_DISTANCE, -st.v.y * st.side, st.ground), st.leg),
                Vector3(STANCE_DISTANCE, st.rotateStrideLength, st.ground));
 }
 
 // End of the swing path (start of the next ground phase).
 static Vector3 liftEnd(const Stride &st)
 {
-  return blend(st,
-               placed(Vector3(-st.v.x * st.side + STANCE_DISTANCE, st.v.y * st.side, st.ground), st.leg),
+  return blend(st, placed(Vector3(-st.v.x * st.side + STANCE_DISTANCE, st.v.y * st.side, st.ground), st.leg),
                Vector3(STANCE_DISTANCE, -st.rotateStrideLength, st.ground));
 }
 
@@ -377,8 +375,7 @@ static void trackPhase(float t, const GaitParams &p, const Stride &st, LegCycle 
   }
 }
 
-void trackPhase(int leg, float t, const GaitParams &p, const GaitInput &in,
-                LegCycle &cycle, Vector3 current)
+void trackPhase(int leg, float t, const GaitParams &p, const GaitInput &in, LegCycle &cycle, Vector3 current)
 {
   if (inputWeight(in) < MIN_INPUT)
     return;
@@ -389,8 +386,7 @@ void trackPhase(int leg, float t, const GaitParams &p, const GaitInput &in,
   trackPhase(t, p, strideFor(leg, p, in), cycle, current);
 }
 
-Vector3 footTarget(int leg, float t, const GaitParams &p, const GaitInput &in,
-                   LegCycle &cycle, Vector3 current)
+Vector3 footTarget(int leg, float t, const GaitParams &p, const GaitInput &in, LegCycle &cycle, Vector3 current)
 {
   Stride st = strideFor(leg, p, in);
   if (st.weightSum < MIN_INPUT)
@@ -424,7 +420,9 @@ Vector3 footTarget(int leg, float t, const GaitParams &p, const GaitInput &in,
 
     straight[0] = cycle.start;
     straight[1] = cycle.start + Vector3(0, 0, st.lift);
-    straight[2] = placed(Vector3(-st.v.x * st.side + STANCE_DISTANCE, (st.v.y + STRIDE_OVERSHOOT) * st.side, st.ground + LAND_HEIGHT), st.leg);
+    straight[2] = placed(
+        Vector3(-st.v.x * st.side + STANCE_DISTANCE, (st.v.y + STRIDE_OVERSHOOT) * st.side, st.ground + LAND_HEIGHT),
+        st.leg);
     straight[3] = placed(Vector3(-st.v.x * st.side + STANCE_DISTANCE, st.v.y * st.side, st.ground), st.leg);
     straightPoint = bezier(straight, 4, s);
 

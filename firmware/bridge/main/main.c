@@ -22,44 +22,47 @@
 // Autostart
 //
 #if CONFIG_AUTOSTART_ARDUINO
-void initBluepad32() {
+void initBluepad32()
+{
 #else
-int app_main(void) {
-#endif  // !CONFIG_AUTOSTART_ARDUINO
-    // Spooder: setup mode skips BTstack and Bluepad32 entirely, so Bluetooth
-    // never starts; the bridge leaves setup mode only by restarting.
-    if (setup_mode_requested()) {
-        setup_mode_start();
+int app_main(void)
+{
+#endif // !CONFIG_AUTOSTART_ARDUINO
+  // Spooder: setup mode skips BTstack and Bluepad32 entirely, so Bluetooth
+  // never starts; the bridge leaves setup mode only by restarting.
+  if (setup_mode_requested())
+  {
+    setup_mode_start();
 #if !CONFIG_AUTOSTART_ARDUINO
-        return 0;
+    return 0;
 #else
-        return;
+    return;
 #endif
-    }
+  }
 
-    // hci_dump_open(NULL, HCI_DUMP_STDOUT);
+  // hci_dump_open(NULL, HCI_DUMP_STDOUT);
 
 // Don't use BTstack buffered UART. It conflicts with the console.
 #ifndef CONFIG_ESP_CONSOLE_UART_NONE
 #ifndef CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
-    btstack_stdio_init();
-#endif  // CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
-#endif  // CONFIG_ESP_CONSOLE_UART_NONE
+  btstack_stdio_init();
+#endif // CONFIG_BLUEPAD32_USB_CONSOLE_ENABLE
+#endif // CONFIG_ESP_CONSOLE_UART_NONE
 
-    // Configure BTstack for ESP32 VHCI Controller
-    btstack_init();
+  // Configure BTstack for ESP32 VHCI Controller
+  btstack_init();
 
-    // hci_dump_init(hci_dump_embedded_stdout_get_instance());
+  // hci_dump_init(hci_dump_embedded_stdout_get_instance());
 
-    // Must be called before uni_init()
-    uni_platform_set_custom(get_arduino_platform());
+  // Must be called before uni_init()
+  uni_platform_set_custom(get_arduino_platform());
 
-    // Init Bluepad32.
-    uni_init(0 /* argc */, NULL /* argv */);
+  // Init Bluepad32.
+  uni_init(0 /* argc */, NULL /* argv */);
 
-    // Does not return.
-    btstack_run_loop_execute();
+  // Does not return.
+  btstack_run_loop_execute();
 #if !CONFIG_AUTOSTART_ARDUINO
-    return 0;
-#endif  // !CONFIG_AUTOSTART_ARDUINO
+  return 0;
+#endif // !CONFIG_AUTOSTART_ARDUINO
 }

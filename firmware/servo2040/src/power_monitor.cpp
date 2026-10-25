@@ -13,10 +13,10 @@ namespace power_monitor
 constexpr int SAMPLES = 8;
 
 // Both quantities are read through the shared ADC behind the multiplexer.
-static AnalogMux mux(servo2040::ADC_ADDR_0, servo2040::ADC_ADDR_1, servo2040::ADC_ADDR_2,
-                     PIN_UNUSED, servo2040::SHARED_ADC);
-static Analog currentAdc(servo2040::SHARED_ADC, servo2040::CURRENT_GAIN,
-                         servo2040::SHUNT_RESISTOR, servo2040::CURRENT_OFFSET);
+static AnalogMux mux(servo2040::ADC_ADDR_0, servo2040::ADC_ADDR_1, servo2040::ADC_ADDR_2, PIN_UNUSED,
+                     servo2040::SHARED_ADC);
+static Analog currentAdc(servo2040::SHARED_ADC, servo2040::CURRENT_GAIN, servo2040::SHUNT_RESISTOR,
+                         servo2040::CURRENT_OFFSET);
 static Analog voltageAdc(servo2040::SHARED_ADC, servo2040::VOLTAGE_GAIN);
 
 void setup()

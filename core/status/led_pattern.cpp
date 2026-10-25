@@ -34,12 +34,12 @@ static const FaultIndication FAULT_COLOURS[] = {
 
 // One hue per gait: Tri, Wave, Ripple, Bi, Quad, Hop.
 static const Rgb GAIT_COLOURS[] = {
-    {0, 255, 0},     // Tri: green
-    {0, 160, 255},   // Wave: sky blue
-    {160, 0, 255},   // Ripple: violet
-    {255, 220, 0},   // Bi: yellow
-    {0, 255, 160},   // Quad: mint
-    {255, 0, 160},   // Hop: pink
+    {0, 255, 0},   // Tri: green
+    {0, 160, 255}, // Wave: sky blue
+    {160, 0, 255}, // Ripple: violet
+    {255, 220, 0}, // Bi: yellow
+    {0, 255, 160}, // Quad: mint
+    {255, 0, 160}, // Hop: pink
 };
 constexpr int GAIT_COLOUR_COUNT = sizeof(GAIT_COLOURS) / sizeof(GAIT_COLOURS[0]);
 

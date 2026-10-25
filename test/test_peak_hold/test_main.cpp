@@ -5,7 +5,10 @@ using namespace peak_hold;
 
 static Hold h;
 
-void setUp() { h = Hold(); }
+void setUp()
+{
+  h = Hold();
+}
 void tearDown() {}
 
 // Feeds @p reading every 20 ms from @p fromMs to before @p toMs.
@@ -63,7 +66,8 @@ void test_lost_link_clears_and_restarts()
 void test_sparse_updates_fall_by_elapsed_time()
 {
   update(h, Extreme::Max, CURRENT_FALL_MA_PER_S, CURRENT_WARN_MARGIN_MA, 0, true, 4300);
-  update(h, Extreme::Max, CURRENT_FALL_MA_PER_S, CURRENT_WARN_MARGIN_MA, 4000, true, 400); // one call, 1 s past the hold
+  update(h, Extreme::Max, CURRENT_FALL_MA_PER_S, CURRENT_WARN_MARGIN_MA, 4000, true,
+         400); // one call, 1 s past the hold
   TEST_ASSERT_FLOAT_WITHIN(1, 2300, h.value);
 }
 

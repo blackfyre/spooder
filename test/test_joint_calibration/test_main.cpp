@@ -311,9 +311,8 @@ static int exportDefaults(const Joint *table, char *out, int size)
                    "\n"
                    "const joint_calibration::Joint DEFAULTS[18] = {\n");
   for (int i = 0; i < JOINT_COUNT; i++)
-    n += snprintf(out + n, size - n, "  {%.2f, %d, %d, %s}, // leg %d %s\n", table[i].offsetDeg,
-                  (int)table[i].pulse0Us, (int)table[i].pulse180Us, table[i].reversed ? "true" : "false",
-                  i / 3 + 1, JOINT_NAMES[i % 3]);
+    n += snprintf(out + n, size - n, "  {%.2f, %d, %d, %s}, // leg %d %s\n", table[i].offsetDeg, (int)table[i].pulse0Us,
+                  (int)table[i].pulse180Us, table[i].reversed ? "true" : "false", i / 3 + 1, JOINT_NAMES[i % 3]);
   n += snprintf(out + n, size - n, "};\n\n} // namespace joint_calibration\n");
   return n;
 }

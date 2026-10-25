@@ -15,17 +15,16 @@ using namespace protocol;
 void setUp() {}
 void tearDown() {}
 
-static const char *const HEADER =
-    "# Spooder link protocol version 3: golden frames.\n"
-    "# Generated from the C++ encoder by test/test_protocol_golden; regenerate with\n"
-    "# SPOODER_WRITE_GOLDEN=1 mise run test after a deliberate protocol change.\n"
-    "#\n"
-    "# One frame per line, fields separated by single spaces:\n"
-    "#   <name> <frame bytes as lowercase hex, no separators> <field>=<value> ...\n"
-    "# Values are decimal. The header fields (version, type, seq) come first, then\n"
-    "# the payload fields in payload order; report joints are joint<i>.<field>.\n"
-    "# A line whose only field is \"rejected\" is a frame a decoder must discard.\n"
-    "# Lines starting with # are comments.\n";
+static const char *const HEADER = "# Spooder link protocol version 3: golden frames.\n"
+                                  "# Generated from the C++ encoder by test/test_protocol_golden; regenerate with\n"
+                                  "# SPOODER_WRITE_GOLDEN=1 mise run test after a deliberate protocol change.\n"
+                                  "#\n"
+                                  "# One frame per line, fields separated by single spaces:\n"
+                                  "#   <name> <frame bytes as lowercase hex, no separators> <field>=<value> ...\n"
+                                  "# Values are decimal. The header fields (version, type, seq) come first, then\n"
+                                  "# the payload fields in payload order; report joints are joint<i>.<field>.\n"
+                                  "# A line whose only field is \"rejected\" is a frame a decoder must discard.\n"
+                                  "# Lines starting with # are comments.\n";
 
 struct Text
 {
@@ -74,8 +73,8 @@ static void describe(Text &t, const Frame &f)
     add(t,
         " mode=%u translateX=%d translateY=%d rotate=%d height=%u speed=%u gait=%u stride=%u flags=%u "
         "clearCounter=%u modeRequestCounter=%u gesture=%u gestureRequestCounter=%u",
-        c.mode, c.translateX, c.translateY, c.rotate, c.height, c.speed, c.gait, c.stride, c.flags,
-        c.clearCounter, c.modeRequestCounter, c.gesture, c.gestureRequestCounter);
+        c.mode, c.translateX, c.translateY, c.rotate, c.height, c.speed, c.gait, c.stride, c.flags, c.clearCounter,
+        c.modeRequestCounter, c.gesture, c.gestureRequestCounter);
     break;
   }
   case FrameType::Telemetry:
@@ -83,11 +82,12 @@ static void describe(Text &t, const Frame &f)
     const Telemetry &m = f.telemetry;
     add(t,
         " bodyMode=%u gait=%u outputsOn=%d faults=%u voltageMv=%u currentMa=%u validFrames=%u "
-        "discardedFrames=%u sensorsAvailable=%u tofMm=%u tofStatus=%u pitchCentideg=%d rollCentideg=%d flags=%u gesture=%u "
+        "discardedFrames=%u sensorsAvailable=%u tofMm=%u tofStatus=%u pitchCentideg=%d rollCentideg=%d flags=%u "
+        "gesture=%u "
         "bridgeValidFrames=%u bridgeDiscardedFrames=%u",
-        m.bodyMode, m.gait, m.outputsOn ? 1 : 0, m.faults, m.voltageMv, m.currentMa, m.validFrames,
-        m.discardedFrames, m.sensorsAvailable, m.tofMm, m.tofStatus, m.pitchCentideg, m.rollCentideg, m.flags,
-        m.gesture, m.bridgeValidFrames, m.bridgeDiscardedFrames);
+        m.bodyMode, m.gait, m.outputsOn ? 1 : 0, m.faults, m.voltageMv, m.currentMa, m.validFrames, m.discardedFrames,
+        m.sensorsAvailable, m.tofMm, m.tofStatus, m.pitchCentideg, m.rollCentideg, m.flags, m.gesture,
+        m.bridgeValidFrames, m.bridgeDiscardedFrames);
     break;
   }
   case FrameType::CalibrationSet:
@@ -254,7 +254,8 @@ static void buildGolden(Text &t)
   addFrame(t, "telemetry_conflict", f);
 
   f = frame(FrameType::Telemetry, 255);
-  f.telemetry = {255, 255, true, 0xFFFF, 65535, 65535, 65535, 65535, 0xFF, 65535, 255, -32768, 32767, 0xFF, 0xFF, 65535, 65535};
+  f.telemetry = {255,   255, true,   0xFFFF, 65535, 65535, 65535, 65535, 0xFF,
+                 65535, 255, -32768, 32767,  0xFF,  0xFF,  65535, 65535};
   addFrame(t, "telemetry_extremes", f);
 
   f = frame(FrameType::Telemetry, 30);

@@ -33,8 +33,8 @@ constexpr uint8_t DPAD_LEFT = 1u << 3;
 constexpr uint8_t MISC_HOME = 1u << 0;
 constexpr uint8_t MISC_BACK = 1u << 1;
 
-constexpr int AXIS_MAX = 512;           // Bluepad32 axes span -511..512
-constexpr float DEAD_ZONE = 0.08f;      // radial, fraction of full scale
+constexpr int AXIS_MAX = 512;      // Bluepad32 axes span -511..512
+constexpr float DEAD_ZONE = 0.08f; // radial, fraction of full scale
 constexpr uint32_t COMBO_HOLD_MS = 1000;
 constexpr int DIAL_STEP = 10;
 // In steer mode, the left stick reverses (steering mirrored, as a car's)

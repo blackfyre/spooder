@@ -55,10 +55,10 @@ struct Input
   bool linkSeen;           // at least one valid frame since power-up
   bool controllerConnected;
   bool emergencyStop;
-  bool clearRequested;     // a new clear-counter value since the last tick
-  uint32_t requestSeq;     // advances with each new mode-request counter value
-  uint32_t gestureSeq;     // advances with each new gesture-request counter value
-  uint8_t gesture;         // the gesture id of the latest request
+  bool clearRequested; // a new clear-counter value since the last tick
+  uint32_t requestSeq; // advances with each new mode-request counter value
+  uint32_t gestureSeq; // advances with each new gesture-request counter value
+  uint8_t gesture;     // the gesture id of the latest request
 };
 
 struct Receiver
@@ -177,7 +177,7 @@ struct Arbiter
 
 struct Arbitration
 {
-  Input input;            // the tick's input; Sleep with no source or a conflict
+  Input input; // the tick's input; Sleep with no source or a conflict
   Source source;
   uint8_t telemetryFlags; // protocol::TELEMETRY_* source bits
 };
