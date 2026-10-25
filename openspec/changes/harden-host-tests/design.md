@@ -8,8 +8,8 @@ The host tests are PlatformIO's `native` env in the root `platformio.ini` (`test
 
 **Goals:**
 
-- Every native Unity test is compiled and linked with `-fsanitize=address,undefined -fno-sanitize-recover=all`, so the first finding aborts the test program and fails `mise run test`.
-- A `core/` source missing from, or a stale entry in, `build_src_filter` fails `mise run test` with the names.
+- Every native Unity test is compiled and linked with `-fsanitize=address,undefined,float-cast-overflow -fno-sanitize-recover=all`, so the first finding aborts the test program and fails `mise run test`.
+- A `core/` source missing from, a stale entry in, or an entry of any other form in `build_src_filter` fails `mise run test` with the names.
 
 **Non-Goals:**
 
@@ -21,30 +21,32 @@ The host tests are PlatformIO's `native` env in the root `platformio.ini` (`test
 
 ### Flags through a PlatformIO extra script
 
-PlatformIO puts unrecognised `build_flags` on the compile line only, and has no link-flags option, so `-fsanitize=…` in `build_flags` would compile but not link the runtime. A `pre:` extra script for `[env:native]` (`test/sanitizers.py`) appends `-fsanitize=address,undefined`, `-fno-sanitize-recover=all` and `-fno-omit-frame-pointer` to both `CCFLAGS` and `LINKFLAGS`. Frame pointers keep ASan's stack traces readable; no optimisation flag changes.
+PlatformIO passes `build_flags` through SCons's `ParseFlags`, which (SCons 4.11.1, the pinned `tool-scons`) already puts `-fsanitize=…` on both the compile and the link line; `-fno-sanitize-recover=all` and `-fno-omit-frame-pointer` go to the compile line only, where they belong. `build_flags` cannot be conditional on the runtimes being present, though, so a `pre:` extra script for `[env:native]` (`test/sanitizers.py`) adds the flags with `env.Append(CCFLAGS=[…], LINKFLAGS=[…])` after the probe: `-fsanitize=address,undefined,float-cast-overflow` on both, `-fno-sanitize-recover=all` and `-fno-omit-frame-pointer` on `CCFLAGS` only. `float-cast-overflow` is named because GCC's `undefined` group does not include it, and an out-of-range float-to-integer conversion is undefined behaviour the kinematics and pulse code could hit. Frame pointers keep ASan's stack traces readable; no optimisation flag changes.
 
 ### Probe the runtime; fall back loudly, never in CI
 
-Before adding the flags, the script links a one-line C++ program with the same flags using the env's compiler. If that fails:
+Before adding the flags, the script links a one-line C++ program with the same flags. A `pre:` script runs before the native platform's builder, which deletes `CC`/`CXX` and loads SCons's `gcc` and `g++` tools; SCons's `g++` tool sets `CXX` only when it is absent, so the probe repeats the builder's sequence on a clone of the env (delete `CC` and `CXX`, then `Tool("gcc")` and `Tool("g++")`) and uses that clone's `$CXX`, the same compiler the tests are built with, rather than whatever `CXX` or `c++` holds at that moment. The script prints the probed compiler, so a verbose run shows it next to the compile lines. The selection is a function, `probe_compiler(env)`, that `test/test_sanitizers.py` (`unittest`) checks against real SCons: it loads SCons from PlatformIO's installed `tool-scons` package (under `$PLATFORMIO_CORE_DIR`, default `~/.platformio`, `packages/tool-scons/`), builds an environment whose `CXX` is a different compiler name (`c++`), and asserts that the function returns the compiler the native builder's delete-and-reload sequence selects and leaves the original environment's `CC` and `CXX` unchanged. `mise run test` runs it after `pio test`, which installs the package, and the test fails rather than skips when the package is missing. If the probe fails:
 
-- under CI (`CI` set to `true`, which GitHub Actions always sets), the build fails with a message that the sanitiser runtimes are missing;
+- under CI (`CI` set to `true`, which GitHub Actions always sets) or with `SPOODER_REQUIRE_SANITIZERS=1`, the build fails with a message that the sanitiser runtimes are missing;
 - otherwise it prints a warning naming the packages (`libasan libubsan` on Fedora; on Debian/Ubuntu they come with GCC) and builds without sanitisers.
 
-The fallback exists because making the sanitised link mandatory would fail `mise run test`, the gate of every delivery, on the development host until packages are installed, a change outside this repository that an unattended delivery cannot make. CI keeps the guarantee, and the warning makes the weaker local run visible. A `SPOODER_REQUIRE_SANITIZERS=1` variable makes the probe failure fatal outside CI too, for a host that has the runtimes and wants the strict gate.
+The fallback exists because making the sanitised link mandatory would fail `mise run test`, the gate of every delivery, on the development host until packages are installed, a change outside this repository that an unattended delivery cannot make. CI keeps the guarantee, and the warning makes the weaker local run visible. `SPOODER_REQUIRE_SANITIZERS=1` makes the probe failure fatal outside CI too, for a host that has the runtimes and wants the strict gate.
+
+The decision (probe result and environment → sanitise, warn and continue, or fail, with the message) is a plain function in `test/sanitizer_policy.py`, importable without SCons, which `test/sanitizers.py` calls. `test/test_sanitizer_policy.py` (`unittest`) covers the probe succeeding, and the probe failing locally, with `SPOODER_REQUIRE_SANITIZERS=1` and with `CI=true`, checking the outcome and the message. This makes every branch deterministic on any host, whether or not it has the runtimes.
 
 ### Source-list check as a small Python script
 
-`test/check_test_sources.py` (standard library only) reads `platformio.ini` with `configparser`, takes the `+<…>` entries of `[env:native]` `build_src_filter`, lists `core/**/*.cpp` relative to `core/`, and exits non-zero printing `missing from build_src_filter:` and `not in core/:` lines with the names, sorted. Header files, `-<…>` entries and `+<…>` patterns other than plain file paths are out of scope: an entry with a wildcard is reported as an error, so the list stays a plain list the check can compare. `test/test_check_test_sources.py` (`unittest`) covers match, a missing file, an extra entry and a wildcard entry with crafted trees in a temporary directory. `mise run test` runs the test and then the check before `pio test`, as it already runs the bridge's `test_image_size` with plain `python`.
+`test/check_test_sources.py` (standard library only) reads `platformio.ini` with `configparser`, splits `[env:native]` `build_src_filter` into entries, lists `core/**/*.cpp` relative to `core/`, and exits non-zero printing `missing from build_src_filter:`, `not in core/:` and `invalid entry:` lines with the names, sorted. The filter must have one shape: `-<*>` as its first entry, then only `+<path>` entries whose path is a plain relative path ending in `.cpp` (no wildcard, no `..`). Any other entry, including a second `-<…>` exclusion that would drop a listed source, is an invalid entry, so passing the check means PlatformIO compiles exactly the listed files. Header files are out of scope. `test/test_check_test_sources.py` (`unittest`) covers match, a missing file, an extra entry, a wildcard entry, an additional exclusion and a missing leading `-<*>` with crafted trees in a temporary directory. `mise run test` runs both Python unit tests and then the check before `pio test`, as it already runs the bridge's `test_image_size` with plain `python`.
 
 ### Fixing findings
 
-Each sanitiser finding in `core/` is fixed at its cause with a Unity regression test that fails under the sanitiser before the fix. A finding in test code only is fixed in the test. No finding is suppressed with an attribute or a suppression file unless it is a false positive, which is then recorded here.
+Each sanitiser finding in `core/` is fixed at its cause with a Unity regression test that fails under the sanitiser before the fix. Because `core/` reaches the robot, the bridge and the virtual robot (`core/CLAUDE.md`), any such fix is also verified with `mise run build` (with and without `--serial`), `mise run build-bridge` and `mise run e2e`; a fix that would change the 20 ms tick's timing, a protection decision or the link protocol's bytes is outside this change and is reported instead. A finding in test code only is fixed in the test. No finding is suppressed with an attribute or a suppression file unless it is a false positive, which is then recorded here.
 
 ## Risks / Trade-offs
 
 - [The local fallback lets UB pass on a host without the runtimes] → CI fails on it; the warning is printed on every such run; the strict variable exists.
 - [ASan slows the tests and raises memory use] → the suite is small (about 30 programs); the slowdown is seconds.
-- [UBSan aborts tests that rely on implementation-defined float-to-int conversion] → those are real portability defects on the robot's Arm toolchain too, and are fixed.
+- [UBSan aborts tests that hit an out-of-range float-to-integer conversion] → that is undefined behaviour, a real defect on the robot's Arm toolchain too, and is fixed.
 - [Verifying the sanitised path on the development host] → run `mise run test` in an `ubuntu:24.04` container with podman (mirroring CI), or rely on CI for the branch.
 
 ## Assumptions
