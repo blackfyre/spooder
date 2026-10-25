@@ -255,11 +255,11 @@ description = "Render desktop/assets/icon.svg to the committed PNGs and .ico (ne
 run = "desktop/scripts/render-icons.sh"
 
 [tasks.desktop-test]
-description = "Run the desktop calibrator's Go tests (vet, then go test)"
+description = "Run the desktop calibrator's Go checks (gofmt, go vet, staticcheck, then go test)"
 depends = ["desktop-deps"]
 dir = "desktop"
 env = { CGO_ENABLED = "1" }
-run = ["test -z \"$(gofmt -l .)\" || { gofmt -l .; exit 1; }", "go vet ./...", "go test ./..."]
+run = ["test -z \"$(gofmt -l .)\" || { gofmt -l .; exit 1; }", "go vet ./...", "go tool staticcheck ./...", "go test ./..."]
 
 # Random fuzzing of the link parsers (decoder, text/frame split), one target per
 # go test run since Go fuzzes one at a time. desktop-test already replays each

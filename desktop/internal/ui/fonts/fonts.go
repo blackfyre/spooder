@@ -35,11 +35,11 @@ var (
 func Collection() ([]font.FontFace, error) {
 	text, err := opentype.Parse(archivo)
 	if err != nil {
-		return nil, fmt.Errorf("Archivo: %w", err)
+		return nil, fmt.Errorf("parse Archivo: %w", err)
 	}
 	mono, err := opentype.Parse(jetBrainsMono)
 	if err != nil {
-		return nil, fmt.Errorf("JetBrains Mono: %w", err)
+		return nil, fmt.Errorf("parse JetBrains Mono: %w", err)
 	}
 	return []font.FontFace{
 		{Font: font.Font{Typeface: Text, Weight: font.SemiBold}, Face: text},

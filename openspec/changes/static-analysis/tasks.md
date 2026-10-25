@@ -17,8 +17,8 @@
 
 ## 4. staticcheck on the desktop calibrator
 
-- [ ] 4.1 Add staticcheck with `go get -tool honnef.co/go/tools/cmd/staticcheck@v0.8.2` in `desktop/`, and run `go tool staticcheck ./...` in `mise run desktop-test` between `go vet` and `go test`. Verify `desktop/go.mod` has the `tool` line and `desktop/go.sum` its checksums; `go mod verify` passes and `go tool staticcheck -version` reports 2026.2.2 (v0.8.2) with `GOFLAGS=-mod=readonly` and `GOPROXY=off` after the module cache is filled from `go.sum`; and a temporary file in a desktop package with a value overwritten before it is read (compiles and passes `go vet`) makes `mise run desktop-test` fail with SA4006.
-- [ ] 4.2 Fix the existing staticcheck findings in `desktop/`. Verify `mise run desktop-test`, `mise run desktop-build`, `mise run e2e` and `mise run vulncheck` pass.
+- [x] 4.1 Add staticcheck with `go get -tool honnef.co/go/tools/cmd/staticcheck@v0.8.2` in `desktop/`, and run `go tool staticcheck ./...` in `mise run desktop-test` between `go vet` and `go test`. Verify `desktop/go.mod` has the `tool` line and `desktop/go.sum` its checksums; `go mod verify` passes and `go tool staticcheck -version` reports 2026.2.2 (v0.8.2) with `GOFLAGS=-mod=readonly` and `GOPROXY=off` after the module cache is filled from `go.sum`; and a temporary file in a desktop package with a value overwritten before it is read (compiles and passes `go vet`) makes `mise run desktop-test` fail with SA4006.
+- [x] 4.2 Fix the existing staticcheck findings in `desktop/`. Verify `mise run desktop-test`, `mise run desktop-build`, `mise run e2e` and `mise run vulncheck` pass.
 
 ## 5. Gates and documentation
 
