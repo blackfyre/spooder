@@ -13,8 +13,9 @@
 
 ## 3. Bounded runs and found bugs
 
-- [ ] 3.1 Add the `fuzz` mise task of design D5 (`--time`, default `60s`). Verify `mise run fuzz --time 10s` runs every target and exits zero, and that a target made to fail on purpose (temporarily) makes it exit non-zero.
-- [ ] 3.2 Run `mise run fuzz` at the default time. For each failing input found, fix the bug in the decoder or the split and commit the input under `testdata/fuzz/` as a regression case; if none is found, record that in this task. Verify `mise run desktop-test` passes with the saved inputs.
+- [x] 3.1 Add the `fuzz` mise task of design D5 (`--time`, default `60s`). Verify `mise run fuzz --time 10s` runs every target and exits zero, and that a target made to fail on purpose (temporarily) makes it exit non-zero.
+- [x] 3.2 Run `mise run fuzz` at the default time. For each failing input found, fix the bug in the decoder or the split and commit the input under `testdata/fuzz/` as a regression case; if none is found, record that in this task. Verify `mise run desktop-test` passes with the saved inputs.
+  - Result (2026-10-25, 16 workers, 60 s per target): no failing input. `FuzzDecoder` ran about 28.3 million inputs, `FuzzSplitArbitrary` 12.5 million and `FuzzSplitInterleaved` 4.0 million; no bug to fix and no input to save under `testdata/fuzz/`.
 
 ## 4. Documentation and gates
 

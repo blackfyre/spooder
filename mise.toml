@@ -232,3 +232,21 @@ depends = ["desktop-deps"]
 dir = "desktop"
 env = { CGO_ENABLED = "1" }
 run = ["test -z \"$(gofmt -l .)\" || { gofmt -l .; exit 1; }", "go vet ./...", "go test ./..."]
+
+# Random fuzzing of the link parsers (decoder, text/frame split), one target per
+# go test run since Go fuzzes one at a time. desktop-test already replays each
+# seed corpus and testdata/fuzz/; a failing input lands in testdata/fuzz/<Target>/.
+# Minimising each new-coverage input is capped at 2s: Go's 60s default would
+# spend most of a bounded run minimising instead of fuzzing.
+[tasks.fuzz]
+description = "Fuzz the desktop's link decoder and text/frame split with random inputs (--time per target)"
+usage = 'flag "--time <duration>" default="60s" help="Fuzzing time per target (a Go duration, e.g. 10s, 5m)"'
+dir = "desktop"
+env = { CGO_ENABLED = "0" }
+run = '''
+for target in protocol:FuzzDecoder link:FuzzSplitArbitrary link:FuzzSplitInterleaved; do
+  pkg=${target%%:*}; name=${target#*:}
+  echo "== $name (./internal/$pkg, ${usage_time:-60s})"
+  go test -run '^$' -fuzz "^$name\$" -fuzztime "${usage_time:-60s}" -fuzzminimizetime 2s "./internal/$pkg" || exit 1
+done
+'''

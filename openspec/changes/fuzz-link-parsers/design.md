@@ -77,6 +77,7 @@ Text is split at `MaxLineLength`, so the recipe keeps every text line shorter th
 - No CI change is needed: the seed corpus runs in `desktop-test`, which CI already runs.
 - The split tests' in-memory port never returns an empty read before the end of the stream: an empty read means a quiet line, which makes `read` call `Idle`, and the bare decoder the frames are compared with has no such event. Quiet-line handling stays covered by the existing link tests.
 - The interleaved recipe (D4) is read as items: a byte with its low bit clear picks an accepted golden frame by the next byte; one with it set makes a text line from the next three bytes (a 16-bit length modulo `MaxLineLength - 1`, and a seed for its printable characters), so a short input can still reach the longest line kept whole. An item cut short by the end of the input is left out.
+- `mise run fuzz` passes `-fuzzminimizetime 2s`: with Go's default of 60 s, minimising each new-coverage input of the link targets stalled them for most of a 10 s or 60 s run (0 execs/sec for seconds at a time; about 0.26 million inputs in 30 s against 2.9 million with no minimisation). A failing input is still minimised, for up to 2 s, before it is written.
 - The "Line length boundary" scenario also has a plain test with the expected lines written out, so it does not rest on the reference model alone.
 
 ## Follow-ups
