@@ -200,6 +200,15 @@ void init(RobotState &s, InputMode mode, const protection::Limits &limits, uint3
           const char *buildId = "unknown");
 
 /**
+ * @brief Whether the next tick(), given @p usbConnected, logs the build
+ * banner: on the first tick, and when a host connects after a tick without
+ * one. An adapter that prints text of its own before tick() (the serial-keys
+ * build's command echo) holds that text back on such a tick, so the banner
+ * stays the tick's first line.
+ */
+bool bannerDue(const RobotState &s, bool usbConnected);
+
+/**
  * @brief Runs one tick at @p nowMs (see the header comment).
  */
 void tick(RobotState &s, const Inputs &in, uint32_t nowMs, Hardware &hw);

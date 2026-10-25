@@ -341,6 +341,19 @@ void test_banner_is_the_first_line_of_its_tick()
   TEST_ASSERT_EQUAL(0, banner); // before any other call of the tick
 }
 
+void test_banner_due_matches_the_banner()
+{
+  TEST_ASSERT_TRUE(bannerDue(state, false)); // the first tick
+  tick();
+  TEST_ASSERT_FALSE(bannerDue(state, false));
+  TEST_ASSERT_TRUE(bannerDue(state, true)); // a host connecting
+  usbHost = true;
+  tick();
+  TEST_ASSERT_EQUAL(2, banners());
+  TEST_ASSERT_FALSE(bannerDue(state, true)); // still connected
+  TEST_ASSERT_FALSE(bannerDue(state, false));
+}
+
 // --- Output rate backstop ----------------------------------------------------
 
 // Shifts a joint's calibration offset at once (both tables, so the applied
@@ -987,6 +1000,7 @@ int main()
   RUN_TEST(test_one_banner_when_connected_from_the_first_tick);
   RUN_TEST(test_banner_again_on_each_connect);
   RUN_TEST(test_banner_is_the_first_line_of_its_tick);
+  RUN_TEST(test_banner_due_matches_the_banner);
   RUN_TEST(test_diagnostics_on_usb_only_on_their_own_tick);
   RUN_TEST(test_diagnostics_contents);
   RUN_TEST(test_diagnostics_window_holds_the_five_previous_ticks);

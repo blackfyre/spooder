@@ -21,14 +21,17 @@ struct Input
 
 /**
  * @brief Reads at most MAX_CHARS_PER_POLL pending characters without blocking,
- * so a flood of input cannot hold up the control loop.
+ * so a flood of input cannot hold up the control loop. With @p readKeys false
+ * it reads and echoes nothing (the keys wait for the next poll) and returns
+ * the current command: the loop does so on a tick that logs the build banner,
+ * which must come before any echo.
  *
  *   s  stand            w  walk forward      r  walk rotating
  *   x  walk, no input   g  next gait         f  toggle fixed stride
  *   z  sleep            c  calibrate         +/-  body height
  *   !  clear faults     p  print power readings
  */
-Input poll(uint32_t nowMs);
+Input poll(uint32_t nowMs, bool readKeys = true);
 
 } // namespace serial_commands
 

@@ -404,6 +404,11 @@ void init(RobotState &s, InputMode mode, const protection::Limits &limits, uint3
   s.buildId = buildId;
 }
 
+bool bannerDue(const RobotState &s, bool usbConnected)
+{
+  return !s.profileAnnounced || (usbConnected && !s.usbConnected);
+}
+
 void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
 {
   const bool links = s.inputMode == InputMode::Links;
@@ -412,9 +417,9 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
   // connect. The first tick takes the connection as it finds it, so a host
   // connected from the start gets one banner.
   const bool firstTick = !s.profileAnnounced;
-  const bool connected = in.usbConnected && !s.usbConnected;
+  const bool banner = bannerDue(s, in.usbConnected);
   s.usbConnected = in.usbConnected;
-  if (firstTick || connected)
+  if (banner)
   {
     char line[build_identity::BANNER_SIZE];
     build_identity::banner(line, sizeof line, "robot", s.buildId);

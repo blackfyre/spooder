@@ -15,13 +15,13 @@ static void report(const char *what)
   printf("serial command: %s\n", what);
 }
 
-Input poll(uint32_t nowMs)
+Input poll(uint32_t nowMs, bool readKeys)
 {
   Input in;
   in.clearFaults = false;
   in.printReadings = false;
 
-  for (int n = 0; n < MAX_CHARS_PER_POLL; n++)
+  for (int n = 0; readKeys && n < MAX_CHARS_PER_POLL; n++)
   {
     int c = getchar_timeout_us(0);
     if (c == PICO_ERROR_TIMEOUT)

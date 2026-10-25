@@ -89,12 +89,17 @@ int main()
   {
     uint32_t now = nowMs();
     robot_tick::Inputs in = {};
+    // Sampled first: the build banner on each connect, which the serial-keys
+    // build's command echo must not precede.
+    in.usbConnected = stdio_usb_connected();
 
     // Input first, so an emergency stop in a frame that has arrived acts in
     // this tick. Both input sources are bounded and never block, so they
     // cannot delay the protection step that follows.
 #ifdef SPOODER_SERIAL_COMMANDS
-    serial_commands::Input s = serial_commands::poll(now); // bounded
+    // Bounded; on a tick that logs the build banner the keys wait one tick,
+    // so their echo follows the banner.
+    serial_commands::Input s = serial_commands::poll(now, !robot_tick::bannerDue(robot, in.usbConnected));
     in.serial.command = s.command;
     in.serial.requestSeq = s.requestSeq;
     in.serial.clearFaults = s.clearFaults;
@@ -109,7 +114,6 @@ int main()
 #endif
     in.power = power_monitor::read();
     in.previousTickUs = previousTickUs;
-    in.usbConnected = stdio_usb_connected(); // the build banner on each connect
 
     uint32_t tickStart = time_us_32();
     robot_tick::tick(robot, in, now, board);
