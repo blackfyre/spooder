@@ -6,8 +6,8 @@ The desktop calibrator, a Go module (`github.com/blackfyre/spooder/desktop`) wit
 
 - `cmd/spooder-calibrator`: `main`, the wiring.
 - `cmd/spooder-monitor` + `internal/console`: the text console behind `mise run monitor`. It uses the link read-only (no source, so no writer) and never sends a frame; only `--keys` writes, printable ASCII only. No Gio, and cgo only on macOS.
-- `internal/protocol`: the link protocol in Go, byte for byte the C++ one, tested against `test/golden/protocol_v3.txt`.
-- `internal/link`: the serial port (`go.bug.st/serial`), the split of the stream into frames and debug text lines, the 20 ms writer (none for a nil source) and reconnecting by USB serial number.
+- `internal/protocol`: the link protocol in Go, byte for byte the C++ one, tested against `test/golden/protocol_v3.txt`; `FuzzDecoder` fuzzes the decoder (`fuzz_test.go`).
+- `internal/link`: the serial port (`go.bug.st/serial`), the split of the stream into frames and debug text lines, the 20 ms writer (none for a nil source) and reconnecting by USB serial number; `FuzzSplitArbitrary` and `FuzzSplitInterleaved` fuzz the split (`fuzz_test.go`).
 - `internal/session`: the single state owner: observe or control, the e-stop, mode and clear counters, driving (held keys and walking settings), telemetry, the latest pose, and the ten-minute history with its CSV export.
 - `internal/legview`: the legs pane's geometry: forward kinematics (tested against `test/golden/leg_pose.txt`), leg mounting, servo limits; and the whole robot in the body frame with the top, front, left and isometric projections (`views.go`) for the four-view window (`internal/ui/views.go`, its own Gio window); `gravity.go`, the estimated centre of gravity and support polygon that window draws, with a battery toggle (tested against `test/golden/centre_of_gravity.txt`).
 - `internal/calib`: the joint table shown from reports, pending edits, one change in flight, resend and confirmation by request id.
@@ -20,3 +20,4 @@ The desktop calibrator, a Go module (`github.com/blackfyre/spooder/desktop`) wit
 
 - The calibrator never opens a port by itself: it lists ports (the Servo 2040, USB ID 2e8a:000a, preselected; or the `--port` path) and connects on request. Its unit tests use in-memory ports or pseudo-terminals they create; the e2e tests use only the virtual robot's terminal.
 - `internal/protocol` and `internal/legview` copy C++ behaviour; keep them in step through the golden files, never by editing a golden file to match.
+- **Fuzz tests.** `go test` (so `desktop-test` and CI) replays each fuzz test's seed corpus and `testdata/fuzz/` without random inputs; `mise run fuzz` (`--time`, default `60s` per target) fuzzes them with random inputs. A new `Fuzz*` target is added to that task's list. A failing input Go saves under `testdata/fuzz/<Target>/` is committed with the fix as a regression case.

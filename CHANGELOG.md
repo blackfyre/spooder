@@ -46,6 +46,7 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
   - Movement slows its own clock, in 20 ms pieces, wherever full speed would turn a joint faster than the budget. Feet keep their paths, and motion stays independent of the tick length.
   - An output rate backstop never moves a joint faster than the servo's rated speed. It reports on the USB console when it engages.
 - **Project files.** An MIT licence, this changelog and an expanded readme.
+- **Link parser fuzzing.** Go fuzz tests of the desktop's link decoder (`FuzzDecoder`) and of its split of the USB stream into frames and debug text (`FuzzSplitArbitrary`, `FuzzSplitInterleaved`), seeded from the golden frames: no panic, bounded buffers and lines, every byte accounted for, canonical re-encoding, and text never mixed with frames. `mise run desktop-test` replays their seeds and any saved failing inputs on every run; `mise run fuzz` fuzzes each with random inputs for a bounded time (`--time`, default 60 s). The first full run found no bug.
 
 ### Changed
 

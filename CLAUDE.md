@@ -35,6 +35,7 @@ mise run test         # host-side Unity tests of core/ (PlatformIO native env)
 mise run desktop-build   # the desktop calibrator -> build/desktop/spooder-calibrator
 mise run desktop-run     # build and start it (run from the checkout: it exports there)
 mise run desktop-test    # gofmt, go vet and go test of desktop/
+mise run fuzz           # fuzz the desktop's link decoder and text/frame split (--time per target, default 60s)
 mise run desktop-deps    # name the missing Linux packages for the Gio build
 mise run desktop-install # the launcher and icon for this user (Linux); desktop-icons re-renders the icon
 mise run virtual-robot   # the virtual robot -> build/virtual-robot/virtual-robot

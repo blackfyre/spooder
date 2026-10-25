@@ -19,5 +19,6 @@
 
 ## 4. Documentation and gates
 
-- [ ] 4.1 List `mise run fuzz` in the root `CLAUDE.md` commands, name the fuzz tests in `desktop/CLAUDE.md`, and record the change in `CHANGELOG.md` under Unreleased. Verify the three files mention the task.
-- [ ] 4.2 Run the gates: `mise run test`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e`. Verify each exits zero.
+- [x] 4.1 List `mise run fuzz` in the root `CLAUDE.md` commands, name the fuzz tests in `desktop/CLAUDE.md`, and record the change in `CHANGELOG.md` under Unreleased. Verify the three files mention the task.
+- [x] 4.2 Run the gates: `mise run test`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e`. Verify each exits zero.
+  - Result (2026-10-25): `mise run test` 431 of 431 host tests and 10 image-size tests passed; `mise run desktop-test`, `mise run desktop-build` and `mise run e2e` exited zero.
