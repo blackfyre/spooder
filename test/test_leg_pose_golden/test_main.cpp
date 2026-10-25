@@ -56,6 +56,8 @@ struct Target
 
 // Initialise, calibration, rest and stand poses from body.cpp, and walking
 // points of middle and corner legs (gait.cpp, STANCE_DISTANCE 190).
+// One target per line, as in the golden file: kept out of clang-format.
+// clang-format off
 static const Target TARGETS[] = {
     {"initialise_low", Vector3(160, 0, 0)},
     {"initialise_high", Vector3(225, 0, 115)},
@@ -72,6 +74,7 @@ static const Target TARGETS[] = {
     {"turn_negative_coxa", Vector3(180, -90, -140)},
     {"far_reach", Vector3(300, 100, -80)},
 };
+// clang-format on
 
 static void buildGolden(Text &t)
 {

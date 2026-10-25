@@ -21,6 +21,8 @@
 namespace config
 {
 
+// One limit per line, in protection::Limits order: kept out of clang-format.
+// clang-format off
 constexpr protection::Limits POWER_LIMITS = {
     SPOODER_TRIP_CURRENT_A,
     SPOODER_TRIP_PERSIST_MS,
@@ -32,6 +34,7 @@ constexpr protection::Limits POWER_LIMITS = {
     SPOODER_BROWNOUT_V,
     SPOODER_MAX_V,
 };
+// clang-format on
 
 static_assert(SPOODER_SUSTAINED_CURRENT_A < SPOODER_TRIP_CURRENT_A, "sustained limit must be below the trip current");
 static_assert(SPOODER_TRIP_CURRENT_A < SPOODER_CEILING_CURRENT_A, "trip current must be below the ceiling current");

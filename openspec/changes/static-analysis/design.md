@@ -32,6 +32,27 @@ mise's `pipx` backend already installs PlatformIO through `uv`; the same backend
 ### The formatting style is derived from the code
 The `.clang-format` starts from `BasedOnStyle: LLVM` with `BreakBeforeBraces: Allman`, `IndentWidth: 2` and `NamespaceIndentation: None`. Then the column limit, `AllowShortIfStatementsOnASingleLine`, include sorting, `PointerAlignment`/`ReferenceAlignment` (the code writes `ResumeGate &g`), comment reflow and argument packing are set to whichever value changes the fewest lines, measured by running clang-format over the file set with each candidate. `SortIncludes` stays off unless it changes nothing, since include order can matter in the firmware. The chosen values and the resulting changed-line count are recorded in this file during implementation.
 
+**Measured (task 2.1)** with clang-format 22.1.8 over the 114 checked files (the 120 the lint lists, less the 6 under the exclusions), counting changed lines as lines removed plus lines added by a line diff of each file against its clang-format output. The base (LLVM, Allman, indent 2, unindented namespaces, includes not sorted) changes 3537 lines. A coordinate search over 49 options, each tried at its usual values in turn, repeated until no option improved, settled on:
+
+| Option | Chosen | Lines at the chosen value, and at the others |
+|---|---|---|
+| `ColumnLimit` | 120 | 979; 80: 3296, 100: 1425, 110: 1097, 130: 1059, 140: 1124, 160: 1155, 0 (none): 1744 |
+| `AllowShortIfStatementsOnASingleLine` | `Never` | 979; `WithoutElse` 1893, `OnlyFirstIf` 1962, `AllIfsAndElse` 2103 |
+| `AllowShortFunctionsOnASingleLine` | `Inline` | 979; `All` (LLVM) 1244, `InlineOnly` 1163, `Empty` 1029, `None` 1229 |
+| `PointerAlignment` / `ReferenceAlignment` | `Right` / `Pointer` | 979; `Left` 2279, `Middle` 2274 / `Left` 1879, `Middle` 1878 |
+| `ReflowComments` | `Never` | 1010 against 1022 for `Always` (LLVM) before the last options settled, a tie at 979 after; kept so hand-wrapped comments stay as written |
+| `BinPackArguments` / `BinPackParameters` | `true` / `BinPack` (LLVM) | 979; `false` 1251 / `OnePerLine` 1103 |
+| `IndentExternBlock` | `NoIndent` | 979; `AfterExternBlock` (LLVM with Allman) and `Indent` 987: they indent the body of `extern "C" {` in the bridge's C header |
+| `MaxEmptyLinesToKeep` | 2 | 979; 1 (LLVM) 980 |
+| `PenaltyBreakAssignment` | 100 | 979; 2 (LLVM) 1001, 20 989 |
+| `SortIncludes` | `Never` | sorting (`CaseSensitive`) changes 6 lines, so it stays off |
+
+Every other option searched (alignment of assignments, declarations, macros, operators and trailing comments, short loops, blocks, case labels, lambdas and enums, constructor initialisers, binary and ternary operator breaks, template and return-type breaks, continuation and initialiser indents, case-label and preprocessor indents, access modifiers, braced lists, spaces before parentheses, after casts and before trailing comments, empty lines, namespace comments, definition blocks, the final newline) changed the fewest lines at its LLVM value, so `.clang-format` does not list it.
+
+One value was not taken from the count: `PenaltyExcessCharacter: 10` changes 12 fewer lines (967), but only by letting clang-format write lines past the 120-column limit (a 124-column `if` in the virtual robot, for one), which makes the limit meaningless. It keeps the LLVM value, so the limit holds.
+
+With the four data tables fenced by `// clang-format off`/`on` (the logo bitmap in `firmware/bridge/main/logo.h`, `POWER_LIMITS` in `firmware/servo2040/src/config.h`, and the target and pose tables of the leg-pose and centre-of-gravity golden tests, which clang-format would pack into columns), the reformat changes **803 lines** across 59 files. The largest are `core/movement/vectors.h` (one-line accessors written as blocks), `core/protocol/protocol.h` (trailing-comment alignment) and `firmware/bridge/main/main.c` (the Bluepad32 template's four-space indent and attached braces).
+
 ### Exclusions through `.clang-format-ignore`
 clang-format (18 and later) honours a `.clang-format-ignore` at the root, so the exclusions hold in editors as well as in the lint task:
 - `external/`, `managed_components/`: third-party code;

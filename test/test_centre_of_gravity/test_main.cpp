@@ -174,6 +174,8 @@ struct Pose
   Vector3 feet[LEG_COUNT]; // leg frame
 };
 
+// One pose per entry, as in the golden file: kept out of clang-format.
+// clang-format off
 static const Pose POSES[] = {
     {"stand_height_0", {Vector3(190, 0, -60), Vector3(190, 0, -60), Vector3(190, 0, -60), Vector3(190, 0, -60),
                         Vector3(190, 0, -60), Vector3(190, 0, -60)}},
@@ -188,6 +190,7 @@ static const Pose POSES[] = {
     {"tripod_up", {Vector3(190, 20, -100), Vector3(190, -40, -145), Vector3(190, 20, -100), Vector3(190, -40, -145),
                    Vector3(190, 20, -100), Vector3(190, -40, -145)}},
 };
+// clang-format on
 
 // A value rounding to zero at three decimals, as exactly 0: the sign of a
 // tiny residue differs between compilers and maths libraries, and "-0.000"

@@ -1,0 +1,20 @@
+# Spooder's C++ layout (mise run lint checks it; reformat with clang-format -i).
+# The house style is LLVM with Allman braces, a two-space indent and
+# unindented namespaces. Every other value below was chosen as the one that
+# changed the fewest lines of the existing code (openspec change
+# static-analysis, design.md); options not listed keep the LLVM value.
+BasedOnStyle: LLVM
+BreakBeforeBraces: Allman
+IndentWidth: 2
+NamespaceIndentation: None
+ColumnLimit: 120
+# Include order can matter in the firmware: never reorder.
+SortIncludes: Never
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Inline
+PointerAlignment: Right
+ReferenceAlignment: Pointer
+ReflowComments: Never
+IndentExternBlock: NoIndent
+MaxEmptyLinesToKeep: 2
+PenaltyBreakAssignment: 100
