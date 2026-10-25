@@ -72,7 +72,8 @@ void test_symmetric_stand_is_on_the_centre_line()
 // The leg's own mass centre: its servos at the joints, its links along them.
 static Vector3 legMassCentre(int leg, JointAngles a)
 {
-  const Vector3 *p = legInBody(leg, a).points;
+  const LegPoints pose = legInBody(leg, a); // p must not outlive the temporary
+  const Vector3 *p = pose.points;
   Vector3 moment = (p[0] + p[1] + p[2]) * SERVO_G + interpolate(p[0], p[1], 0.5f) * COXA_LINK_G +
                    interpolate(p[1], p[2], 0.5f) * FEMUR_LINK_G + interpolate(p[2], p[3], TIBIA_LINK_AT) * TIBIA_LINK_G;
   return moment / (3 * SERVO_G + COXA_LINK_G + FEMUR_LINK_G + TIBIA_LINK_G);

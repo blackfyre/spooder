@@ -53,6 +53,10 @@ Each sanitiser finding in `core/` is fixed at its cause with a Unity regression 
 
 - "Keep CI green on ubuntu-24.04" means the sanitised run must pass in CI; the local Fedora host may run unsanitised with a warning until `libasan` and `libubsan` are installed.
 - The probe's `CI=true` test is enough to identify CI; no workflow change is needed.
+- PlatformIO 6.2 hides an extra script's standard output below `-vv` and prints compile and link command lines only at `-vvv`, so the script prints the probed compiler on standard output (seen with `pio test -e native -vv` or `-vvv`, next to the command lines) and the warning and the failure on standard error, which `pio test` always shows. Task 2.3's check of the command lines therefore uses `-vvv`. `pio test` builds each test program in its own SCons run, so the probe and the warning repeat once per test program (about 30); each probe is one short link.
+- `CI` counts as `true` case-insensitively (`True`, `TRUE`); `SPOODER_REQUIRE_SANITIZERS` only as `1`. Any other value, or none, is local.
+- The script skips the probe for a clean target (`pio run -t clean`), which builds nothing.
+- The first sanitised run (ubuntu:24.04, GCC 13.3) found one defect, in test code: `test_centre_of_gravity`'s `legMassCentre` kept a pointer into the temporary `LegPoints` that `legInBody` returned (stack-use-after-scope). It is fixed in the test by keeping the `LegPoints` in a local; `core/` had no finding.
 - The checker and its test live in `test/`, next to the tests they guard, rather than in `tools/`, matching `firmware/bridge/scripts/` keeping its checker next to what it checks.
 
 ## Follow-ups
