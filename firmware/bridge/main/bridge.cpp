@@ -11,6 +11,7 @@
 #include "display.h"
 #include "gamepad_mapping/gamepad_mapping.h"
 #include "gamepad_mapping/rumble.h"
+#include "identity/build_identity.h"
 #include "link.h"
 #include "setup/setup_entry.h"
 #include "status/page_button.h"
@@ -80,8 +81,11 @@ static gamepad_mapping::PadState readPad()
 
 void setup()
 {
+  char banner[build_identity::BANNER_SIZE];
+  build_identity::banner(banner, sizeof(banner), "bridge", build_identity::ID);
+  Console.printf("%s", banner);
   Console.printf("spooder bridge, Bluepad32 %s\n", BP32.firmwareVersion());
-  display::setup(); // logo first
+  display::setup(build_identity::ID); // logo first
   pinMode(SETUP_BUTTON_PIN, INPUT_PULLUP);
   robot_link::start();
   display::bootMessage("Robot link: UART1 26/27");

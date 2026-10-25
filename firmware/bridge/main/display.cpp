@@ -4,6 +4,7 @@
 #include <string.h>
 #include "lovyangfx_include.h"
 
+#include "identity/build_identity.h"
 #include "logo.h"
 #include "screen_draw.h"
 #include "status/power_history.h"
@@ -169,7 +170,7 @@ static void initPanel()
   lcd.setTextWrap(false);
 }
 
-void setup()
+void setup(const char *buildId)
 {
   initPanel();
   loadFonts();
@@ -181,6 +182,12 @@ void setup()
   drawLogo();
   phase = Phase::Logo;
   phaseSinceMs = millis();
+  static const char BUILD_PREFIX[] = "Build ";
+  constexpr int PREFIX_CHARS = sizeof(BUILD_PREFIX) - 1;
+  char build[status_screen::LINE_CHARS + 1];
+  memcpy(build, BUILD_PREFIX, PREFIX_CHARS);
+  build_identity::fit(build + PREFIX_CHARS, status_screen::LINE_CHARS - PREFIX_CHARS, buildId);
+  bootMessage(build);
   bootMessage("Boot");
 }
 

@@ -11,7 +11,7 @@
 
 ## 3. Bridge
 
-- [ ] 3.1 Wire the generated source into `firmware/bridge/main/CMakeLists.txt` and add `build_identity.cpp` there; print `spooder bridge: build <id>` first in `setup()` and in `setup_mode_start`; have `display::setup` take the build line and queue `Build <fitted id>` before `Boot`. Verify, from a committed tree, that `mise run build-bridge` passes and the size check still passes; that a second build with no change compiles no source; and that after a temporary edit of a tracked file (restored afterwards) a rebuild puts the `-dirty` identity in the image (`strings` on the built `.elf`).
+- [x] 3.1 Wire the generated source into `firmware/bridge/main/CMakeLists.txt` and add `build_identity.cpp` there; print `spooder bridge: build <id>` first in `setup()` and in `setup_mode_start`; have `display::setup` take the build line and queue `Build <fitted id>` before `Boot`. Verify, from a committed tree, that `mise run build-bridge` passes and the size check still passes; that a second build with no change compiles no source; and that after a temporary edit of a tracked file (restored afterwards) a rebuild puts the `-dirty` identity in the image (`strings` on the built `.elf`).
 
 ## 4. Documentation and gates
 

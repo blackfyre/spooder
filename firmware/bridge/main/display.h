@@ -23,9 +23,11 @@ constexpr uint32_t LOGO_MS = 1500;
 constexpr uint32_t BOOT_LOG_MS = 1500; // after the logo
 
 /**
- * @brief Starts the panel and shows the logo.
+ * @brief Starts the panel and shows the logo. The start-up log begins with
+ * `Build <buildId>`, the identity fitted to the line (build_identity::fit),
+ * then `Boot`.
  */
-void setup();
+void setup(const char *buildId);
 
 /**
  * @brief Adds a line to the start-up log (shown after the logo).

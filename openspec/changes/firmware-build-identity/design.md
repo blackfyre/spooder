@@ -37,7 +37,7 @@ The custom target is always out of date, so it runs `git describe` once per buil
 - **Robot** (`firmware/servo2040/CMakeLists.txt`): the generated source is added to `spooder` (not to `spooder_core`, which the host tests share), with the target depending on the custom target.
 - **Virtual robot** (`tools/virtual-robot/CMakeLists.txt`): the same, into `virtual-robot`; its identity is the virtual robot binary's own build.
 - The script takes the repository root and the output path as `-D` variables, so its checks can run it against disposable fixture repositories in a scratch directory instead of the delivery branch.
-- **Bridge** (`firmware/bridge/main/CMakeLists.txt`): the generated source is listed in `idf_component_register`'s `SRCS` (marked `GENERATED`) and `${COMPONENT_LIB}` depends on the custom target. If PlatformIO's ESP-IDF integration does not run the custom target on every build, the fallback is a PlatformIO pre-script calling the same `cmake -P` before the build; the form and the script stay the same.
+- **Bridge** (`firmware/bridge/main/CMakeLists.txt`): the generated source (`${CMAKE_BINARY_DIR}/build_identity_id.cpp`, PlatformIO's build directory) is listed in `idf_component_register`'s `SRCS`, marked `GENERATED` outside ESP-IDF's script-mode requirements pass. PlatformIO's ESP-IDF builder compiles the component sources itself with SCons, from CMake's code model, and never builds CMake targets, so a custom target would never run: the fallback is the one used, a PlatformIO pre-script (`firmware/bridge/scripts/build_identity.py`) running the same `cmake -P` (the platform's own CMake) before every build; the form and the script stay the same.
 
 ### Banner text in core
 `core/identity/build_identity.{h,cpp}`, hardware-free and host-tested:

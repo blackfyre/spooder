@@ -17,6 +17,7 @@
 #include "freertos/task.h"
 
 #include "display.h"
+#include "identity/build_identity.h"
 #include "link.h"
 #include "portal_page.h"
 #include "setup/access_point.h"
@@ -334,6 +335,9 @@ void setup_mode_start(void)
   // back to the heap for WiFi.
   esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
   initArduino();
+  char banner[build_identity::BANNER_SIZE];
+  build_identity::banner(banner, sizeof(banner), "bridge", build_identity::ID);
+  printf("%s", banner);
   printf("spooder bridge: setup mode (Bluetooth off)\n");
 
   uint8_t mac[6];
