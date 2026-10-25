@@ -2,7 +2,7 @@
 
 Hardware-free C++ shared by both firmwares, the virtual robot and the host tests (`mise run test`). It includes only `<math.h>`/`<stdint.h>` (plus `<stdio.h>` for `snprintf` in `status/status_screen` and `robot/robot_tick`). The bridge compiles it under ESP-IDF, where POSIX `link()` and C++20 `std::lerp` are visible: hence `interpolate` in `movement/vectors.h`.
 
-A change here reaches the robot, the bridge and the virtual robot: run `mise run build` (with and without `--serial`), `mise run build-bridge` and `mise run e2e` besides `mise run test`.
+A change here reaches the robot, the bridge and the virtual robot: run `mise run build` (with and without `--serial`), `mise run build-bridge` and `mise run e2e` besides `mise run test` and `mise run lint` (formatting, and clang-tidy with `.clang-tidy`: fix a finding, or suppress it with `NOLINTNEXTLINE(check)` and a reason; never cast a narrowing away without the value's bound beside it).
 
 - `movement/` (reference: the `spooder-leg-kinematics` skill):
   - `body`: the non-blocking state machine (Initialise, Stand, Walk, Sleep, Calibrate, Perform) on a fixed 5 ms internal grid.
@@ -21,4 +21,4 @@ A change here reaches the robot, the bridge and the virtual robot: run `mise run
 - `status/led_pattern`: what the robot's six status LEDs show; `status/status_screen`: the bridge screen's content (the drive, power and link pages with the status strip, and the setup-mode text), with `status/power_history` (60 s of voltage and current), `status/page_button` (the left button as the page switch) and `status/peak_hold`.
 - `setup/`: the bridge's setup mode. `portal_controller` (portal polls and buttons as the controller), `calibration_sync` (pending edits, one set in flight, confirmation by report), `calibration_export` (a reported table as `calibration_defaults.cpp`), `setup_entry` (the button hold and the boot decision) and `access_point` (SSID, password, QR text).
 
-A new `.cpp` here is listed by hand wherever it is built: the root `platformio.ini`'s `build_src_filter` (host tests; `mise run test` fails naming a file missing there), and as needed `firmware/servo2040/CMakeLists.txt`, `tools/virtual-robot/CMakeLists.txt` and `firmware/bridge/main/CMakeLists.txt`.
+A new `.cpp` here is listed by hand wherever it is built: the root `platformio.ini`'s `build_src_filter` (host tests, and the sources clang-tidy analyses; one `+<file>` entry per source, no globs: `mise run test` fails naming a file missing there, and `mise run lint` fails too), and as needed `firmware/servo2040/CMakeLists.txt`, `tools/virtual-robot/CMakeLists.txt` and `firmware/bridge/main/CMakeLists.txt`.
