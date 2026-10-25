@@ -20,7 +20,7 @@ type vector struct {
 	fields []string
 }
 
-func readVectors(t *testing.T) []vector {
+func readVectors(t testing.TB) []vector {
 	t.Helper()
 	f, err := os.Open(goldenPath)
 	if err != nil {

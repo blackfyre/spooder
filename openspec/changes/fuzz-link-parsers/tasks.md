@@ -2,9 +2,9 @@
 
 ## 1. Decoder fuzz test
 
-- [ ] 1.1 Change `readVectors` in `golden_test.go` to take `testing.TB`, and add `FuzzDecoder` in `desktop/internal/protocol`, seeded with every golden frame from `test/golden/protocol_v3.txt` and the extra seeds of design D2, checking the properties of design D3 (bounded `Pending`, in-order byte accounting, each span decoding alone to the same frame, canonical re-encoding, byte-identical re-encoding of canonical spans). Verify `go test -run FuzzDecoder ./internal/protocol` passes in `desktop/`.
-- [ ] 1.2 Add a test that `Push` and `Next` allocate nothing on a stream of golden frames. Verify `go test -run Alloc ./internal/protocol` passes.
-- [ ] 1.3 Add the CRC-valid non-canonical seeds of design D2 to `FuzzDecoder`, and a plain test asserting each is accepted with the expected fields and re-encodes to the canonical bytes. Verify `go test -run 'NonCanonical|FuzzDecoder' ./internal/protocol` passes.
+- [x] 1.1 Change `readVectors` in `golden_test.go` to take `testing.TB`, and add `FuzzDecoder` in `desktop/internal/protocol`, seeded with every golden frame from `test/golden/protocol_v3.txt` and the extra seeds of design D2, checking the properties of design D3 (bounded `Pending`, in-order byte accounting, each span decoding alone to the same frame, canonical re-encoding, byte-identical re-encoding of canonical spans). Verify `go test -run FuzzDecoder ./internal/protocol` passes in `desktop/`.
+- [x] 1.2 Add a test that `Push` and `Next` allocate nothing on a stream of golden frames. Verify `go test -run Alloc ./internal/protocol` passes.
+- [x] 1.3 Add the CRC-valid non-canonical seeds of design D2 to `FuzzDecoder`, and a plain test asserting each is accepted with the expected fields and re-encodes to the canonical bytes. Verify `go test -run 'NonCanonical|FuzzDecoder' ./internal/protocol` passes.
 
 ## 2. Split fuzz tests
 
