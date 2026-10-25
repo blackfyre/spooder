@@ -24,14 +24,14 @@ mise run setup        # fetch the pinned submodules (only the sub-submodules the
 ## Commands
 
 ```sh
-mise run build        # CMake build of firmware/servo2040 -> build/servo2040/spooder.uf2 (--serial: USB serial keys)
+mise run build        # CMake build of firmware/servo2040 -> build/servo2040/spooder.uf2, then the flash/RAM budget check (--serial: USB serial keys)
 mise run upload       # copy the .uf2 to a Servo 2040 in BOOTSEL mode (RPI-RP2 drive)
 mise run monitor      # robot USB console: timestamped text; --frames decodes frames, --keys for a --serial build
 mise run monitor-raw  # the raw console (pio device monitor, 115200): frames show as junk
 mise run build-bridge    # PlatformIO build of firmware/bridge (TTGO T-Display)
 mise run upload-bridge   # flash the bridge (BRIDGE_PORT, default /dev/ttyUSB0)
 mise run monitor-bridge  # the bridge's Bluepad32 console
-mise run test         # host-side Unity tests of core/ (PlatformIO native env), sanitised (ASan, UBSan), after a source-list check
+mise run test         # host-side Unity tests of core/ (PlatformIO native env), sanitised (ASan, UBSan), after a source-list check; and the bridge and robot build checks' tests
 mise run desktop-build   # the desktop calibrator -> build/desktop/spooder-calibrator
 mise run desktop-run     # build and start it (run from the checkout: it exports there)
 mise run desktop-test    # gofmt, go vet and go test of desktop/
@@ -51,7 +51,7 @@ mise run worktree-remove <name>  # remove it and its local branch
 mise run clean
 ```
 
-**Verification gates:** `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e` and, when `hardware/spooder-electronics-mount/` changes, `mise run cad`. Hardware behaviour can only be checked on the boards (the `spooder-hardware-check` skill).
+**Verification gates:** `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e` and, when `hardware/spooder-electronics-mount/` changes, `mise run cad`. Compiler warnings in Spooder's own sources are errors in the robot build, the bridge build and the host tests (each area's `CLAUDE.md` says how); SDK warnings are not. Hardware behaviour can only be checked on the boards (the `spooder-hardware-check` skill).
 
 **CI** (`.github/workflows/ci.yml`) runs the same gates, except `mise run cad`, on a clean Ubuntu runner on every push to `main` and `deliver/*` and every pull request, and nightly with `mise run vulncheck`. It is an independent check, not a merge gate: the delivery workflow's own gates decide merges. Actions are pinned to commit SHAs.
 

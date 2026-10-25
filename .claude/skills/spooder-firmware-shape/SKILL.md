@@ -11,7 +11,7 @@ Adapted from architecture guidance on modules, explicit state machines, named co
 
 | Layer | Where | Rules |
 |---|---|---|
-| Hardware-free core | `core/` (`movement/`, `protection/`, `protocol/`, `gamepad_mapping/`, `status/`, `setup/`) | Only `<math.h>`, `<stdint.h>` and other `core/` headers (`status/status_screen`, `setup/calibration_export` and `setup/access_point` also use `<stdio.h>` for `snprintf`). No SDKs, no globals with hidden state; pass state structs explicitly. Every behaviour change needs host tests (`test/`, `mise run test`). Built into the robot as `spooder_core` with `-Wall -Wextra`; the bridge compiles the parts it uses into its `main` component. |
+| Hardware-free core | `core/` (`movement/`, `protection/`, `protocol/`, `gamepad_mapping/`, `status/`, `setup/`) | Only `<math.h>`, `<stdint.h>` and other `core/` headers (`status/status_screen`, `setup/calibration_export` and `setup/access_point` also use `<stdio.h>` for `snprintf`). No SDKs, no globals with hidden state; pass state structs explicitly. Every behaviour change needs host tests (`test/`, `mise run test`). Built into the robot as `spooder_core` with `-Wall -Wextra -Werror`; the bridge compiles the parts it uses into its `main` component. |
 | Hardware adapters | `firmware/servo2040/src/`, `firmware/bridge/main/` | Thin: read hardware into core inputs, or apply core outputs to hardware. No decisions that could live in `core/`. Each adapter exposes `setup()`/`start()` plus a small API in its header; file-local state is `static`. |
 
 New logic goes into `core/` unless it truly needs hardware. A controller mapping, a filter or a protocol parser is core logic.
@@ -159,9 +159,9 @@ Every byte that arrives from outside the board is untrusted: link and USB frames
 
 ## Verification
 
-- **Gates:** `mise run test`; `mise run build` with limits configured, with and without `--serial`; `mise run build-bridge`. No new warnings in `core/` or `firmware/`.
+- **Gates:** `mise run test`; `mise run build` with limits configured, with and without `--serial`; `mise run build-bridge`. Warnings in Spooder's own sources (`core/`, `firmware/servo2040/src/`, `firmware/bridge/main/`, `test/`) fail all three; fix them in the code, never with `-Wno-…`, and suppress an SDK header's warning only at its include (`firmware/bridge/main/lovyangfx_include.h`). `mise run build` also fails when the robot image exceeds its flash or static RAM budget (`firmware/servo2040/scripts/image_budget.py`).
 - **Logic tests** live with `core/`. Each bug fix there gets a regression test that fails without the fix, at the boundary where the failure lives (core logic, the protocol, an adapter's mapping), not only end to end.
 - **Place tests at the smallest boundary that proves the behaviour**: rules and state machines in `core/` host tests; wiring across the tick in `test_robot_tick`; the real link and session end to end against the virtual robot (`mise run e2e`), kept to a few journeys.
 - **Deterministic tests:** time is passed in (`nowMs`), never read from a clock in `core/`; no network, no test-order dependence, no shared mutable fixtures between tests.
-- **New gates in existing code**: when a new mandatory check is added that the code does not yet pass (for example `-Werror`, `-Wextra` on the bridge, clang-tidy, `govulncheck`), commit a machine-readable baseline of today's violations next to its configuration, fail on anything not in it, and let it only shrink. Security gates must reach an empty baseline; hygiene gates may keep one. Record the baseline's owner and target in the change that adds it.
+- **New gates in existing code**: when a new mandatory check is added that the code does not yet pass (for example clang-tidy or `govulncheck`), commit a machine-readable baseline of today's violations next to its configuration, fail on anything not in it, and let it only shrink. Security gates must reach an empty baseline; hygiene gates may keep one. Record the baseline's owner and target in the change that adds it.
 - **Hardware behaviour** is checked with the `spooder-hardware-check` skill.
