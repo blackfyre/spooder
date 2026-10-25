@@ -65,6 +65,7 @@ mise run clean
 - `desktop/`: the desktop calibrator (Go module).
 - `tools/`: the virtual robot, the bridge screenshot renderer, the delivery worktree and risk-tier scripts.
 - `test/`: Unity host tests, and `test/golden/`, the fixtures other implementations test against.
+- `cmake/build_identity.cmake`: the build identity (`git describe --always --dirty --abbrev=12`, or `unknown`), written as a generated source by the robot's, the virtual robot's and the bridge's builds, rewritten only when it changes.
 - `hardware/`: Spooder's own printed parts, and reference files copied unchanged.
   - `spooder-electronics-mount/`: the printed mount for the electronics on the frame top (deck, cover, bumpers, holders), generated and checked with build123d (`mise run cad`, `mise run cad-preview`); its README gives the parts and colours, printing, the hardware list, the assembly order, the cable routes and the measurements to take before printing.
   - The reference files, each folder's README giving its source and licence:

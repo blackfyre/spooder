@@ -11,7 +11,7 @@ Adapted from architecture guidance on modules, explicit state machines, named co
 
 | Layer | Where | Rules |
 |---|---|---|
-| Hardware-free core | `core/` (`movement/`, `protection/`, `protocol/`, `gamepad_mapping/`, `status/`, `setup/`) | Only `<math.h>`, `<stdint.h>` and other `core/` headers (`status/status_screen`, `setup/calibration_export` and `setup/access_point` also use `<stdio.h>` for `snprintf`). No SDKs, no globals with hidden state; pass state structs explicitly. Every behaviour change needs host tests (`test/`, `mise run test`). Built into the robot as `spooder_core` with `-Wall -Wextra -Werror`; the bridge compiles the parts it uses into its `main` component. |
+| Hardware-free core | `core/` (`movement/`, `protection/`, `protocol/`, `gamepad_mapping/`, `status/`, `setup/`, `identity/`) | Only `<math.h>`, `<stdint.h>` and other `core/` headers (`status/status_screen`, `setup/calibration_export` and `setup/access_point` also use `<stdio.h>` for `snprintf`). No SDKs, no globals with hidden state; pass state structs explicitly. Every behaviour change needs host tests (`test/`, `mise run test`). Built into the robot as `spooder_core` with `-Wall -Wextra -Werror`; the bridge compiles the parts it uses into its `main` component. |
 | Hardware adapters | `firmware/servo2040/src/`, `firmware/bridge/main/` | Thin: read hardware into core inputs, or apply core outputs to hardware. No decisions that could live in `core/`. Each adapter exposes `setup()`/`start()` plus a small API in its header; file-local state is `static`. |
 
 New logic goes into `core/` unless it truly needs hardware. A controller mapping, a filter or a protocol parser is core logic.
