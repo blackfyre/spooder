@@ -115,6 +115,7 @@ static Frontend fe[LINK_COUNT];
 static uint32_t now;
 static protection::Reading supply;
 static uint32_t tickUs; // the previous tick's working time each tick reports
+static bool usbHost;    // a host has the USB console open
 
 void setUp()
 {
@@ -125,6 +126,7 @@ void setUp()
   now = 1000;
   supply = {0.5f, 6.0f};
   tickUs = 0;
+  usbHost = false;
   init(state, InputMode::Links, LIMITS, now);
 }
 void tearDown() {}
@@ -167,6 +169,7 @@ static void tick()
   }
   in.power = supply;
   in.previousTickUs = tickUs;
+  in.usbConnected = usbHost;
   board.events.clear();
   board.tickNo++;
   now += LOOP_PERIOD_MS;
@@ -258,12 +261,84 @@ static void queueSet(Frontend &f, uint8_t id, uint8_t joint, int16_t offsetCenti
 void test_first_tick_names_the_servo_profile()
 {
   tick();
-  TEST_ASSERT_TRUE(board.logs.size() >= 1);
-  TEST_ASSERT_EQUAL_STRING("servo profile MG996R: joint speed budget 257 deg/s\n", board.logs[0].c_str());
+  TEST_ASSERT_TRUE(board.logs.size() >= 2);
+  TEST_ASSERT_EQUAL_STRING("servo profile MG996R: joint speed budget 257 deg/s\n", board.logs[1].c_str());
   size_t first = board.logs.size();
   ticks(10);
   for (size_t i = first; i < board.logs.size(); i++)
     TEST_ASSERT_TRUE(board.logs[i].find("servo profile") == std::string::npos);
+}
+
+// --- build banner ------------------------------------------------------------------
+
+static int banners()
+{
+  int n = 0;
+  for (const std::string &l : board.logs)
+    n += l.compare(0, 21, "spooder robot: build ") == 0;
+  return n;
+}
+
+void test_first_tick_logs_the_banner_then_the_profile()
+{
+  state = RobotState();
+  init(state, InputMode::Links, LIMITS, now, "v1-3-gabcdef012345-dirty");
+  tick();
+  TEST_ASSERT_TRUE(board.logs.size() >= 2);
+  TEST_ASSERT_EQUAL_STRING("spooder robot: build v1-3-gabcdef012345-dirty\n", board.logs[0].c_str());
+  TEST_ASSERT_EQUAL(0, board.logs[1].compare(0, 14, "servo profile "));
+  TEST_ASSERT_EQUAL(1, banners());
+}
+
+void test_banner_names_unknown_by_default_and_follows_its_rules()
+{
+  tick(); // setUp's init: no identity given
+  TEST_ASSERT_EQUAL_STRING("spooder robot: build unknown\n", board.logs[0].c_str());
+  state = RobotState();
+  board = FakeBoard();
+  init(state, InputMode::Links, LIMITS, now, "a\xA5" "b\n0123456789012345678901234567890123456789");
+  tick();
+  TEST_ASSERT_EQUAL_STRING("spooder robot: build a?b?012345678901234567890123456789012345\n", board.logs[0].c_str());
+}
+
+void test_one_banner_when_connected_from_the_first_tick()
+{
+  usbHost = true;
+  tick();
+  TEST_ASSERT_EQUAL(1, banners());
+  TEST_ASSERT_EQUAL(0, board.logs[0].compare(0, 21, "spooder robot: build "));
+  ticks(100);
+  TEST_ASSERT_EQUAL(1, banners()); // none while it stays connected
+}
+
+void test_banner_again_on_each_connect()
+{
+  tick();
+  ticks(10);
+  TEST_ASSERT_EQUAL(1, banners()); // the first tick's only
+  usbHost = true;
+  tick();
+  TEST_ASSERT_EQUAL(2, banners());
+  ticks(100);
+  TEST_ASSERT_EQUAL(2, banners());
+  usbHost = false;
+  tick();
+  TEST_ASSERT_EQUAL(2, banners()); // not on disconnect
+  usbHost = true;
+  tick();
+  TEST_ASSERT_EQUAL(3, banners());
+}
+
+void test_banner_is_the_first_line_of_its_tick()
+{
+  ticks(49);
+  supply = {0.5f, 7.5f}; // latches overvoltage this tick
+  usbHost = true;
+  tick();
+  int banner = indexOf(board.events, "log spooder robot: build ");
+  int fault = indexOf(board.events, "log fault latched: overvoltage");
+  TEST_ASSERT_TRUE(fault >= 0);
+  TEST_ASSERT_EQUAL(0, banner); // before any other call of the tick
 }
 
 // --- Output rate backstop ----------------------------------------------------
@@ -907,6 +982,11 @@ int main()
 {
   UNITY_BEGIN();
   RUN_TEST(test_first_tick_names_the_servo_profile);
+  RUN_TEST(test_first_tick_logs_the_banner_then_the_profile);
+  RUN_TEST(test_banner_names_unknown_by_default_and_follows_its_rules);
+  RUN_TEST(test_one_banner_when_connected_from_the_first_tick);
+  RUN_TEST(test_banner_again_on_each_connect);
+  RUN_TEST(test_banner_is_the_first_line_of_its_tick);
   RUN_TEST(test_diagnostics_on_usb_only_on_their_own_tick);
   RUN_TEST(test_diagnostics_contents);
   RUN_TEST(test_diagnostics_window_holds_the_five_previous_ticks);

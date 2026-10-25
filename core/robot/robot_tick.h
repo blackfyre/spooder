@@ -16,6 +16,8 @@
 //   every fifth tick: telemetry on both links; two ticks later the pose on
 //   USB; calibration reports when due
 //   once a second (or on request in --serial builds): the status line
+// Before all of it, on the first tick and on each tick that sees a USB host
+// connect: the build banner, `spooder robot: build <identity>`.
 //
 // The adapter (firmware main.cpp, the virtual robot) reads the link bytes and
 // the power reading, calls tick(), and implements Hardware: the tick calls it
@@ -86,6 +88,9 @@ struct Inputs
   // The working time of the previous tick() call, in microseconds, as the
   // caller measured it (0 when not measured).
   uint32_t previousTickUs;
+  // A host has the USB console open (sampled once per tick): the build
+  // banner is logged again on each tick that sees it connect.
+  bool usbConnected;
 };
 
 // What the tick drives. Every call happens from inside tick().
@@ -150,6 +155,10 @@ struct RobotState
   float jointBudgetDegPerS = 0;
   float backstopDegPerS = 0;
   bool profileAnnounced = false; // the start-up line naming the profile
+  // The build identity the banner names (init() sets it), and whether the
+  // previous tick saw a USB host connected.
+  const char *buildId = "unknown";
+  bool usbConnected = false;
 
   // Output rate backstop: the angles last handed to the servos, per leg
   // whether that is known since output switched on, and how often (ticks)
@@ -183,10 +192,12 @@ struct RobotState
 /**
  * @brief Prepares a default-constructed @p s (call once): protection with
  * @p limits, both calibration tables from the compiled defaults, the joint
- * speed budget and backstop speed from the build's servo profile, and @p nowMs
- * as the previous tick's time.
+ * speed budget and backstop speed from the build's servo profile, @p nowMs
+ * as the previous tick's time, and @p buildId as the identity the build
+ * banner names (see core/identity/build_identity.h).
  */
-void init(RobotState &s, InputMode mode, const protection::Limits &limits, uint32_t nowMs);
+void init(RobotState &s, InputMode mode, const protection::Limits &limits, uint32_t nowMs,
+          const char *buildId = "unknown");
 
 /**
  * @brief Runs one tick at @p nowMs (see the header comment).

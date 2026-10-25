@@ -1,7 +1,9 @@
 #include <cstdio>
+#include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
 
 #include "config.h"
+#include "identity/build_identity.h"
 #include "power_monitor.h"
 #include "robot/robot_tick.h"
 #include "servo_output.h"
@@ -79,7 +81,7 @@ int main()
     }
   }
 
-  robot_tick::init(robot, INPUT_MODE, config::POWER_LIMITS, nowMs());
+  robot_tick::init(robot, INPUT_MODE, config::POWER_LIMITS, nowMs(), build_identity::ID);
   absolute_time_t next = get_absolute_time();
   uint32_t previousTickUs = 0;
 
@@ -107,6 +109,7 @@ int main()
 #endif
     in.power = power_monitor::read();
     in.previousTickUs = previousTickUs;
+    in.usbConnected = stdio_usb_connected(); // the build banner on each connect
 
     uint32_t tickStart = time_us_32();
     robot_tick::tick(robot, in, now, board);

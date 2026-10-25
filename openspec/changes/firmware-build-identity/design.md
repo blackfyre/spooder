@@ -77,6 +77,7 @@ The status pages are unchanged, so `mise run bridge-screenshots` output does not
 - The robot repeats the banner on each USB connect, because the first-tick line is normally lost before the console enumerates; this is the reading of "print it in the boot banner" that makes it visible.
 - `cmake/build_identity.cmake` runs `git` from `PATH` (an optional `-DGIT_EXECUTABLE` overrides it) through `execute_process` rather than `find_program`, so a `PATH` without git gives `unknown` instead of a system path being searched. It compares and writes the file itself rather than with `file(CONFIGURE)`, so `@` or `${` in a tag cannot be substituted.
 - `fit` applies the banner's printable rule and `unknown` too (the screen font has no glyphs outside ASCII) but not the 40-character cut, so a long identity still ends in its hash and `-dirty` on screen. `BANNER_SIZE` (64) holds the longest banner, `spooder bridge: build ` with 40 characters and the newline.
+- The virtual robot's e2e banner test opens the USB terminal with a plain `open`, as a console does, and waits 100 ms (several ticks) after `plug` before opening it again. The calibrator's `link.Serial` opens a pseudo-terminal twice (the first open fails for want of modem lines and is closed), so on the virtual robot the banner can go to that first open and be lost; this is the accepted reopen-within-one-tick case, not a robot defect. On the board, raising DTR succeeds on the first open.
 
 ## Follow-ups
 

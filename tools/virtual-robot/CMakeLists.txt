@@ -18,8 +18,19 @@ if(NOT EXISTS "${SPOODER_POWER_LIMITS}")
   message(FATAL_ERROR "No power limits file at ${SPOODER_POWER_LIMITS}; pass -DSPOODER_POWER_LIMITS=<file>.")
 endif()
 
+# Build identity: the virtual robot's own build (see
+# firmware/servo2040/CMakeLists.txt and cmake/build_identity.cmake).
+set(SPOODER_BUILD_IDENTITY_SOURCE ${CMAKE_CURRENT_BINARY_DIR}/build_identity_id.cpp)
+add_custom_target(virtual_robot_build_identity
+  COMMAND ${CMAKE_COMMAND} -DREPO_ROOT=${SPOODER_ROOT} -DOUTPUT=${SPOODER_BUILD_IDENTITY_SOURCE}
+          -P ${SPOODER_ROOT}/cmake/build_identity.cmake
+  BYPRODUCTS ${SPOODER_BUILD_IDENTITY_SOURCE}
+  COMMENT "Build identity"
+  VERBATIM)
+
 add_executable(virtual-robot
   src/main.cpp
+  ${SPOODER_BUILD_IDENTITY_SOURCE}
   src/pty.cpp
   src/sim.cpp
   # The robot's own logic, the same sources as the firmware's spooder_core.
@@ -35,8 +46,10 @@ add_executable(virtual-robot
   ${SPOODER_CORE}/protection/resume_gate.cpp
   ${SPOODER_CORE}/protection/supervisor.cpp
   ${SPOODER_CORE}/robot/robot_tick.cpp
+  ${SPOODER_CORE}/identity/build_identity.cpp
   ${SPOODER_CORE}/status/led_pattern.cpp
 )
+add_dependencies(virtual-robot virtual_robot_build_identity)
 target_include_directories(virtual-robot PRIVATE ${SPOODER_CORE} ${SPOODER_FIRMWARE})
 # The same servo profile choice as the firmware.
 set(SPOODER_SERVO_PROFILE "MG996R" CACHE STRING "Servo model fitted (see core/movement/servo_profile.h)")

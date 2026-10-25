@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "config.h"
+#include "identity/build_identity.h"
 #include "pty.h"
 #include "robot/robot_tick.h"
 #include "sim.h"
@@ -164,6 +165,7 @@ static void tickOnce()
   // The working time of the previous tick, as the board measures it.
   static uint32_t previousTickUs = 0;
   in.previousTickUs = previousTickUs;
+  in.usbConnected = board.usb.connected(); // the build banner on each open
   nowMs += robot_tick::LOOP_PERIOD_MS;
   struct timespec start, end;
   clock_gettime(CLOCK_MONOTONIC, &start);
@@ -370,7 +372,7 @@ int main(int argc, char **argv)
 
   board.echo = opts.echo;
   supply.voltageV = opts.supplyV;
-  robot_tick::init(robot, robot_tick::InputMode::Links, config::POWER_LIMITS, nowMs);
+  robot_tick::init(robot, robot_tick::InputMode::Links, config::POWER_LIMITS, nowMs, build_identity::ID);
   lastApplied = robot.applied;
   if (!openUsb())
     return 1;

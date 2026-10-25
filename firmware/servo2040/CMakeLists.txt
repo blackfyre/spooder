@@ -30,6 +30,7 @@ add_library(spooder_core STATIC
   ${SPOODER_CORE}/protection/resume_gate.cpp
   ${SPOODER_CORE}/protection/supervisor.cpp
   ${SPOODER_CORE}/robot/robot_tick.cpp
+  ${SPOODER_CORE}/identity/build_identity.cpp
   ${SPOODER_CORE}/status/led_pattern.cpp
 )
 target_include_directories(spooder_core PUBLIC ${SPOODER_CORE})
@@ -54,8 +55,22 @@ endif()
 # console keys for bring-up and as a rollback.
 option(SPOODER_SERIAL_COMMANDS "Take commands from the USB serial console keys instead of the links" OFF)
 
+# Build identity: `git describe` of the checkout, regenerated on every build
+# (cmake/build_identity.cmake) but rewritten only when it changes, so an
+# unchanged checkout compiles nothing and a new commit or a dirty tree
+# compiles only this source. Not in spooder_core: the host tests share that.
+set(SPOODER_ROOT ${CMAKE_CURRENT_LIST_DIR}/../..)
+set(SPOODER_BUILD_IDENTITY_SOURCE ${CMAKE_CURRENT_BINARY_DIR}/build_identity_id.cpp)
+add_custom_target(spooder_build_identity
+  COMMAND ${CMAKE_COMMAND} -DREPO_ROOT=${SPOODER_ROOT} -DOUTPUT=${SPOODER_BUILD_IDENTITY_SOURCE}
+          -P ${SPOODER_ROOT}/cmake/build_identity.cmake
+  BYPRODUCTS ${SPOODER_BUILD_IDENTITY_SOURCE}
+  COMMENT "Build identity"
+  VERBATIM)
+
 add_executable(spooder
   src/main.cpp
+  ${SPOODER_BUILD_IDENTITY_SOURCE}
   src/power_monitor.cpp
   src/servo_output.cpp
   src/status_leds.cpp
@@ -69,6 +84,8 @@ else()
   target_sources(spooder PRIVATE src/link.cpp src/usb_link.cpp)
   target_compile_definitions(spooder PRIVATE CFG_TUD_CDC_TX_BUFSIZE=256)
 endif()
+
+add_dependencies(spooder spooder_build_identity)
 
 target_compile_options(spooder PRIVATE -Wall)
 # -Wextra and -Werror only for our sources: the SDK's interface libraries

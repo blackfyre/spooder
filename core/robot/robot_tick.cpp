@@ -1,4 +1,5 @@
 #include "robot_tick.h"
+#include "identity/build_identity.h"
 #include "movement/servo_profile.h"
 
 #include <stdarg.h>
@@ -387,7 +388,7 @@ static void reportRejections(const RobotState &s, Hardware &hw)
   }
 }
 
-void init(RobotState &s, InputMode mode, const protection::Limits &limits, uint32_t nowMs)
+void init(RobotState &s, InputMode mode, const protection::Limits &limits, uint32_t nowMs, const char *buildId)
 {
   // No whole-state assignment: a RobotState temporary would not fit the
   // board's 2 KB main stack. The rest is as default-constructed.
@@ -400,12 +401,26 @@ void init(RobotState &s, InputMode mode, const protection::Limits &limits, uint3
   s.jointBudgetDegPerS = servo_profile::SELECTED.budgetDegPerS();
   s.backstopDegPerS = servo_profile::SELECTED.noLoadDegPerS;
   s.lastTickMs = nowMs;
+  s.buildId = buildId;
 }
 
 void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
 {
   const bool links = s.inputMode == InputMode::Links;
-  if (!s.profileAnnounced)
+  // The build banner first: on the first tick (usually lost on the board,
+  // before the console enumerates) and on each tick that sees a host
+  // connect. The first tick takes the connection as it finds it, so a host
+  // connected from the start gets one banner.
+  const bool firstTick = !s.profileAnnounced;
+  const bool connected = in.usbConnected && !s.usbConnected;
+  s.usbConnected = in.usbConnected;
+  if (firstTick || connected)
+  {
+    char line[build_identity::BANNER_SIZE];
+    build_identity::banner(line, sizeof line, "robot", s.buildId);
+    hw.log(line);
+  }
+  if (firstTick)
   {
     s.profileAnnounced = true;
     logf(hw, "servo profile %s: joint speed budget %.0f deg/s\n", servo_profile::SELECTED.name, s.jointBudgetDegPerS);
