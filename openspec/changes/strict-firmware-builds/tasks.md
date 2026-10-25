@@ -13,4 +13,4 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 Record the strict warnings and the image budget in `CHANGELOG.md` under Unreleased, and in `firmware/servo2040/CLAUDE.md` (flags, budgets, the check), `firmware/bridge/CLAUDE.md` (warnings fatal in `main/`, SDK headers at the include) and `test/CLAUDE.md` (host flags). Verify `openspec validate strict-firmware-builds` passes and each file names the new gate.
+- [x] 3.1 Record the strict warnings and the image budget in `CHANGELOG.md` under Unreleased, and in `firmware/servo2040/CLAUDE.md` (flags, budgets, the check), `firmware/bridge/CLAUDE.md` (warnings fatal in `main/`, SDK headers at the include) and `test/CLAUDE.md` (host flags). Verify `openspec validate strict-firmware-builds` passes and each file names the new gate.
