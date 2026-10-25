@@ -47,6 +47,7 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
   - An output rate backstop never moves a joint faster than the servo's rated speed. It reports on the USB console when it engages.
 - **Project files.** An MIT licence, this changelog and an expanded readme.
 - **Link parser fuzzing.** Go fuzz tests of the desktop's link decoder (`FuzzDecoder`) and of its split of the USB stream into frames and debug text (`FuzzSplitArbitrary`, `FuzzSplitInterleaved`), seeded from the golden frames: no panic, bounded buffers and lines, every byte accounted for, canonical re-encoding, and text never mixed with frames. `mise run desktop-test` replays their seeds and any saved failing inputs on every run; `mise run fuzz` fuzzes each with random inputs for a bounded time (`--time`, default 60 s). The first full run found no bug.
+- **Hardened host tests.** `mise run test` builds and runs the `core/` host tests with AddressSanitizer and UndefinedBehaviorSanitizer (including float-to-integer overflow), so the first finding fails the run. Where the compiler cannot link the runtimes it warns and runs unsanitised, except under CI or with `SPOODER_REQUIRE_SANITIZERS=1`, where it fails. It also checks first that the native env's source list names exactly the `.cpp` files under `core/`. The first sanitised run found a stack-use-after-scope in the centre-of-gravity test, now fixed.
 
 ### Changed
 

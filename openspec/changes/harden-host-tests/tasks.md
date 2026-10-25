@@ -15,4 +15,4 @@
 
 ## 3. Documentation
 
-- [ ] 3.1 Describe the sanitisers, the local fallback and the source-list check in `test/CLAUDE.md`, and add a `CHANGELOG.md` Unreleased entry; verify `openspec validate harden-host-tests` passes
+- [x] 3.1 Describe the sanitisers, the local fallback and the source-list check in `test/CLAUDE.md`, and add a `CHANGELOG.md` Unreleased entry; verify `openspec validate harden-host-tests` passes
