@@ -2,9 +2,9 @@
 
 ## 1. Source-list check
 
-- [ ] 1.1 Add `test/check_test_sources.py` (reads `[env:native]` `build_src_filter`, requires `-<*>` first and then only plain `+<….cpp>` entries, compares them with `core/**/*.cpp`, prints sorted missing, extra and invalid entries) and verify `python test/check_test_sources.py` exits 0 on the current tree
-- [ ] 1.2 Add `test/test_check_test_sources.py` covering match, a missing source, a stale entry, a wildcard entry, an additional `-<…>` exclusion and a missing leading `-<*>` on crafted trees, each failing case asserting the exit status and the named entry; verify `python -m unittest -v test_check_test_sources` passes in `test/`
-- [ ] 1.3 Run the test and the check from `mise run test` before `pio test`; verify `mise run test` passes, and fails naming the file after temporarily adding an unlisted `core/` `.cpp` (then remove it)
+- [x] 1.1 Add `test/check_test_sources.py` (reads `[env:native]` `build_src_filter`, requires `-<*>` first and then only plain `+<….cpp>` entries, compares them with `core/**/*.cpp`, prints sorted missing, extra and invalid entries) and verify `python test/check_test_sources.py` exits 0 on the current tree
+- [x] 1.2 Add `test/test_check_test_sources.py` covering match, a missing source, a stale entry, a wildcard entry, an additional `-<…>` exclusion and a missing leading `-<*>` on crafted trees, each failing case asserting the exit status and the named entry; verify `python -m unittest -v test_check_test_sources` passes in `test/`
+- [x] 1.3 Run the test and the check from `mise run test` before `pio test`; verify `mise run test` passes, and fails naming the file after temporarily adding an unlisted `core/` `.cpp` (then remove it)
 
 ## 2. Sanitised host tests
 
