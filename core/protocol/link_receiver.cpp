@@ -18,7 +18,7 @@ MovementCommand toMovementCommand(const protocol::Command &c)
     m.translate.normalize();
     m.translate = m.translate * 100;
   }
-  m.rotate = c.rotate < -100 ? -100 : (c.rotate > 100 ? 100 : c.rotate);
+  m.rotate = (float)(c.rotate < -100 ? -100 : (c.rotate > 100 ? 100 : c.rotate)); // exact: -100..100
   m.height = c.height > 100 ? 100 : c.height;
   m.speed = c.speed > 100 ? 100 : c.speed;
   m.gait = c.gait; // the body ignores unknown gaits
@@ -91,7 +91,7 @@ static protocol::CalibrationResult guard(const protocol::CalibrationSet &c, join
   if (!calibrating || !allowOutput || c.joint >= joint_calibration::JOINT_COUNT)
     return protocol::CalibrationResult::Rejected;
   joint_calibration::Joint j;
-  j.offsetDeg = c.offsetCentideg / 100.0f;
+  j.offsetDeg = (float)c.offsetCentideg / 100.0f; // exact: an int16_t
   j.pulse0Us = c.pulse0Us;
   j.pulse180Us = c.pulse180Us;
   j.reversed = (c.flags & protocol::CALIBRATION_REVERSED) != 0;

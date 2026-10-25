@@ -131,6 +131,8 @@ static uint16_t clampU16(float v)
     return 0;
   if (v >= 65535.0f)
     return 65535;
+  // v is in (0, 65535) here, where adding 0.5 and truncating rounds half up.
+  // NOLINTNEXTLINE(bugprone-incorrect-roundings)
   return (uint16_t)(v + 0.5f);
 }
 
@@ -183,6 +185,10 @@ static protocol::Diagnostics windowDiagnostics(RobotState &s, const protection::
   d.motionSharePermille = clamp16(s.windowMotionShare * 1000);
   d.backstopTicks = (uint16_t)s.backstopTicks;
   d.tickMaxUs = clamp16((float)s.windowTickMaxUs);
+  // The window restarts with every diagnostics frame, but a build that sends
+  // none (serial keys) never restarts it; past 2^24 ticks (3.9 days) the
+  // count rounds, which only blurs a mean already clamped to 16 bits.
+  // NOLINTNEXTLINE(bugprone-narrowing-conversions)
   d.tickMeanUs = s.windowTicks ? clamp16((float)s.windowTickSumUs / s.windowTicks) : 0;
   d.averageCurrentMa = clamp16(p.averageCurrentA * 1000);
   d.tripCurrentMa = clamp16(l.tripCurrentA * 1000);
@@ -309,7 +315,7 @@ static float stepTowards(float &value, float target, float maxStep)
 static const body::BodyState &limitOutput(RobotState &s, uint32_t elapsedMs)
 {
   output = s.body;
-  float maxStep = s.backstopDegPerS * (elapsedMs / 1000.0f);
+  float maxStep = s.backstopDegPerS * ((float)elapsedMs / 1000.0f); // exact: at most body::MAX_STEP_MS
   bool heldBack = false;
   for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
   {
@@ -491,7 +497,7 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
         link_receiver::requestReport(e.reports);
     }
   }
-  joint_calibration::step(s.applied, s.requested, elapsedMs / 1000.0f);
+  joint_calibration::step(s.applied, s.requested, (float)elapsedMs / 1000.0f); // exact: at most body::MAX_STEP_MS
 
   if (run.runBody)
   {

@@ -57,7 +57,8 @@ static Rgb scaled(Rgb c, float level)
     level = 0;
   if (level > 1)
     level = 1;
-  return Rgb{(uint8_t)(c.r * level), (uint8_t)(c.g * level), (uint8_t)(c.b * level)};
+  // Exact conversions in, and the products stay within 0..255 (level is 0..1).
+  return Rgb{(uint8_t)((float)c.r * level), (uint8_t)((float)c.g * level), (uint8_t)((float)c.b * level)};
 }
 
 // Triangle wave from lo to 1.0 and back over the period.

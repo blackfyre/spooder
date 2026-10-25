@@ -236,15 +236,15 @@ static void composeDrive(const Inputs &in, DriveBody &d)
   {
     // Compact, so the widest values still fit: "TOF 65535MM P-327.6 R-327.6".
     char buf[40];
-    int used = 0;
+    int used = 0; // at most 27 of the 40 bytes, so sizeof(buf) - used stays positive
     if (t.sensorsAvailable & protocol::SENSOR_TOF)
       used += snprintf(buf + used, sizeof(buf) - used, "TOF %uMM ", t.tofMm);
     if (t.sensorsAvailable & protocol::SENSOR_ATTITUDE)
     {
       used += snprintf(buf + used, sizeof(buf) - used, "P");
-      used += formatTenths(buf + used, sizeof(buf) - used, t.pitchCentideg);
+      used += formatTenths(buf + used, (int)sizeof(buf) - used, t.pitchCentideg);
       used += snprintf(buf + used, sizeof(buf) - used, " R");
-      formatTenths(buf + used, sizeof(buf) - used, t.rollCentideg);
+      formatTenths(buf + used, (int)sizeof(buf) - used, t.rollCentideg);
     }
     text(d.sensors, Tone::Normal, "%s", buf);
   }

@@ -618,7 +618,8 @@ static bool isStale(BodyState &s, uint32_t issuedAtMs, uint32_t nowMs)
 // One fixed sub-step of the whole state machine.
 static void subStep(BodyState &s, const MovementCommand &cmd, RequestedMode req, uint8_t newGesture, uint32_t dtUs)
 {
-  float dtS = dtUs / 1e6f;
+  // Exact: a sub-step is at most INTEGRATION_STEP_US (5000 us), far below 2^24.
+  float dtS = (float)dtUs / 1e6f;
 
   resolveMode(s, req, cmd, newGesture);
   selectGait(s, cmd.gait);
@@ -697,7 +698,9 @@ static float advanceMotion(BodyState &s, const MovementCommand &cmd, RequestedMo
     {
       *halfway = s;
       finishMotion(*halfway);
-      share = (float)done / motionUs;
+      // Exact: motion time is at most MAX_STEP_MS (100 ms) or a few budget
+      // pieces of BUDGET_INTERVAL_US, far below 2^24 us.
+      share = (float)done / (float)motionUs;
     }
   } while (done < motionUs);
 

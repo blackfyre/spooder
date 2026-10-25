@@ -16,3 +16,4 @@ desktop/spooder-calibrator
 desktop/cmd/spooder-calibrator/spooder-calibrator
 .claude/worktrees/
 __pycache__/
+compile_commands.json

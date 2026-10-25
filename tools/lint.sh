@@ -83,20 +83,45 @@ check_tidy() {
     echo "lint: pio run -e native -t compiledb wrote no compile_commands.json" >&2
     return 1
   fi
-  local sources=()
-  mapfile -t sources < <(python3 - <<'EOF'
-import json, os
+  # The core/ sources in the database, which must be exactly the sources the
+  # native env's build_src_filter names (relative to src_dir, core/), so no
+  # source escapes analysis.
+  local listing sources=()
+  if ! listing=$(python3 - <<'EOF'
+import configparser, json, os, re, sys
 root = os.getcwd()
+ini = configparser.ConfigParser(interpolation=None)
+ini.read("platformio.ini")
+src_dir = ini.get("platformio", "src_dir", fallback="src")
+patterns = re.findall(r"([+-])<([^>]*)>", ini.get("env:native", "build_src_filter"))
+# Only "-<*>" then one "+<file>" per source is understood; a glob, a directory
+# or a later exclusion could hide a source from the check, so it fails.
+odd = [f"{sign}<{p}>" for i, (sign, p) in enumerate(patterns)
+       if not ((i == 0 and sign == "-" and p == "*") or
+               (sign == "+" and re.fullmatch(r"[\w./-]+\.(c|cc|cpp)", p)))]
+for p in odd:
+    print(f"lint: build_src_filter entry {p} is not -<*> or a single source; list each source", file=sys.stderr)
+if odd:
+    sys.exit(1)
+wanted = {os.path.normpath(os.path.join(src_dir, p)) for sign, p in patterns if sign == "+"}
+listed = set()
 for entry in json.load(open("compile_commands.json")):
     path = os.path.relpath(os.path.join(entry["directory"], entry["file"]), root)
     if path.startswith("core" + os.sep):
-        print(path)
+        listed.add(path)
+missing = sorted(wanted - listed)
+for path in missing:
+    print(f"lint: {path} is in build_src_filter but not in the compile database", file=sys.stderr)
+if not wanted:
+    print("lint: the native env's build_src_filter names no source", file=sys.stderr)
+if missing or not wanted:
+    sys.exit(1)
+print("\n".join(sorted(listed)))
 EOF
-  )
-  if ((${#sources[@]} == 0)); then
-    echo "lint: the compile database lists no core/ source" >&2
+  ); then
     return 1
   fi
+  mapfile -t sources <<<"$listing"
   clang-tidy -p . --quiet "${sources[@]}"
 }
 

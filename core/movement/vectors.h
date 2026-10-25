@@ -86,12 +86,20 @@ public:
 
     float px = x - pivot.x;
     float py = y - pivot.y;
+    // The angle and the coordinates are not bounded here, so these
+    // conversions are suppressed rather than cast: upstream's arithmetic,
+    // including the truncation to whole millimetres, pinned by the golden
+    // vectors and kept as it is.
+    // NOLINTNEXTLINE(bugprone-narrowing-conversions)
     float angleRad = angle * (float)M_PI / 180.0f;
 
+    // NOLINTNEXTLINE(bugprone-narrowing-conversions)
     int x_rotated = px * cosf(angleRad) - py * sinf(angleRad);
+    // NOLINTNEXTLINE(bugprone-narrowing-conversions)
     int y_rotated = px * sinf(angleRad) + py * cosf(angleRad);
 
-    return Vector3(x_rotated + pivot.x, y_rotated + pivot.y, z);
+    // Exact: an int truncated from a float converts back without rounding.
+    return Vector3((float)x_rotated + pivot.x, (float)y_rotated + pivot.y, z);
   }
 
   float distanceTo(Vector3 v) const

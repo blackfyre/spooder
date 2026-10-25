@@ -104,6 +104,10 @@ uint16_t toPulse(const Joint &j, float angleDeg)
   if (j.reversed)
     a = 180 - a;
   float us = j.pulse0Us + (j.pulse180Us - j.pulse0Us) * a / 180.0f;
+  // us is positive (pulse widths of hundreds of microseconds), where adding
+  // 0.5 and truncating rounds half up; lround would change the exported
+  // pulses at the float rounding edge.
+  // NOLINTNEXTLINE(bugprone-incorrect-roundings)
   return (uint16_t)(us + 0.5f);
 }
 

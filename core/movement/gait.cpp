@@ -107,7 +107,7 @@ static const Placement &placement(int leg)
     for (int i = 0; i < LEG_COUNT; i++)
     {
       int a = placementFor(i);
-      float rad = a * (float)M_PI / 180.0f;
+      float rad = (float)a * (float)M_PI / 180.0f; // exact: |a| <= LEG_PLACEMENT_ANGLE (56)
       table[i] = Placement{a, cosf(rad), sinf(rad)};
     }
     ready = true;
@@ -121,9 +121,15 @@ static Vector3 placed(Vector3 v, int leg)
   if (pl.angle == 0)
     return v;
   float px = v.x - STANCE_DISTANCE, py = v.y;
+  // Truncated to whole millimetres, as Vector3::rotate does: upstream's
+  // arithmetic, pinned by the golden vectors, kept as it is. This function
+  // does not bound v, so the conversion is suppressed rather than cast.
+  // NOLINTNEXTLINE(bugprone-narrowing-conversions)
   int xr = px * pl.cosA - py * pl.sinA;
+  // NOLINTNEXTLINE(bugprone-narrowing-conversions)
   int yr = px * pl.sinA + py * pl.cosA;
-  return Vector3(xr + STANCE_DISTANCE, yr, v.z);
+  // Exact: an int truncated from a float converts back without rounding.
+  return Vector3((float)xr + STANCE_DISTANCE, (float)yr, v.z);
 }
 
 // The ground stroke (propel end minus lift end) of each motion alone, in the
@@ -191,8 +197,9 @@ static float reachScale(const Stride &st, float f, float t, float scale, float g
     {
       // The straight end's offset from the stance point, rotated by the
       // placement, blended with the rotation end's.
-      float dx = end * v.x * side, dy = -end * v.y * side;
-      Vector2 d((dx * pl.cosA - dy * pl.sinA) * wS, (dx * pl.sinA + dy * pl.cosA) * wS + end * rot * wR);
+      const float e = (float)end; // exact: -1 or 1
+      float dx = e * v.x * side, dy = -e * v.y * side;
+      Vector2 d((dx * pl.cosA - dy * pl.sinA) * wS, (dx * pl.sinA + dy * pl.cosA) * wS + e * rot * wR);
       limit = fminf(limit, largestWithin(stance, d, r));
     }
   }
@@ -209,7 +216,7 @@ static float aloneReachScale(Stride st, bool straight, float ground)
 
 float mountAngleDeg(int leg)
 {
-  return (leg < LEG_COUNT / 2 ? 180.0f : 0.0f) + placementFor(leg);
+  return (leg < LEG_COUNT / 2 ? 180.0f : 0.0f) + (float)placementFor(leg); // exact: at most 56 degrees
 }
 
 // The parts of the stride every leg shares.

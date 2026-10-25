@@ -33,7 +33,11 @@ void stickToVector(int32_t x, int32_t y, int8_t &outX, int8_t &outY)
   if (scaled > 1.0f)
     scaled = 1.0f;
   float k = scaled / m;
+  // toPercent's int8_t is a percentage (-100..100), not a character, so
+  // widening it to int keeps its value.
+  // NOLINTNEXTLINE(bugprone-signed-char-misuse)
   int ix = toPercent(fx * k);
+  // NOLINTNEXTLINE(bugprone-signed-char-misuse)
   int iy = toPercent(fy * k);
   // Rounding each axis can push a full diagonal just past 100; pull the
   // larger component back until the magnitude is within range.

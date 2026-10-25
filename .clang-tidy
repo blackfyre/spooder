@@ -1,0 +1,36 @@
+# clang-tidy for core/, run by tools/lint.sh (mise run lint) over the host
+# compile database (PlatformIO's native env). The check set is in
+# openspec/changes/static-analysis/design.md. Every finding fails the lint;
+# a check disabled here says why below.
+Checks: >-
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-throwing-static-initialization,
+  -bugprone-implicit-widening-of-multiplication-result,
+  performance-*,
+  -performance-avoid-endl,
+  -performance-enum-size,
+  readability-misleading-indentation,
+  readability-duplicate-include,
+  readability-inconsistent-declaration-parameter-name,
+  readability-redundant-declaration,
+  readability-non-const-parameter,
+  readability-container-size-empty
+# Disabled:
+# - bugprone-easily-swappable-parameters: fires on most functions taking two
+#   floats and asks for a rewrite, not a fix.
+# - bugprone-throwing-static-initialization: fires on every constant table of
+#   vectors and poses, only because their constructors are not noexcept; they
+#   do float arithmetic and cannot throw, and the robot firmware builds
+#   without C++ exceptions (the pico-sdk default).
+# - bugprone-implicit-widening-of-multiplication-result: fires on payload
+#   offsets (index times field size) in the protocol, all below the 256-byte
+#   frame; on the RP2040 and the ESP32 ptrdiff_t is int, so nothing widens.
+# - performance-avoid-endl: core/ uses no streams.
+# - performance-enum-size: asks for a smaller base type, a type change the
+#   design rules out (protection::Fault is 16 bits to match its wire field).
+WarningsAsErrors: '*'
+HeaderFilterRegex: '(^|/)core/'
+CheckOptions:
+  bugprone-narrowing-conversions.WarnOnFloatingPointNarrowingConversion: true
