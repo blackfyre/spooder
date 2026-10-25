@@ -456,7 +456,10 @@ static int textWidthPx(const char *text)
 {
   int w = 0;
   for (const char *c = text; *c; c++)
-    w += (*c >= 32 && *c < 128) ? FONT2_WIDTHS[*c - 32] : 10;
+  {
+    const unsigned char ch = static_cast<unsigned char>(*c);
+    w += (ch >= 32 && ch < 128) ? FONT2_WIDTHS[ch - 32] : 10;
+  }
   return w;
 }
 

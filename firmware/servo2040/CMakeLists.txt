@@ -33,7 +33,7 @@ add_library(spooder_core STATIC
   ${SPOODER_CORE}/status/led_pattern.cpp
 )
 target_include_directories(spooder_core PUBLIC ${SPOODER_CORE})
-target_compile_options(spooder_core PRIVATE -Wall -Wextra)
+target_compile_options(spooder_core PRIVATE -Wall -Wextra -Werror)
 
 # Servo profile: the servo model fitted, which sets the joint speed budget
 # (core/movement/servo_profile.h lists the known names).
@@ -71,10 +71,10 @@ else()
 endif()
 
 target_compile_options(spooder PRIVATE -Wall)
-# -Wextra only for our sources: the SDK's interface libraries compile into
-# this target too.
+# -Wextra and -Werror only for our sources: the SDK's interface libraries
+# compile into this target too, and their warnings must not fail the build.
 get_target_property(SPOODER_SOURCES spooder SOURCES)
-set_source_files_properties(${SPOODER_SOURCES} PROPERTIES COMPILE_OPTIONS -Wextra)
+set_source_files_properties(${SPOODER_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wextra;-Werror")
 target_compile_definitions(spooder PRIVATE
   SPOODER_POWER_LIMITS_HEADER="${SPOODER_POWER_LIMITS}"
   # A connected host that is not reading must not stall the control loop:

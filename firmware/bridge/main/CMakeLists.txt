@@ -24,3 +24,17 @@ idf_component_register(
   INCLUDE_DIRS "." "${SPOODER_CORE}"
   REQUIRES bluepad32 bluepad32_arduino arduino btstack LovyanGFX bootloader_support bt
 )
+
+# Warnings are errors in Spooder's own sources: this component's files, the
+# bridge's and the shared core/ ones, never another component's (PRIVATE).
+# ESP-IDF enables neither -Wall nor -Wextra and switches some of their warnings
+# off or keeps them non-fatal, and a specific -W<name> outranks -Wall/-Wextra,
+# so each of those is named again here, after ESP-IDF's options. A warning
+# raised inside an SDK header is handled at its include (see CLAUDE.md).
+target_compile_options(${COMPONENT_LIB} PRIVATE
+  -Wall -Wextra -Werror
+  -Wframe-address -Wunused-parameter -Wsign-compare
+  $<$<COMPILE_LANGUAGE:C>:-Wenum-conversion -Wold-style-declaration>
+  -Werror=unused-function -Werror=unused-variable -Werror=unused-but-set-variable
+  -Werror=deprecated-declarations -Werror=extra
+)

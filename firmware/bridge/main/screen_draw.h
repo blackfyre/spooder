@@ -7,8 +7,7 @@
 // (tools/bridge-screenshots). Each function fills its region's ground at
 // y0 and draws within it.
 #include <stdint.h>
-#define LGFX_USE_V1
-#include <LovyanGFX.hpp>
+#include "lovyangfx_include.h"
 
 #include "status/page_button.h"
 #include "status/power_history.h"

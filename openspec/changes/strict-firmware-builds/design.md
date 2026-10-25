@@ -85,7 +85,10 @@ Made without a human to ask; each can be revisited in review.
 - Static RAM counts the linker's minimum heap and the core 0 stack reservation, since they are SRAM the image claims; the 264 KiB SRAM limit is not checked separately because the linker already fails on it and the budget is far below.
 - One budget pair serves the link and `--serial` builds; they differ by about 1 KiB.
 - The brief's "native env: -Wall -Wextra -Werror" is met with `build_src_flags` in that env rather than `build_flags`, so that Unity stays outside the gate as the spec requires.
-- The robot figures above are a reference measurement with `power_limits.example.h` and the MG996R profile before any warning fix; the delivered check is verified against the `objdump -h` of the ELF it measures, not against these numbers.
+- The bridge's C sources also get `-Wold-style-declaration`: ESP-IDF adds `-Wno-old-style-declaration` for C after its common options, and `-Wextra` enables that warning in C, so leaving it off would switch off a `-Wextra` warning against the spec. The bridge's compile commands show the component's options after all of ESP-IDF's, including that one, so the positive forms win.
+- LovyanGFX's panel headers raise `-Wunused-parameter` under the bridge's flags (`Panel_AMOLED.hpp`, `Panel_FlexibleFrameBuffer.hpp`, `Panel_FrameBufferBase.hpp`, `Panel_RA8875.hpp`), and it is included from two places (`display.cpp`, `screen_draw.h`), so the include-level handling is one Spooder-owned wrapper, `firmware/bridge/main/lovyangfx_include.h`, with a `#pragma GCC diagnostic` push/ignore/pop of that one warning around `<LovyanGFX.hpp>`, rather than `#pragma GCC system_header` (which would only mark the wrapper itself) or the same pragmas at each include. No other SDK header warns today.
+- In the host tests, PlatformIO's generated `unity_config.c` (written into the build directory for the project builder) is compiled with `build_src_flags` like the tests; it is PlatformIO's two-line glue, not Unity's framework source, which stays without `-Werror`.
+- The robot image figures above are a reference measurement with `power_limits.example.h` and the MG996R profile before any warning fix; the delivered check is verified against the `objdump -h` of the ELF it measures, not against these numbers.
 
 ## Follow-ups
 

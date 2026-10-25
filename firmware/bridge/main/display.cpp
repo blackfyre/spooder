@@ -2,8 +2,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#define LGFX_USE_V1
-#include <LovyanGFX.hpp>
+#include "lovyangfx_include.h"
 
 #include "logo.h"
 #include "screen_draw.h"

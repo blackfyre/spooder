@@ -268,14 +268,6 @@ void test_first_tick_names_the_servo_profile()
 
 // --- Output rate backstop ----------------------------------------------------
 
-static float largestOutputChange(const kinematics::JointAngles *a, const kinematics::JointAngles *b)
-{
-  float m = 0;
-  for (int i = 0; i < kinematics::LEG_COUNT; i++)
-    m = fmaxf(m, fmaxf(fabsf(a[i].coxa - b[i].coxa), fmaxf(fabsf(a[i].femur - b[i].femur), fabsf(a[i].tibia - b[i].tibia))));
-  return m;
-}
-
 // Shifts a joint's calibration offset at once (both tables, so the applied
 // table does not ramp to it): its commanded angle jumps.
 static void jumpOffset(int joint, float deg)

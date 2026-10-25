@@ -71,7 +71,8 @@ static void loadPassword()
   String stored = prefs.getString("ap_pass", "");
   if (access_point::validPassword(stored.c_str()))
   {
-    snprintf(password, sizeof(password), "%s", stored.c_str());
+    // validPassword checked the length; the precision tells the compiler.
+    snprintf(password, sizeof(password), "%.*s", access_point::PASSWORD_LENGTH, stored.c_str());
   }
   else
   {

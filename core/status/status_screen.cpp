@@ -209,9 +209,9 @@ static void composeDrive(const Inputs &in, DriveBody &d)
 {
   const gamepad_mapping::Desired &want = in.desired;
   text(d.height, Tone::Normal, "H %u", want.height);
-  d.heightBar = {true, fraction(want.height, 0, 100)};
+  d.heightBar = {true, fraction(want.height, 0, 100), false, 0.0f};
   text(d.speed, Tone::Normal, "SPD %u", want.speed);
-  d.speedBar = {true, fraction(want.speed, 0, 100)};
+  d.speedBar = {true, fraction(want.speed, 0, 100), false, 0.0f};
   text(d.modes, Tone::Muted, "%s " DOT " %s", want.stride == StrideMode::Fixed ? "FIXED" : "DYNAMIC",
        want.stickMode == gamepad_mapping::StickMode::Crab ? "CRAB" : "STEER");
 
