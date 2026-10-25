@@ -57,6 +57,7 @@ Each sanitiser finding in `core/` is fixed at its cause with a Unity regression 
 - `CI` counts as `true` case-insensitively (`True`, `TRUE`); `SPOODER_REQUIRE_SANITIZERS` only as `1`. Any other value, or none, is local.
 - The script skips the probe for a clean target (`pio run -t clean`), which builds nothing.
 - The first sanitised run (ubuntu:24.04, GCC 13.3) found one defect, in test code: `test_centre_of_gravity`'s `legMassCentre` kept a pointer into the temporary `LegPoints` that `legInBody` returned (stack-use-after-scope). It is fixed in the test by keeping the `LegPoints` in a local; `core/` had no finding.
+- The source filter checked is the one PlatformIO uses: PlatformIO 6.2 appends `PLATFORMIO_BUILD_SRC_FILTER` (or, when that is empty, the old `PLATFORMIO_SRC_FILTER`) to `build_src_filter`, so the checker appends it the same way and any entry it adds is held to the same shape (found in review).
 - The checker and its test live in `test/`, next to the tests they guard, rather than in `tools/`, matching `firmware/bridge/scripts/` keeping its checker next to what it checks.
 
 ## Follow-ups

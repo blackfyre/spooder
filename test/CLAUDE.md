@@ -8,7 +8,7 @@ Unity host tests of `core/`, one directory per area (`mise run test`, the Platfo
 3. `test_sanitizers`, the sanitiser script's compiler selection against PlatformIO's own SCons (installed by step 2; the test fails, not skips, without it).
 4. the bridge build's image-size check test (`firmware/bridge/scripts/test_image_size.py`).
 
-**Source-list check.** `[env:native]`'s `build_src_filter` must be `-<*>` and then one plain `+<…>` entry per `.cpp` file under `core/`, nothing else. The check fails naming each source missing from the filter, each entry with no file under `core/` and each entry of another form (a wildcard, `..`, a second exclusion). A new `core/` `.cpp` is added there by hand.
+**Source-list check.** `[env:native]`'s `build_src_filter` must be `-<*>` and then one plain `+<…>` entry per `.cpp` file under `core/`, nothing else. The check fails naming each source missing from the filter, each entry with no file under `core/` and each entry of another form (a wildcard, `..`, a second exclusion). It checks the filter PlatformIO uses, so entries from `PLATFORMIO_BUILD_SRC_FILTER` (or the old `PLATFORMIO_SRC_FILTER`), which PlatformIO appends, are checked too. A new `core/` `.cpp` is added there by hand.
 
 **Sanitisers.** `sanitizers.py`, a `pre:` extra script of `[env:native]`, builds every test with `-fsanitize=address,undefined,float-cast-overflow` (compile and link) and `-fno-sanitize-recover=all -fno-omit-frame-pointer`, so the first finding of AddressSanitizer or UndefinedBehaviorSanitizer aborts the test program and fails the run. It first links a probe program with the compiler the native builder selects, then follows `sanitizer_policy.py`:
 - the probe links: sanitised;
