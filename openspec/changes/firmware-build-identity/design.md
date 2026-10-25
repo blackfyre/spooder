@@ -27,7 +27,7 @@ Three builds compile firmware-side code: the robot's pico-sdk CMake project, the
 namespace build_identity { extern const char ID[] = "<identity>"; }
 ```
 
-with `file(CONFIGURE ...)`/`configure_file`, which leaves the file untouched when its content is unchanged. So an unchanged checkout rebuilds nothing; a new commit, or the tree turning dirty or clean, recompiles that one file and relinks. The identity holds only git's output: no time, user or host, so the same checkout gives the same image identity.
+The identity is escaped for the string literal first (`\` and `"` get a backslash): an annotated tag may legally contain `"`, which would otherwise break the generated source. The file is written with `file(CONFIGURE ...)`/`configure_file`, which leaves the file untouched when its content is unchanged. So an unchanged checkout rebuilds nothing; a new commit, or the tree turning dirty or clean, recompiles that one file and relinks. The identity holds only git's output: no time, user or host, so the same checkout gives the same image identity.
 
 *Alternatives:* a compile definition (`-DSPOODER_BUILD_ID=...`) changes the flags of every source and rebuilds everything; computing it only at configure time goes stale after a commit until someone reconfigures; ESP-IDF's `PROJECT_VER` is configure-time only and uses `--tags`, so the two boards would not match in form.
 
@@ -36,6 +36,7 @@ The custom target is always out of date, so it runs `git describe` once per buil
 ### Wiring in each build
 - **Robot** (`firmware/servo2040/CMakeLists.txt`): the generated source is added to `spooder` (not to `spooder_core`, which the host tests share), with the target depending on the custom target.
 - **Virtual robot** (`tools/virtual-robot/CMakeLists.txt`): the same, into `virtual-robot`; its identity is the virtual robot binary's own build.
+- The script takes the repository root and the output path as `-D` variables, so its checks can run it against disposable fixture repositories in a scratch directory instead of the delivery branch.
 - **Bridge** (`firmware/bridge/main/CMakeLists.txt`): the generated source is listed in `idf_component_register`'s `SRCS` (marked `GENERATED`) and `${COMPONENT_LIB}` depends on the custom target. If PlatformIO's ESP-IDF integration does not run the custom target on every build, the fallback is a PlatformIO pre-script calling the same `cmake -P` before the build; the form and the script stay the same.
 
 ### Banner text in core
@@ -46,23 +47,26 @@ The custom target is always out of date, so it runs `git describe` once per buil
 The generated `build_identity::ID` is declared in the same header but defined only by the generated source of each firmware build; the host tests do not link it and test the functions with literal ids.
 
 ### Robot: on the first tick and on each USB connect
-`robot_tick::Inputs` gains `usbConnected` (the firmware passes `stdio_usb_connected()`, the virtual robot `board.usb.connected()`). `robot_tick::init` takes the build identity (a new last parameter, defaulting to `"unknown"`, so existing callers and tests stay valid) and stores the pointer in `RobotState`. `tick` logs the banner on its first tick, before the servo profile line, and again on each tick where `usbConnected` turns from false to true. On the board, the first-tick banner is normally dropped and the connect banner is the one seen; a host that opens the port therefore always sees the build first. The servo profile line is unchanged (first tick only). The serial-keys build (`--serial`) prints the banner the same way.
+`robot_tick::Inputs` gains `usbConnected` (the firmware passes `stdio_usb_connected()`, the virtual robot `board.usb.connected()`). `robot_tick::init` takes the build identity (a new last parameter, defaulting to `"unknown"`, so existing callers and tests stay valid) and stores the pointer in `RobotState`. `tick` logs the banner on its first tick, before the servo profile line, and again on each tick where `usbConnected` is true after a tick where it was false. The first tick records `usbConnected` as the previous state, so a first tick with a host already connected prints one banner, not two. The banner is the first line `tick` logs on that tick, before any other text. On the board, the first-tick banner is normally dropped and the connect banner is the one seen.
+
+The connection is sampled once per tick, so the banner follows an observed transition, not every open: a host that closes and reopens the port within one tick (20 ms), or a second program opening the virtual robot's terminal while another holds it, gets no new banner. Delivery is as for every debug line: `Hardware::log` does not report failure, and the board's `printf` (bounded by `PICO_STDIO_USB_STDOUT_TIMEOUT_US`) or the virtual terminal's bounded backlog may drop it. Both are accepted: the identity does not change at run time, and the next connect repeats it. No wait or host request is added, so usb-link timing and the robot-console monitor's observe-only rule are untouched. The servo profile line is unchanged (first tick only). The serial-keys build (`--serial`) prints the banner the same way.
 
 *Alternative:* print it inside the once-a-second status line. Rejected: the leg-actuation spec keeps that line unchanged, and the identity does not change at run time.
 
 The banner goes through `Hardware::log`, so the virtual robot prints it on its USB terminal with no code of its own beyond `usbConnected`.
 
 ### Bridge: console at boot, start-up log on screen
-`bridge.cpp::setup()` prints `spooder bridge: build <id>` first, then the existing Bluepad32 line, and adds `Build <fitted id>` as the first start-up log line after the logo (`display::bootMessage`; the log then has five lines of its eight). `setup_mode_start` prints the same console line before `spooder bridge: setup mode (Bluetooth off)`. The setup-mode screen is unchanged. The start-up log line is 28 characters: `Build ` leaves 22, enough for 12 hex digits and `-dirty` (18); a longer describe (an annotated tag) is shortened from the start.
+`bridge.cpp::setup()` prints `spooder bridge: build <id>` first, then the existing Bluepad32 line. `display::setup()` already queues `Boot` as the first start-up log line, so it takes the build line as a parameter and queues `Build <fitted id>` before `Boot` (the log then has six lines of its eight). `setup_mode_start` prints the same console line before `spooder bridge: setup mode (Bluetooth off)`. The setup-mode screen is unchanged. The start-up log line is 28 characters: `Build ` leaves 22, enough for 12 hex digits and `-dirty` (18); a longer describe (an annotated tag) is shortened from the start.
 
 The status pages are unchanged, so `mise run bridge-screenshots` output does not change and the screenshots are not regenerated.
 
 ## Risks / Trade-offs
 
-- [PlatformIO's ESP-IDF build may not rebuild the generated source when only git state changed] → Checked in the task by committing an empty change between two `mise run build-bridge` runs and reading the identity string in the built image (`strings`); fallback above.
+- [PlatformIO's ESP-IDF build may not rebuild the generated source when only git state changed] → Checked in the task by turning the tree dirty (a temporary edit of a tracked file, restored afterwards) between two `mise run build-bridge` runs and reading the identity string in the built image (`strings`); fallback above. The same check runs for the robot and the virtual robot.
 - [CI's shallow checkout has no tags and may lack history] → `--always` gives the hash in a shallow clone; CI's identity is still correct.
-- [A banner line on connect changes what the e2e tests and the calibrator's log see first] → It is one more text line; the e2e run is a gate.
-- [The robot's banner is lost when the host opens the port but reads only later] → The host has the port open, so the text is buffered by the host's driver; a console opened later sees the next connect banner.
+- [A banner line on connect changes what the e2e tests and the calibrator's log see first] → It is one more text line; the e2e run is a gate, and a new e2e assertion checks the banner itself.
+- [The banner is dropped or a reopen is missed] → See the robot decision above: sampled once per tick and best-effort like every debug line; the next connect repeats it.
+- [Cost in the 20 ms tick] → One line of at most 64 characters through the same `Hardware::log` path as the existing status and fault lines, once per connect; no new wait. The tick-time diagnostics and the e2e run cover it.
 
 ## Assumptions
 
