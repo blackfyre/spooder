@@ -2,7 +2,7 @@
 
 ## 1. Pinned tools and the lint task
 
-- [ ] 1.1 Pin `"pipx:clang-format" = "22.1.8"` and `"pipx:clang-tidy" = "22.1.8"` in `mise.toml`, and add the `lint` task running `tools/lint.sh`, which lists Spooder's own C++ files with `git ls-files --cached --others --exclude-standard` (the checked directories, `*.c`, `*.cpp`, `*.h`, `*.hpp`) and runs the formatting check and clang-tidy, failing if either fails. Verify `mise install` provides both tools and `clang-format --version` and `clang-tidy --version` report 22.1.8.
+- [x] 1.1 Pin `"pipx:clang-format" = "22.1.8"` and `"pipx:clang-tidy" = "22.1.8"` in `mise.toml`, and add the `lint` task running `tools/lint.sh`, which lists Spooder's own C++ files with `git ls-files --cached --others --exclude-standard` (the checked directories, `*.c`, `*.cpp`, `*.h`, `*.hpp`) and runs the formatting check and clang-tidy, failing if either fails. Verify `mise install` provides both tools and `clang-format --version` and `clang-tidy --version` report 22.1.8.
 
 ## 2. C++ formatting
 

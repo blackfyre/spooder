@@ -73,6 +73,7 @@ A `lint` job on `ubuntu-24.04` with the same pinned checkout and mise actions as
 - The host compile database for clang-tidy is PlatformIO's `native` environment, the one the host tests use; it lists exactly the core sources in `build_src_filter`. A `core/` source missing from that list is not analysed; adding it is a matter for the change that adds the source.
 - The narrowing-conversion checks are `bugprone-narrowing-conversions` only; the `cppcoreguidelines-*` alias is not enabled as well, to avoid double reports.
 - `tools/vulncheck.sh` scans the packages the calibrator imports, so staticcheck's modules in `go.sum` do not change its baseline; if they do, the baseline task is answered in the staticcheck task.
+- `tools/lint.sh` fails closed: without a root `.clang-format` (or `.clang-tidy`) the formatting check (or clang-tidy) fails rather than falling back to a default style or skipping, so the task fails between task 1.1 and tasks 2.1 and 3.1, which add the configurations. It also fails when the `clang-format` or `clang-tidy` on `PATH` is not the version pinned in `mise.toml`, so running the script outside `mise run lint` cannot use another LLVM.
 - clang-tidy's findings in `core/` will be few enough to fix or suppress by hand within this change. If a single check yields many findings of one harmless pattern, it is disabled with a reason rather than rewritten across the code.
 
 ## Risks / Trade-offs
