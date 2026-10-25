@@ -32,6 +32,9 @@ usage = 'flag "--serial" help="Take commands from the USB serial keys instead of
 run = [
   'cmake -S firmware/servo2040 -B build/servo2040 -G Ninja -DCMAKE_BUILD_TYPE=Release -DSPOODER_POWER_LIMITS=${SPOODER_POWER_LIMITS:-$PWD/firmware/servo2040/src/power_limits.h} -DSPOODER_SERVO_PROFILE=${SPOODER_SERVO_PROFILE:-MG996R} -DSPOODER_SERIAL_COMMANDS=$([ "${usage_serial:-false}" = true ] && echo ON || echo OFF)',
   "cmake --build build/servo2040",
+  # The flash and static RAM budgets (firmware/servo2040/scripts/image_budget.py),
+  # checked on every build, up to date or not, and so before every upload.
+  "python firmware/servo2040/scripts/check_image_budget.py build/servo2040/spooder.elf",
 ]
 
 [tasks.upload]
@@ -125,7 +128,7 @@ run = "rm -rf build .pio/build firmware/bridge/.pio/build"
 
 [tasks.test]
 description = "Run host-side unit tests"
-run = ["mise run test-sources", "pio test -e native", "mise run test-sanitizers", "mise run test-bridge-build"]
+run = ["mise run test-sources", "pio test -e native", "mise run test-sanitizers", "mise run test-bridge-build", "mise run test-robot-build"]
 
 [tasks.test-sources]
 description = "Check that the native test env compiles every core/ source, and test the sanitiser policy (host Python)"
@@ -141,6 +144,11 @@ run = "python -m unittest -v test_sanitizers"
 description = "Test the bridge build's image-size check (host Python, no ESP-IDF)"
 dir = "firmware/bridge/scripts"
 run = "python -m unittest -v test_image_size"
+
+[tasks.test-robot-build]
+description = "Test the robot build's image-budget check (host Python, no toolchain)"
+dir = "firmware/servo2040/scripts"
+run = "python -m unittest -v test_image_budget"
 
 # The virtual robot (tools/virtual-robot): the robot's control tick on the
 # host, speaking the link protocol over pseudo-terminals.
