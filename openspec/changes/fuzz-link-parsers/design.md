@@ -75,6 +75,9 @@ Text is split at `MaxLineLength`, so the recipe keeps every text line shorter th
 - "Every accepted frame re-encodes to the same bytes" holds for canonical frames (all golden frames); for the rest the property is a canonical round trip, because the protocol defines reserved and unused bytes as zero and booleans as 0 or 1 but the decoder, like the C++ one, does not reject other values. Rejecting them would be a protocol behaviour change, out of scope.
 - The split's reference model (D4) restates `textAccumulator`'s documented rules independently in the test; if the rules change on purpose, the model changes with them.
 - No CI change is needed: the seed corpus runs in `desktop-test`, which CI already runs.
+- The split tests' in-memory port never returns an empty read before the end of the stream: an empty read means a quiet line, which makes `read` call `Idle`, and the bare decoder the frames are compared with has no such event. Quiet-line handling stays covered by the existing link tests.
+- The interleaved recipe (D4) is read as items: a byte with its low bit clear picks an accepted golden frame by the next byte; one with it set makes a text line from the next three bytes (a 16-bit length modulo `MaxLineLength - 1`, and a seed for its printable characters), so a short input can still reach the longest line kept whole. An item cut short by the end of the input is left out.
+- The "Line length boundary" scenario also has a plain test with the expected lines written out, so it does not rest on the reference model alone.
 
 ## Follow-ups
 

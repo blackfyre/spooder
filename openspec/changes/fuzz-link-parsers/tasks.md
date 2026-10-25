@@ -8,8 +8,8 @@
 
 ## 2. Split fuzz tests
 
-- [ ] 2.1 Add `FuzzSplitArbitrary` in `desktop/internal/link`, reading the input through `(*Link).read` on an in-memory port (design D4), seeded from the golden frames, checking the properties of design D4: frames equal to a bare decoder's, lines equal one for one to the reference model's, with the line-boundary seeds of design D2. Verify `go test -run FuzzSplitArbitrary ./internal/link` passes in `desktop/`.
-- [ ] 2.2 Add `FuzzSplitInterleaved`, building printable text lines and golden frames from the input as in design D4, keeping every text line shorter than `MaxLineLength` bytes, checking that the frames come back in order and the lines come back one for one. Verify `go test -run FuzzSplitInterleaved ./internal/link` passes.
+- [x] 2.1 Add `FuzzSplitArbitrary` in `desktop/internal/link`, reading the input through `(*Link).read` on an in-memory port (design D4), seeded from the golden frames, checking the properties of design D4: frames equal to a bare decoder's, lines equal one for one to the reference model's, with the line-boundary seeds of design D2. Verify `go test -run FuzzSplitArbitrary ./internal/link` passes in `desktop/`.
+- [x] 2.2 Add `FuzzSplitInterleaved`, building printable text lines and golden frames from the input as in design D4, keeping every text line shorter than `MaxLineLength` bytes, checking that the frames come back in order and the lines come back one for one. Verify `go test -run FuzzSplitInterleaved ./internal/link` passes.
 
 ## 3. Bounded runs and found bugs
 
