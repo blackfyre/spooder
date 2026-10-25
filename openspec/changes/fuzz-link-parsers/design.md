@@ -79,6 +79,7 @@ Text is split at `MaxLineLength`, so the recipe keeps every text line shorter th
 - The interleaved recipe (D4) is read as items: a byte with its low bit clear picks an accepted golden frame by the next byte; one with it set makes a text line from the next three bytes (a 16-bit length modulo `MaxLineLength - 1`, and a seed for its printable characters), so a short input can still reach the longest line kept whole. An item cut short by the end of the input is left out.
 - `mise run fuzz` passes `-fuzzminimizetime 2s`: with Go's default of 60 s, minimising each new-coverage input of the link targets stalled them for most of a 10 s or 60 s run (0 execs/sec for seconds at a time; about 0.26 million inputs in 30 s against 2.9 million with no minimisation). A failing input is still minimised, for up to 2 s, before it is written.
 - The "Line length boundary" scenario also has a plain test with the expected lines written out, so it does not rest on the reference model alone.
+- Random runs keep the inputs that only add coverage in Go's own fuzz cache under `$(go env GOCACHE)/fuzz/`, outside the checkout, as every Go project does; every Go gate here already writes to that cache, and no link input chooses the path. The task leaves `GOCACHE` alone (a checkout-local one would rebuild everything apart from the other tasks' cache), and `desktop/CLAUDE.md` names `go clean -fuzzcache` to clear it.
 
 ## Follow-ups
 
