@@ -6,7 +6,7 @@ Compiler warnings in Spooder's own sources fail the build, in the robot firmware
 
 ### Requirement: Warnings in Spooder's own sources fail the build
 
-The robot firmware build, the bridge firmware build and the host test build SHALL treat every compiler warning raised in Spooder's own sources as an error. Spooder's own sources are the files under `core/`, `firmware/servo2040/src/`, `firmware/bridge/main/` and `test/`, and the headers they include from those directories. The robot firmware SHALL compile them with at least `-Wall -Wextra`, and the host tests with at least `-Wall -Wextra`. The bridge firmware SHALL keep the warning set ESP-IDF applies to components and make it fatal for the bridge's own component.
+The robot firmware build, the bridge firmware build and the host test build SHALL treat every compiler warning raised in Spooder's own sources as an error. Spooder's own sources are the files under `core/`, `firmware/servo2040/src/`, `firmware/bridge/main/` and `test/`, and the headers they include from those directories. The robot firmware, the bridge firmware and the host tests SHALL each compile them with at least `-Wall -Wextra`, and no warning that `-Wall` or `-Wextra` enables SHALL be switched off for them, including by an SDK's default flags.
 
 #### Scenario: Warning in shared core code
 
