@@ -33,7 +33,12 @@ add_executable(virtual-robot
   ${SPOODER_BUILD_IDENTITY_SOURCE}
   src/pty.cpp
   src/sim.cpp
+  src/wifi_bridge.cpp
   # The robot's own logic, the same sources as the firmware's spooder_core.
+  # The bridge's WiFi drive rules (--wifi-bridge), the bridge firmware's own.
+  ${SPOODER_CORE}/gamepad_mapping/gamepad_mapping.cpp
+  ${SPOODER_CORE}/wifi_drive/handheld_controller.cpp
+  ${SPOODER_CORE}/wifi_drive/relay_queue.cpp
   ${SPOODER_CORE}/movement/body.cpp
   ${SPOODER_CORE}/movement/calibration_defaults.cpp
   ${SPOODER_CORE}/movement/gait.cpp

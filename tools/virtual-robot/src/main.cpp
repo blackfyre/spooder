@@ -20,6 +20,7 @@
 #include "pty.h"
 #include "robot/robot_tick.h"
 #include "sim.h"
+#include "wifi_bridge.h"
 
 using robot_tick::Link;
 
@@ -31,6 +32,10 @@ static const char USAGE[] = "usage: virtual-robot [options]\n"
                             "  --link PATH         keep a symbolic link to the USB terminal at PATH\n"
                             "  --bridge-pty        open a terminal for the bridge link (UART1) too\n"
                             "  --bridge-link PATH  keep a symbolic link to the bridge terminal at PATH\n"
+                            "  --wifi-bridge [ADDR:]PORT\n"
+                            "                      run a virtual bridge in WiFi drive on UDP ADDR:PORT\n"
+                            "                      (ADDR default 127.0.0.1; no value: 127.0.0.1:52040;\n"
+                            "                      PORT 0: any free port); real time only\n"
                             "  --speed N           tick N times faster than real time\n"
                             "  --stepped           tick only on 'step N' commands\n"
                             "  --supply V          initial supply voltage (default 6.0)\n"
@@ -52,7 +57,11 @@ struct Options
   bool bridgePty = false;
   std::string bridgeLink;
   double speed = 1;
+  bool speedGiven = false;
   bool stepped = false;
+  bool wifiBridge = false;
+  uint32_t wifiAddress = 0; // network byte order
+  uint16_t wifiPort = 0;
   float supplyV = sim::DEFAULT_SUPPLY_V;
   bool echo = false;
 };
@@ -61,7 +70,9 @@ class VirtualBoard final : public robot_tick::Hardware
 {
 public:
   Pty usb;
-  Pty bridge; // open only with --bridge-pty
+  Pty bridge;      // open only with --bridge-pty
+  WifiBridge wifi; // open only with --wifi-bridge
+  uint32_t nowMs = 0;
   sim::Servos servos;
   led_pattern::State leds = {};
   bool echo = false;
@@ -79,6 +90,12 @@ public:
   {
     if (link == Link::Usb)
       return usb.writeFrame(frame, length);
+    if (wifi.isOpen())
+    {
+      // The bridge's UART: the virtual bridge relays every frame it decodes.
+      wifi.robotFrame(nowMs, frame, length);
+      return true;
+    }
     // Without a terminal, the bridge link is a UART with no one listening:
     // the frame goes out (and is lost), as on the board.
     return bridge.isOpen() ? bridge.writeFrame(frame, length) : true;
@@ -149,9 +166,19 @@ static void tickOnce()
   static uint8_t bridgeBytes[MAX_BYTES_PER_TICK];
   static std::vector<uint8_t> simulated;
   robot_tick::Inputs in = {};
+  // The tick's time: the virtual bridge stamps its datagrams with it.
+  nowMs += robot_tick::LOOP_PERIOD_MS;
+  board.nowMs = nowMs;
   in.bytes[(int)Link::Usb] = usbBytes;
   in.byteCount[(int)Link::Usb] = board.usb.read(usbBytes, MAX_BYTES_PER_TICK);
-  if (board.bridge.isOpen())
+  if (board.wifi.isOpen())
+  {
+    simulated.clear();
+    board.wifi.beforeTick(nowMs, simBridge.estop, simulated);
+    in.bytes[(int)Link::Bridge] = simulated.data();
+    in.byteCount[(int)Link::Bridge] = (int)simulated.size();
+  }
+  else if (board.bridge.isOpen())
   {
     in.bytes[(int)Link::Bridge] = bridgeBytes;
     in.byteCount[(int)Link::Bridge] = board.bridge.read(bridgeBytes, MAX_BYTES_PER_TICK);
@@ -168,13 +195,14 @@ static void tickOnce()
   static uint32_t previousTickUs = 0;
   in.previousTickUs = previousTickUs;
   in.usbConnected = board.usb.connected(); // the build banner on each open
-  nowMs += robot_tick::LOOP_PERIOD_MS;
   struct timespec start, end;
   clock_gettime(CLOCK_MONOTONIC, &start);
   robot_tick::tick(robot, in, nowMs, board);
   clock_gettime(CLOCK_MONOTONIC, &end);
   long us = (end.tv_sec - start.tv_sec) * 1000000L + (end.tv_nsec - start.tv_nsec) / 1000;
   previousTickUs = us > 0 ? (uint32_t)us : 1;
+  if (board.wifi.isOpen())
+    board.wifi.afterTick(nowMs);
   observe();
 }
 
@@ -225,7 +253,7 @@ static bool command(char *line)
     supply.load = v;
     say("ok load %.2f", v);
   }
-  else if (c == "bridge" && argc == 2 && !board.bridge.isOpen())
+  else if (c == "bridge" && argc == 2 && !board.bridge.isOpen() && !board.wifi.isOpen())
   {
     std::string a = argv[1];
     if (a == "off")
@@ -246,8 +274,10 @@ static bool command(char *line)
   else if (c == "estop" && !board.bridge.isOpen() &&
            (argc == 1 || (argc == 2 && (strcmp(argv[1], "on") == 0 || strcmp(argv[1], "off") == 0))))
   {
+    // With --wifi-bridge, the bridge's GPIO35 button, ORed with the
+    // handheld's flag.
     simBridge.estop = argc == 1 || strcmp(argv[1], "on") == 0;
-    if (simBridge.estop && simBridge.state == sim::Bridge::State::Off)
+    if (simBridge.estop && simBridge.state == sim::Bridge::State::Off && !board.wifi.isOpen())
       simBridge.setState(sim::Bridge::State::Idle); // the stop travels in the bridge's frames
     say("ok estop %s", simBridge.estop ? "on" : "off");
   }
@@ -340,9 +370,23 @@ static bool parseArgs(int argc, char **argv)
       if (!parseFloat(value("--speed"), s) || s <= 0)
         return false;
       opts.speed = s;
+      opts.speedGiven = true;
     }
     else if (a == "--stepped")
       opts.stepped = true;
+    else if (a == "--wifi-bridge")
+    {
+      opts.wifiBridge = true;
+      // The value is optional: without one, the bridge's own port.
+      std::string spec = std::string(WifiBridge::DEFAULT_ADDRESS) + ":" + std::to_string(handheld_controller::PORT);
+      if (i + 1 < argc && strncmp(argv[i + 1], "--", 2) != 0)
+        spec = argv[++i];
+      if (!WifiBridge::parse(spec, opts.wifiAddress, opts.wifiPort))
+      {
+        fprintf(stderr, "virtual-robot: --wifi-bridge wants [ADDR:]PORT, not %s\n", spec.c_str());
+        exit(2);
+      }
+    }
     else if (a == "--supply")
     {
       if (!parseFloat(value("--supply"), opts.supplyV) || opts.supplyV < 0)
@@ -357,6 +401,23 @@ static bool parseArgs(int argc, char **argv)
     }
     else
       return false;
+  }
+  if (opts.wifiBridge)
+  {
+    // The handheld's timing is wall-clock time, and the virtual bridge
+    // stands in for the bridge link's terminal.
+    const char *conflict = opts.stepped      ? "--stepped"
+                           : opts.speedGiven ? "--speed"
+                           : opts.bridgePty  ? (opts.bridgeLink.empty() ? "--bridge-pty" : "--bridge-link")
+                                             : nullptr;
+    if (conflict)
+    {
+      fprintf(stderr,
+              "virtual-robot: --wifi-bridge cannot be used with %s (it runs only in real time, in place of "
+              "the bridge terminal)\n",
+              conflict);
+      exit(2);
+    }
   }
   return true;
 }
@@ -388,6 +449,16 @@ int main(int argc, char **argv)
       return 1;
     }
     say("bridge %s", board.bridge.path().c_str());
+  }
+  if (opts.wifiBridge)
+  {
+    std::string error;
+    if (!board.wifi.open(opts.wifiAddress, opts.wifiPort, error))
+    {
+      say("error %s", error.c_str());
+      return 1;
+    }
+    say("wifi-bridge %s", board.wifi.boundAddress().c_str());
   }
   say("ready %s", opts.stepped ? "stepped" : "running");
 
@@ -434,5 +505,6 @@ int main(int argc, char **argv)
   }
   board.usb.close();
   board.bridge.close();
+  board.wifi.close();
   return 0;
 }
