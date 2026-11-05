@@ -11,6 +11,7 @@ How a reviewer (Codex, a review agent or a person) reviews a change here. The `d
 | `core/protocol`, the links | the two boards or the desktop disagree on a byte, a lost or repeated frame changes behaviour, or a gap replays a request |
 | Bridge setup mode and portal | WiFi and Bluetooth run together, the portal accepts what the robot would refuse, or input from the phone reaches the robot unchecked |
 | Desktop calibrator | it shows a state the robot is not in, sends without control, or writes an export that does not round-trip |
+| Handheld controller (`desktop/handheld/`) | its mapping drifts from `core/gamepad_mapping`, a datagram other than exactly one valid robot frame is taken, a robot frame changes what is sent, a leave exits before telemetry reports Sleep, or WiFi power saving stays off after the pak ends |
 | Tests, golden files | they pass for the wrong reason, or a golden file was regenerated to match a bug |
 | Docs, specs, skills | they lie: a path, symbol, value or behaviour that the code does not have |
 | Printed parts (`hardware/spooder-electronics-mount/`) | a part needs support or does not fit the bed, a check passes geometry it should fail (it samples past the bad case), a size the layout uses is assumed without being listed to measure, or an exported file differs from the checked part |
@@ -61,7 +62,7 @@ Look for these first; each has happened here:
 
 ## Security
 
-Review separately where input arrives from outside: the link decoders (UART and USB), the setup portal's HTTP and DNS servers and its WiFi access point, and the desktop's serial port and file export. Look for unchecked lengths and indices, unbounded buffers, values passed on without the robot's guards, and paths written outside the checkout.
+Review separately where input arrives from outside: the link decoders (UART and USB), the setup portal's HTTP and DNS servers and its WiFi access point, the desktop's serial port and file export, and the handheld's UDP socket and the shell commands it runs (`udhcpc`, `iw`). Look for unchecked lengths and indices, unbounded buffers, values passed on without the robot's guards, and paths written outside the checkout.
 
 ## Risk tiers
 
