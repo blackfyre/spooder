@@ -56,6 +56,7 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 
 ### Changed
 
+- **Measured leg mounts.** The coxa pivots are measured from upstream's frame STLs (`core/movement/body_geometry.h`, pinned for the desktop by `test/golden/body_geometry.txt`): (±97.50, 0) for the middle legs and (±60.41, ±89.56) for the corners, in place of the schematic (±90, 0) and (±70, ±120). The calibrator's legs pane and four views draw them, and the centre-of-gravity estimate, the gesture and gait stability tests use them: the support margins in `test/golden/centre_of_gravity.txt` shrink by 6–17 mm; the centre itself is unchanged. No firmware behaviour changes.
 - The robot moved from the Arduino Nano RP2040 Connect (PCA9685 servo driver, Bluepad32 on its NINA module) to the Servo 2040, and the gamepad moved from the robot to the bridge.
 - Coxa offsets are shown from the servo centre (stored value minus 90°) in the portal and the calibrator. The stored values, the link and the export are unchanged.
 - Compiled defaults must let every servo reach the calibration pose: the IK angle there, plus the offset, within 0–180°.

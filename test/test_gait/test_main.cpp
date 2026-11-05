@@ -1,4 +1,5 @@
 #include <unity.h>
+#include "movement/body_geometry.h"
 #include "movement/gait.h"
 #include "movement/kinematics.h"
 #include <math.h>
@@ -344,17 +345,13 @@ void test_long_strides_shrink_to_reach()
 
 // --- static stability ---------------------------------------------------------
 
-// Schematic coxa pivots (the desktop legs pane's and test_gesture's), until the
-// body geometry is measured (add-gestures part two).
-static const Vector2 PIVOTS[LEG_COUNT] = {Vector2(-70, 120), Vector2(-90, 0), Vector2(-70, -120),
-                                          Vector2(70, -120), Vector2(90, 0),  Vector2(70, 120)};
-
 // A leg-frame foot in the body frame (x right, y forward).
 static Vector2 toBody(int leg, Vector3 foot)
 {
   float a = mountAngleDeg(leg) * (float)M_PI / 180.0f;
   Vector2 x(cosf(a), sinf(a)), y(sinf(a), -cosf(a));
-  return Vector2(PIVOTS[leg].x + foot.x * x.x + foot.y * y.x, PIVOTS[leg].y + foot.x * x.y + foot.y * y.y);
+  const Vector3 &pivot = body_geometry::PIVOTS[leg];
+  return Vector2(pivot.x + foot.x * x.x + foot.y * y.x, pivot.y + foot.x * x.y + foot.y * y.y);
 }
 
 // How far the body centre (the body frame's origin) lies inside the polygon
@@ -415,9 +412,10 @@ void test_walking_keeps_the_body_over_its_support()
   // centre. Ripple, Bi and Hop are not statically stable: Ripple's phases
   // leave front left, middle right and rear right down at times, a triangle
   // with the body centre on its diagonal edge; Bi has only two feet down at
-  // times and Hop none. The pivots are schematic until the body geometry is
-  // measured (add-gestures part two), so this guards the gait table's
-  // intent, not the physical margin.
+  // times and Hop none. The pivots are measured from the frame's STLs
+  // (body_geometry); the feet are where the IK puts them with the firmware's
+  // link lengths, so this guards the gait table's intent, not the physical
+  // margin.
   const Gait STABLE[] = {Gait::Tri, Gait::Wave, Gait::Quad};
   const float MARGIN_MM = 20;
   const Vector2 directions[] = {Vector2(0, 100),  Vector2(0, -100),      Vector2(100, 0),

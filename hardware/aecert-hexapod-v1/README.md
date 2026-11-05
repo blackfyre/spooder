@@ -29,6 +29,12 @@ The firmware's link lengths came from upstream's code at this commit (coxa 41, f
 | Femur | 116 | 108 | 108 |
 | Tibia (to the sprung tip) | 183 | 200 (ball foot) | 195 at rest, 190 bottomed out |
 
+The coxa pivots (`core/movement/body_geometry.h`) are measured from `Frame Top.stl`, `Frame Bottom.stl` and `Bearing Axle Mount.stl`:
+
+- Each leg's Bearing Axle Mount screws to a pair of frame holes 28.5 mm apart, square to the leg, 87.60 mm (middle legs) or 98.13 mm (corner legs) from the frame's centre, at exactly the gait's mount angles (0°, ±56° from the sides).
+- The mount holds the coxa axle centred between its screws, 9.90 mm off their line, on the side where the mount reaches 28.5 mm. Facing outward, that side ends flush with the frame's arm (116.10 and 126.63 mm out); the MG996R's off-centre shaft in its Servo Mount sits the same 9.9 mm off the line.
+- So the pivots are 97.50 mm (middle) and 108.03 mm (corners) from the centre: (±97.50, 0) and (±60.41, ±89.56). Not yet checked on the built robot.
+
 `BOM.md` lists the bought hardware (bearings, inserts, screws), derived from these parts, since upstream never published a list.
 
 The sprung tip travels 5 mm: 40 g preload, about 330 g at full travel, so it bottoms out under the robot's standing load.

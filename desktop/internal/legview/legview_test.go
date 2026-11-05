@@ -200,3 +200,48 @@ func TestFromFrame(t *testing.T) {
 		t.Fatal("outputs off")
 	}
 }
+
+// bodyGeometryPath is test/golden/body_geometry.txt, written from
+// core/movement/body_geometry by test/test_body_geometry.
+var bodyGeometryPath = filepath.Join("..", "..", "..", "test", "golden", "body_geometry.txt")
+
+// The mounts are the C++ body geometry's: the pivots to the golden file's
+// hundredth of a millimetre (z = 0, the body frame's pivot plane) and the
+// angles to its ten-thousandth of a degree, the same angle modulo 360°.
+func TestMountsMatchTheBodyGeometry(t *testing.T) {
+	data, err := os.ReadFile(bodyGeometryPath)
+	if err != nil {
+		t.Fatalf("golden body geometry: %v", err)
+	}
+	seen := 0
+	for line, text := range strings.Split(string(data), "\n") {
+		if text == "" || strings.HasPrefix(text, "#") {
+			continue
+		}
+		parts := strings.Split(text, " ")
+		if len(parts) != 5 {
+			t.Fatalf("line %d: %q", line+1, text)
+		}
+		var v [5]float64
+		for i := range v {
+			if v[i], err = strconv.ParseFloat(parts[i], 64); err != nil {
+				t.Fatalf("line %d: %v", line+1, err)
+			}
+		}
+		leg := int(v[0])
+		if leg != seen || leg >= Legs {
+			t.Fatalf("line %d: leg %d out of order", line+1, leg)
+		}
+		seen++
+		m := Mounts[leg]
+		if !near(m.Pivot.X, v[1], 0.005) || !near(m.Pivot.Y, v[2], 0.005) || v[3] != 0 {
+			t.Errorf("leg %d: pivot %+v, want (%v, %v, %v)", leg, m.Pivot, v[1], v[2], v[3])
+		}
+		if d := math.Mod(m.Angle-v[4]+720, 360); !near(d, 0, 5e-5) && !near(d, 360, 5e-5) {
+			t.Errorf("leg %d: mount angle %v, want %v", leg, m.Angle, v[4])
+		}
+	}
+	if seen != Legs {
+		t.Fatalf("%d legs in the golden file, want %d", seen, Legs)
+	}
+}

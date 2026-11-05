@@ -1,5 +1,6 @@
 #include <unity.h>
 #include <math.h>
+#include "movement/body_geometry.h"
 #include "movement/centre_of_gravity.h"
 #include "movement/gait.h"
 #include "movement/gesture.h"
@@ -35,15 +36,11 @@ static Vector2 legY(int leg)
   return Vector2(sinf(a), -cosf(a));
 }
 
-// Schematic coxa pivots (the desktop legs pane's), until the body geometry
-// is measured (add-gestures part two).
-static const Vector2 PIVOTS[kinematics::LEG_COUNT] = {Vector2(-70, 120), Vector2(-90, 0), Vector2(-70, -120),
-                                                      Vector2(70, -120), Vector2(90, 0),  Vector2(70, 120)};
-
 static Vector2 toBody(int leg, Vector3 foot)
 {
   Vector2 x = legX(leg), y = legY(leg);
-  return Vector2(PIVOTS[leg].x + foot.x * x.x + foot.y * y.x, PIVOTS[leg].y + foot.x * x.y + foot.y * y.y);
+  const Vector3 &pivot = body_geometry::PIVOTS[leg];
+  return Vector2(pivot.x + foot.x * x.x + foot.y * y.x, pivot.y + foot.x * x.y + foot.y * y.y);
 }
 
 // The servo angle (commanded plus offset) of every joint is within 0-180.
@@ -173,9 +170,9 @@ static float gravityMargin(const Vector3 *feet)
 void test_lifted_legs_keep_the_body_over_its_support()
 {
   // Sampled through the whole gesture, eased moves and interrupted returns
-  // included. The pivots are schematic until the body geometry is measured
-  // (add-gestures part two) and the masses estimated until the robot is
-  // weighed, so this guards the scripts' intent, not the physical margin.
+  // included. The pivots are measured from the frame's STLs (body_geometry)
+  // but the masses estimated until the robot is weighed, so this guards the
+  // scripts' intent, not the physical margin.
   const float MARGIN_MM = 20;
   const uint32_t STOPS[] = {0, 1200, 1900, 2600};
   for (Gesture g : AVAILABLE)

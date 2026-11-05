@@ -3,12 +3,13 @@
 
 // The robot's estimated centre of gravity: point masses for the body, the
 // battery and each leg's servos and links, placed by forward kinematics of
-// the joint angles on the leg mounts, and the support margin of the feet on
+// the joint angles on the leg mounts (body_geometry), and the support margin of the feet on
 // the ground. A static estimate (no accelerations, no foot forces).
 // Hardware-free: compiled for host tests only; the desktop's legview has a
 // copy, pinned by test/golden/centre_of_gravity.txt.
 //
 // Body frame: x right, y forward, z up, millimetres, the coxa pivots at z = 0.
+#include "body_geometry.h"
 #include "kinematics.h"
 #include "vectors.h"
 
@@ -30,11 +31,6 @@ constexpr float TIBIA_LINK_AT = 0.4f;
 // Where the body's and the battery's masses sit.
 const Vector3 BODY_AT(0, 0, 0);
 const Vector3 BATTERY_AT(0, 0, 0);
-
-// Schematic coxa pivots (the desktop legs pane's), until the body geometry
-// is measured (add-gestures part two). The mount angles are gait's.
-const Vector2 PIVOTS[LEG_COUNT] = {Vector2(-70, 120), Vector2(-90, 0), Vector2(-70, -120),
-                                   Vector2(70, -120), Vector2(90, 0),  Vector2(70, 120)};
 
 // A foot higher than this above the lowest foot is off the ground.
 constexpr float CONTACT_MM = 10;

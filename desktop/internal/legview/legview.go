@@ -81,22 +81,23 @@ func Foot(a Angles) Vec3 { return Plane(a, SideView(a).Foot) }
 // x turned 90° clockwise, so a positive coxa angle turns the leg clockwise.
 type Mount struct {
 	Name  string
-	Pivot Vec2    // coxa pivot, schematic
+	Pivot Vec2    // coxa pivot
 	Angle float64 // the leg frame's x axis
 }
 
-// Mounts are derived from gait.cpp (design D6): legs 0–2 on the left,
-// 3–5 on the right, corners at LEG_PLACEMENT_ANGLE (56°) from the middle
-// legs. The leg order is confirmed on the robot: legs 1 and 6 (indices 0
-// and 5) are the front pair, 3 and 4 the rear. The pivots are schematic, not
-// measured; upstream's frame STLs can supply real positions.
+// Mounts: the angles are derived from gait.cpp (design D6): legs 0–2 on the
+// left, 3–5 on the right, corners at LEG_PLACEMENT_ANGLE (56°) from the
+// middle legs. The leg order is confirmed on the robot: legs 1 and 6
+// (indices 0 and 5) are the front pair, 3 and 4 the rear. The pivots are
+// core/movement/body_geometry's, measured from upstream's frame STLs; both
+// are pinned by test/golden/body_geometry.txt.
 var Mounts = [Legs]Mount{
-	{"front left", Vec2{-70, 120}, 180 - 56},
-	{"middle left", Vec2{-90, 0}, 180},
-	{"rear left", Vec2{-70, -120}, 180 + 56},
-	{"rear right", Vec2{70, -120}, -56},
-	{"middle right", Vec2{90, 0}, 0},
-	{"front right", Vec2{70, 120}, 56},
+	{"front left", Vec2{-60.41, 89.56}, 180 - 56},
+	{"middle left", Vec2{-97.50, 0}, 180},
+	{"rear left", Vec2{-60.41, -89.56}, 180 + 56},
+	{"rear right", Vec2{60.41, -89.56}, -56},
+	{"middle right", Vec2{97.50, 0}, 0},
+	{"front right", Vec2{60.41, 89.56}, 56},
 }
 
 // ToBody maps a leg-frame point (its x and y) into the body frame.
@@ -107,7 +108,12 @@ func (m Mount) ToBody(p Vec3) Vec2 {
 	return Vec2{m.Pivot.X + p.X*ex.X + p.Y*ey.X, m.Pivot.Y + p.X*ex.Y + p.Y*ey.Y}
 }
 
-// BodyOutline is the schematic body: a hexagon through the coxa pivots.
+// FrontMarkTip is where the front marker's tip sits on the body's centre
+// line, inside the front edge of the outline (y 89.56).
+const FrontMarkTip = 75.0
+
+// BodyOutline is the schematic body: a hexagon through the coxa pivots, not
+// the frame's own outline.
 func BodyOutline() []Vec2 {
 	return []Vec2{Mounts[0].Pivot, Mounts[5].Pivot, Mounts[4].Pivot, Mounts[3].Pivot, Mounts[2].Pivot, Mounts[1].Pivot}
 }

@@ -488,7 +488,7 @@ func (w *window) topView(gtx layout.Context, st legsState) layout.Dimensions {
 		closed = append(closed, closed[0])
 		strokePath(gtx, closed, float32(gtx.Dp(2)), w.pal.Border)
 		// The front: legs 1 and 6 (confirmed on the robot).
-		tipY := 105.0
+		tipY := legview.FrontMarkTip
 		strokePath(gtx, []f32.Point{v.pt(legview.Vec2{X: -22, Y: tipY - 26}), v.pt(legview.Vec2{X: 0, Y: tipY}), v.pt(legview.Vec2{X: 22, Y: tipY - 26})},
 			float32(gtx.Dp(2)), w.pal.AccentText)
 

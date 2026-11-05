@@ -259,7 +259,7 @@ func (w *window) robotView(gtx layout.Context, view legview.View, vp viewport, s
 		case stepPlate:
 			w.plate(gtx, view, vp)
 		case stepFront:
-			tipY := 105.0
+			tipY := legview.FrontMarkTip
 			strokePath(gtx, []f32.Point{
 				projected(view, vp, legview.Point3{X: -22, Y: tipY - 26, Z: legview.PlateThickness / 2}),
 				projected(view, vp, legview.Point3{X: 0, Y: tipY, Z: legview.PlateThickness / 2}),

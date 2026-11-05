@@ -16,7 +16,8 @@ Vector3 toBody(int leg, Vector3 p)
   // turned 90° clockwise (legview.Mount).
   float a = rad(gait::mountAngleDeg(leg));
   float c = cosf(a), s = sinf(a);
-  return Vector3(PIVOTS[leg].x + p.x * c + p.y * s, PIVOTS[leg].y + p.x * s - p.y * c, p.z);
+  const Vector3 &pivot = body_geometry::PIVOTS[leg];
+  return Vector3(pivot.x + p.x * c + p.y * s, pivot.y + p.x * s - p.y * c, p.z);
 }
 
 LegPoints legInBody(int leg, kinematics::JointAngles a)

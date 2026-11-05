@@ -12,7 +12,7 @@
 
 ## 2. Part two: body geometry, dance, attack and ball
 
-- [ ] 2.1 Derive each leg's mount position and angle from the upstream STL files (or measurements) into `core/movement/body_geometry`, with a golden file the desktop legs pane reads (D3)
+- [x] 2.1 Derive each leg's mount position and angle from the upstream STL files (or measurements) into `core/movement/body_geometry`, with a golden file the desktop legs pane reads (D3)
 - [ ] 2.2 Body pose (yaw, pitch, roll, translation) with planted feet in the player; host tests
 - [ ] 2.3 Script dance, attack and ball (with unfold); host tests for every keyframe at both height extremes
 - [ ] 2.4 Rehearse all five on the virtual robot; then on the supported robot, attack and ball last
