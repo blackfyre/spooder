@@ -574,6 +574,217 @@ void test_setup_screen_cuts_overlong_text()
   TEST_ASSERT_EQUAL_STRING("", out[2].text);
 }
 
+// --- WiFi drive and the drive mode switch notice --------------------------------
+
+using handheld_controller::State;
+
+static Inputs wifi(State handheld)
+{
+  Inputs in = healthy();
+  in.gamepadConnected = false;
+  in.driveMode = drive_mode::Mode::Wifi;
+  in.handheld = handheld;
+  in.network = "spooder-drive-ab0f";
+  in.password = "abcdefgh23";
+  in.desired.stride = StrideMode::Fixed;
+  in.desired.stickMode = gamepad_mapping::StickMode::Crab; // never shown in WiFi drive
+  return in;
+}
+
+// The spec's handheld scenarios, and the three states.
+void test_wifi_drive_header_names_the_handheld_state()
+{
+  const State states[] = {State::None, State::Idle, State::InControl};
+  const char *header[] = {"WF NONE", "WF IDLE", "WF CTRL"};
+  const char *link[] = {"HANDHELD NONE", "HANDHELD IDLE", "HANDHELD IN CONTROL"};
+  const Tone tones[] = {Tone::Warn, Tone::Warn, Tone::Good};
+  for (int i = 0; i < 3; i++)
+  {
+    Inputs in = wifi(states[i]);
+    in.gamepadBattery = 255; // a stale gamepad reading is never shown
+    composePage(in, Page::Drive, view);
+    TEST_ASSERT_EQUAL_STRING(header[i], view.header.gamepad.text);
+    TEST_ASSERT_TRUE(view.header.gamepad.tone == tones[i]);
+    TEST_ASSERT_LESS_OR_EQUAL_INT(HEADER_CONTROLLER_CHARS, (int)strlen(view.header.gamepad.text));
+    TEST_ASSERT_NULL(strchr(view.header.gamepad.text, '%'));
+    composePage(in, Page::Link, view);
+    TEST_ASSERT_EQUAL_STRING(link[i], view.link.handheld.text);
+    TEST_ASSERT_TRUE(view.link.handheld.tone == tones[i]);
+  }
+}
+
+void test_bluetooth_header_fits_the_controller_field()
+{
+  Inputs in = healthy();
+  in.gamepadBattery = 255;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_EQUAL_INT(HEADER_CONTROLLER_CHARS, (int)strlen(view.header.gamepad.text)); // "PAD 100%"
+}
+
+void test_wifi_drive_shows_no_stick_mode()
+{
+  composePage(wifi(State::InControl), Page::Drive, view);
+  TEST_ASSERT_EQUAL_STRING("FIXED", view.drive.modes.text);
+  Inputs in = wifi(State::InControl);
+  in.desired.stride = StrideMode::Dynamic;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_EQUAL_STRING("DYNAMIC", view.drive.modes.text);
+}
+
+// The spec's joining scenario, with the link up and lost.
+void test_wifi_drive_link_page_shows_the_network_to_join()
+{
+  for (int fresh = 0; fresh < 2; fresh++)
+  {
+    Inputs in = wifi(State::None);
+    in.telemetryFresh = fresh != 0;
+    composePage(in, Page::Link, view);
+    TEST_ASSERT_EQUAL_STRING("NET spooder-drive-ab0f", view.link.network.text);
+    TEST_ASSERT_EQUAL_STRING("PASS abcdefgh23", view.link.password.text);
+    TEST_ASSERT_EQUAL_STRING("HANDHELD NONE", view.link.handheld.text);
+    TEST_ASSERT_EQUAL_STRING("", view.link.gamepad.text); // in place of the gamepad line
+  }
+  Inputs in = wifi(State::None);
+  in.network = nullptr;
+  in.password = nullptr;
+  composePage(in, Page::Link, view);
+  TEST_ASSERT_EQUAL_STRING("NET --", view.link.network.text);
+  TEST_ASSERT_EQUAL_STRING("PASS --", view.link.password.text);
+}
+
+void test_every_wifi_drive_line_fits_its_field()
+{
+  // The widest network name and password the bridge makes, and every state.
+  const State states[] = {State::None, State::Idle, State::InControl};
+  for (State st : states)
+  {
+    Inputs in = wifi(st);
+    in.network = "spooder-drive-ffff";
+    in.password = "wwwwwwwwww";
+    in.switchNotice = true;
+    for (Page p : {Page::Drive, Page::Power, Page::Link})
+    {
+      composePage(in, p, view);
+      TEST_ASSERT_LESS_OR_EQUAL_INT(HEADER_CONTROLLER_CHARS, (int)strlen(view.header.gamepad.text));
+      assertStripFits();
+    }
+    composePage(in, Page::Link, view);
+    // Whole, not cut by the field's buffer.
+    TEST_ASSERT_EQUAL_STRING("NET spooder-drive-ffff", view.link.network.text);
+    TEST_ASSERT_EQUAL_STRING("PASS wwwwwwwwww", view.link.password.text);
+    for (const Text *t : {&view.link.network, &view.link.password, &view.link.handheld})
+      TEST_ASSERT_LESS_THAN_INT(TEXT_CHARS, (int)strlen(t->text));
+  }
+}
+
+void test_bluetooth_drive_pages_are_unchanged()
+{
+  // Zero drive mode fields: Bluetooth drive, as before WiFi drive existed.
+  Inputs in = healthy();
+  in.desired.stickMode = gamepad_mapping::StickMode::Crab;
+  in.handheld = State::InControl; // ignored outside WiFi drive
+  in.network = "spooder-drive-ab0f";
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_EQUAL_STRING("PAD", view.header.gamepad.text);
+  TEST_ASSERT_EQUAL_STRING("DYNAMIC \xc2\xb7 CRAB", view.drive.modes.text);
+  TEST_ASSERT_EQUAL_STRING("NO FAULTS", view.strip.lines[0]);
+  composePage(in, Page::Link, view);
+  TEST_ASSERT_EQUAL_STRING("PAD CONNECTED", view.link.gamepad.text);
+  TEST_ASSERT_EQUAL_STRING("", view.link.network.text);
+  TEST_ASSERT_EQUAL_STRING("", view.link.password.text);
+  TEST_ASSERT_EQUAL_STRING("", view.link.handheld.text);
+}
+
+// The spec's switch notice scenarios.
+void test_switch_notice_alone_warns()
+{
+  for (drive_mode::Mode m : {drive_mode::Mode::Bluetooth, drive_mode::Mode::Wifi})
+  {
+    Inputs in = m == drive_mode::Mode::Wifi ? wifi(State::InControl) : healthy();
+    in.switchNotice = true;
+    for (Page p : {Page::Drive, Page::Power, Page::Link})
+    {
+      composePage(in, p, view);
+      TEST_ASSERT_EQUAL_STRING(SWITCH_NOTICE, view.strip.lines[0]);
+      TEST_ASSERT_FALSE(stripHas("NO FAULTS"));
+      TEST_ASSERT_TRUE(view.strip.tone == Tone::Warn);
+    }
+    in.switchNotice = false; // moved back
+    composePage(in, Page::Drive, view);
+    TEST_ASSERT_FALSE(stripHas(SWITCH_NOTICE));
+    TEST_ASSERT_EQUAL_STRING("NO FAULTS", view.strip.lines[0]);
+  }
+}
+
+void test_switch_notice_beside_a_fault_in_the_faults_tone()
+{
+  Inputs in = healthy();
+  in.switchNotice = true;
+  in.telemetry.faults = protection::UNDERVOLTAGE;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_TRUE(stripHas("LOW V"));
+  TEST_ASSERT_TRUE(stripHas(SWITCH_NOTICE));
+  TEST_ASSERT_TRUE(view.strip.tone == Tone::Bad);
+  // After the faults and the source state.
+  TEST_ASSERT_TRUE(strstr(view.strip.lines[0], "LOW V") == view.strip.lines[0]);
+  in.telemetry.faults = 0;
+  in.telemetry.flags = protocol::TELEMETRY_USB_IN_CONTROL;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_EQUAL_STRING("USB IN CONTROL  SWITCH MOVED: RESTART", view.strip.lines[0]);
+  TEST_ASSERT_TRUE(view.strip.tone == Tone::Warn);
+  in.telemetryFresh = false;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_TRUE(stripHas("LINK LOST"));
+  TEST_ASSERT_TRUE(stripHas(SWITCH_NOTICE));
+  TEST_ASSERT_TRUE(view.strip.tone == Tone::Bad);
+}
+
+void test_switch_notice_never_cuts_a_fault()
+{
+  const uint16_t bits[] = {protection::OVERCURRENT, protection::SUSTAINED_CURRENT, protection::UNDERVOLTAGE,
+                           protection::BROWNOUT,    protection::OVERVOLTAGE,       protection::EMERGENCY_STOP};
+  const char *names[] = {"OVERCURRENT", "OVERLOAD", "LOW V", "BROWN-OUT", "HIGH V", "E-STOP"};
+  const uint8_t flags[] = {0, protocol::TELEMETRY_SOURCE_CONFLICT, protocol::TELEMETRY_USB_IN_CONTROL};
+  bool leftOut = false;
+  for (uint8_t f : flags)
+    for (uint16_t combo = 0; combo < 64; combo++)
+    {
+      Inputs in = healthy();
+      in.switchNotice = true;
+      in.telemetry.flags = f;
+      for (int i = 0; i < 6; i++)
+        if (combo & (1u << i))
+          in.telemetry.faults |= bits[i];
+      composePage(in, Page::Drive, view);
+      assertStripFits();
+      for (int i = 0; i < 6; i++)
+        if (combo & (1u << i))
+          TEST_ASSERT_TRUE_MESSAGE(stripHas(names[i]), names[i]);
+      if (f == protocol::TELEMETRY_SOURCE_CONFLICT)
+        TEST_ASSERT_TRUE(stripHas("SOURCE CONFLICT"));
+      if (f == protocol::TELEMETRY_USB_IN_CONTROL)
+        TEST_ASSERT_TRUE(stripHas("USB IN CONTROL"));
+      // The notice is whole or absent, never cut.
+      bool whole = stripHas(SWITCH_NOTICE);
+      bool part = stripHas("SWITCH");
+      TEST_ASSERT_EQUAL(whole, part);
+      leftOut |= !whole;
+      TEST_ASSERT_FALSE(stripHas("NO FAULTS"));
+    }
+  TEST_ASSERT_TRUE(leftOut); // the full strip happens
+  // The spec's full strip: every named fault and the source conflict.
+  Inputs in = healthy();
+  in.switchNotice = true;
+  in.telemetry.flags = protocol::TELEMETRY_SOURCE_CONFLICT;
+  for (uint16_t b : bits)
+    in.telemetry.faults |= b;
+  composePage(in, Page::Drive, view);
+  for (const char *n : names)
+    TEST_ASSERT_TRUE_MESSAGE(stripHas(n), n);
+  TEST_ASSERT_TRUE(stripHas("SOURCE CONFLICT"));
+  TEST_ASSERT_FALSE(stripHas("SWITCH"));
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -604,5 +815,14 @@ int main()
   RUN_TEST(test_setup_screen_states);
   RUN_TEST(test_every_setup_line_fits_at_the_widest);
   RUN_TEST(test_setup_screen_cuts_overlong_text);
+  RUN_TEST(test_wifi_drive_header_names_the_handheld_state);
+  RUN_TEST(test_bluetooth_header_fits_the_controller_field);
+  RUN_TEST(test_wifi_drive_shows_no_stick_mode);
+  RUN_TEST(test_wifi_drive_link_page_shows_the_network_to_join);
+  RUN_TEST(test_every_wifi_drive_line_fits_its_field);
+  RUN_TEST(test_bluetooth_drive_pages_are_unchanged);
+  RUN_TEST(test_switch_notice_alone_warns);
+  RUN_TEST(test_switch_notice_beside_a_fault_in_the_faults_tone);
+  RUN_TEST(test_switch_notice_never_cuts_a_fault);
   return UNITY_END();
 }

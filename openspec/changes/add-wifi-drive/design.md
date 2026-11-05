@@ -87,6 +87,12 @@ The relay: the link task's `takeFrames` copies each frame's raw bytes into `core
 - The relay drops, and counts, robot frames when its 8-frame ring is full, rather than delay the link task.
 - UDP port 52040, the fixed address 192.168.4.1 and channel 1 need no configuration.
 - The switch is read about 1 ms after enabling the pull-up; GPIO32 has no external load on the T-Display v1.1 (to be confirmed on the board).
+- The rate window is a fixed grid (`nowMs / 20`), so the UDP task knows when the next window starts; every datagram read counts against the budget, malformed ones included.
+- `handheld_controller::epoch` advances at every session start and end; the bridge clears `relay_queue` whenever it changes (checked under the link lock, where both the push and the take happen), so a frame never crosses sessions even when a lapse and a new session fall between two link periods.
+- `protocol::Decoder::frameBytes()` is a copy of the returned frame, kept until `next()` returns another one (stronger than "until the next push").
+- `access_point::SSID_SIZE` is 19, the drive network's size; the setup network's join code still fits `JOIN_CODE_SIZE`.
+- The header's controller field stays within 8 characters (the width of `PAD 100%`): `WF NONE`, `WF IDLE` (both in the warning tone) and `WF CTRL` (good). The link page's WiFi drive lines are `NET <name>`, `PASS <password>` and `HANDHELD NONE`, `HANDHELD IDLE` or `HANDHELD IN CONTROL`; how they share the body's height with the four rate lines is the bridge's drawing (task 2.3).
+- With the switch notice alone the strip shows the notice, not `NO FAULTS`.
 
 ## Risks / Trade-offs
 

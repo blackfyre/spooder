@@ -315,6 +315,9 @@ void Decoder::emit(int total, Frame &out)
     parseDiagnostics(payload, out.diagnostics);
     break;
   }
+  for (int i = 0; i < total; i++)
+    frame_[i] = buf_[i];
+  frameLen_ = total;
   valid_++;
   drop(total);
 }

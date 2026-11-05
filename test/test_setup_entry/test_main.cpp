@@ -52,6 +52,35 @@ void test_ssid_uses_the_last_four_hex_digits_of_the_mac()
   TEST_ASSERT_EQUAL_STRING("spooder-ab0f", ssid);
 }
 
+void test_both_network_names_from_one_mac()
+{
+  const uint8_t mac[6] = {0x24, 0x0A, 0xC4, 0x12, 0xAB, 0x0F};
+  char setup[access_point::SSID_SIZE], drive[access_point::SSID_SIZE];
+  access_point::ssid(mac, setup);
+  access_point::driveSsid(mac, drive);
+  TEST_ASSERT_EQUAL_STRING("spooder-ab0f", setup);
+  TEST_ASSERT_EQUAL_STRING("spooder-drive-ab0f", drive);
+  TEST_ASSERT_TRUE(strcmp(setup, drive) != 0);
+}
+
+void test_drive_network_name_fills_the_size_limit()
+{
+  // The widest name the MAC gives fits exactly, NUL included; a guard byte
+  // past the limit is never written.
+  const uint8_t mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  char drive[access_point::SSID_SIZE + 1];
+  memset(drive, 'X', sizeof(drive));
+  access_point::driveSsid(mac, drive);
+  TEST_ASSERT_EQUAL_STRING("spooder-drive-ffff", drive);
+  TEST_ASSERT_EQUAL_INT(access_point::SSID_SIZE - 1, (int)strlen(drive));
+  TEST_ASSERT_EQUAL_CHAR('X', drive[access_point::SSID_SIZE]);
+  // And its join code fits JOIN_CODE_SIZE exactly.
+  char code[access_point::JOIN_CODE_SIZE];
+  int n = access_point::joinCode(drive, "abcdefgh23", code, sizeof(code));
+  TEST_ASSERT_EQUAL_INT(access_point::JOIN_CODE_SIZE - 1, n);
+  TEST_ASSERT_EQUAL_STRING("WIFI:T:WPA;S:spooder-drive-ffff;P:abcdefgh23;;", code);
+}
+
 static uint32_t sequence[64];
 static int sequenceAt;
 static uint32_t fromSequence()
@@ -120,7 +149,6 @@ void test_join_code()
   int n = access_point::joinCode("spooder-ab0f", "abcdefgh23", code, sizeof(code));
   TEST_ASSERT_EQUAL_STRING("WIFI:T:WPA;S:spooder-ab0f;P:abcdefgh23;;", code);
   TEST_ASSERT_EQUAL_INT((int)strlen(code), n);
-  TEST_ASSERT_EQUAL_INT(access_point::JOIN_CODE_SIZE - 1, n);
   char small[10];
   TEST_ASSERT_EQUAL_INT(-1, access_point::joinCode("spooder-ab0f", "abcdefgh23", small, sizeof(small)));
   TEST_ASSERT_EQUAL_STRING("", small);
@@ -133,6 +161,8 @@ int main()
   RUN_TEST(test_release_restarts_the_hold);
   RUN_TEST(test_setup_mode_only_after_a_software_restart_with_the_magic);
   RUN_TEST(test_ssid_uses_the_last_four_hex_digits_of_the_mac);
+  RUN_TEST(test_both_network_names_from_one_mac);
+  RUN_TEST(test_drive_network_name_fills_the_size_limit);
   RUN_TEST(test_password_has_the_length_and_alphabet);
   RUN_TEST(test_password_maps_bytes_without_bias);
   RUN_TEST(test_every_character_is_reachable);

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "protocol/protocol.h"
+#include "../golden_frames.h"
 
 using namespace protocol;
 
@@ -539,6 +540,57 @@ void test_back_to_back_frames()
   TEST_ASSERT_EQUAL(0, dec.discardedFrames());
 }
 
+// The raw bytes of the frame next() just returned: each golden frame's bytes,
+// on its own, after garbage, and back to back with another frame.
+void test_raw_bytes_of_every_golden_frame()
+{
+  static golden_frames::Set golden;
+  TEST_ASSERT_TRUE_MESSAGE(golden_frames::load(__FILE__, golden), "cannot read test/golden/protocol_v3.txt");
+  TEST_ASSERT_EQUAL_INT(0, dec.frameLength());
+  const uint8_t garbage[] = {0x00, START, 0x7F, START, VERSION, 0xEE, 0x13};
+  for (int i = 0; i < golden.count; i++)
+  {
+    const golden_frames::Frame &g = golden.frames[i];
+    for (int prefix = 0; prefix < 2; prefix++)
+    {
+      dec = Decoder();
+      Frame f;
+      int frames = 0;
+      if (prefix)
+        frames += feedAndCount(garbage, sizeof(garbage), f);
+      frames += feedAndCount(g.bytes, g.length, f);
+      TEST_ASSERT_EQUAL_INT_MESSAGE(1, frames, g.name);
+      TEST_ASSERT_EQUAL_UINT32_MESSAGE(prefix ? 2 : 0, dec.discardedFrames(), g.name);
+      TEST_ASSERT_EQUAL_INT_MESSAGE(g.length, dec.frameLength(), g.name);
+      TEST_ASSERT_EQUAL_UINT8_ARRAY_MESSAGE(g.bytes, dec.frameBytes(), g.length, g.name);
+    }
+  }
+}
+
+void test_raw_bytes_follow_each_returned_frame()
+{
+  // Two frames in one burst: after each next(), the bytes are that frame's.
+  uint8_t buf[TELEMETRY_FRAME_SIZE + COMMAND_FRAME_SIZE];
+  int a = encodeTelemetry(sampleTelemetry(), 3, buf);
+  int b = encodeCommand(sampleCommand(), 4, buf + a);
+  feed(buf, a + b);
+  Frame f;
+  TEST_ASSERT_TRUE(dec.next(f));
+  TEST_ASSERT_EQUAL_INT(a, dec.frameLength());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(buf, dec.frameBytes(), a);
+  TEST_ASSERT_TRUE(dec.next(f));
+  TEST_ASSERT_EQUAL_INT(b, dec.frameLength());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(buf + a, dec.frameBytes(), b);
+  // A rejected candidate leaves the last frame's bytes in place.
+  uint8_t bad[COMMAND_FRAME_SIZE];
+  int n = encodeCommand(sampleCommand(), 5, bad);
+  bad[n - 1] ^= 0xFF;
+  feed(bad, n);
+  TEST_ASSERT_FALSE(dec.next(f));
+  TEST_ASSERT_EQUAL_INT(b, dec.frameLength());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(buf + a, dec.frameBytes(), b);
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -567,5 +619,7 @@ int main()
   RUN_TEST(test_frame_split_across_pushes_without_next);
   RUN_TEST(test_telemetry_and_report_in_one_burst);
   RUN_TEST(test_back_to_back_frames);
+  RUN_TEST(test_raw_bytes_of_every_golden_frame);
+  RUN_TEST(test_raw_bytes_follow_each_returned_frame);
   return UNITY_END();
 }

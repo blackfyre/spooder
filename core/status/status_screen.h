@@ -11,6 +11,8 @@
 #include "status/page_button.h"
 #include "status/peak_hold.h"
 #include "status/power_history.h"
+#include "wifi_drive/drive_mode.h"
+#include "wifi_drive/handheld_controller.h"
 
 namespace status_screen
 {
@@ -36,6 +38,11 @@ struct Line
 constexpr int TEXT_CHARS = 28;       // one field of a page
 constexpr int STRIP_LINE_CHARS = 37; // the status strip: 222 px at its 6 px font
 constexpr int STRIP_LINES = 2;
+// The header's controller field: as wide as its widest Bluetooth drive text,
+// "PAD 100%", so the mode chip keeps its room.
+constexpr int HEADER_CONTROLLER_CHARS = 8;
+// The status strip's drive mode switch notice.
+constexpr char SWITCH_NOTICE[] = "SWITCH MOVED: RESTART";
 
 struct Text
 {
@@ -105,12 +112,19 @@ struct Inputs
   const power_history::History *history; // may be null: no history yet
   peak_hold::Hold currentPeak;           // the held highest current, mA
   peak_hold::Hold voltageLow;            // the held lowest voltage, mV
+  // The running drive mode (zero: Bluetooth drive, the gamepad fields above).
+  drive_mode::Mode driveMode;
+  // WiFi drive only: the handheld, and the network to join.
+  handheld_controller::State handheld;
+  const char *network;  // may be null
+  const char *password; // may be null
+  bool switchNotice;    // the drive mode switch selects the other drive mode
 };
 
 struct Header
 {
   Text mode;    // body mode and gait, or the gesture playing
-  Text gamepad; // connection and battery
+  Text gamepad; // connection and battery; in WiFi drive, the handheld
   Text link;    // link state
 };
 
@@ -126,7 +140,7 @@ struct DriveBody
   Bar voltageBar, currentBar;
   Text height, speed;
   Bar heightBar, speedBar;
-  Text modes;   // stride and stick mode
+  Text modes;   // stride and stick mode (stride alone in WiFi drive)
   Text output;  // servo output on or off
   Text sensors; // empty until telemetry reports sensors
 };
@@ -146,7 +160,11 @@ struct LinkBody
   Text bridge;  // the bridge's decoder
   Text age;     // of the newest telemetry
   Text source;  // which operator source the robot follows
-  Text gamepad; // connection and battery
+  Text gamepad; // connection and battery (Bluetooth drive)
+  // WiFi drive, in place of the gamepad line, whether or not the link is up.
+  Text network;  // the network name
+  Text password; // its password
+  Text handheld; // the handheld's state
 };
 
 struct View

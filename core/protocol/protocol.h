@@ -233,6 +233,9 @@ struct Frame
 // candidate is kept until its CRC can be checked, unless the line goes quiet:
 // call idle() when no byte has arrived for longer than a frame takes to send,
 // so a false start cannot hide a complete frame behind it.
+// frameBytes() holds the raw bytes of the frame next() last returned (a
+// copy, kept until next() returns another frame), so a relay passes frames
+// on byte for byte without re-encoding them.
 class Decoder
 {
 public:
@@ -242,6 +245,9 @@ public:
 
   uint32_t validFrames() const { return valid_; }
   uint32_t discardedFrames() const { return discarded_; }
+  // The frame next() last returned, as received; 0 bytes before the first.
+  const uint8_t *frameBytes() const { return frame_; }
+  int frameLength() const { return frameLen_; }
 
 private:
   enum class Candidate
@@ -257,6 +263,8 @@ private:
 
   uint8_t buf_[MAX_FRAME_SIZE] = {};
   int len_ = 0;
+  uint8_t frame_[MAX_FRAME_SIZE] = {};
+  int frameLen_ = 0;
   uint32_t valid_ = 0;
   uint32_t discarded_ = 0;
 };

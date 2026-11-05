@@ -10,6 +10,11 @@ void ssid(const uint8_t mac[6], char out[SSID_SIZE])
   snprintf(out, SSID_SIZE, "spooder-%02x%02x", mac[4], mac[5]);
 }
 
+void driveSsid(const uint8_t mac[6], char out[SSID_SIZE])
+{
+  snprintf(out, SSID_SIZE, "spooder-drive-%02x%02x", mac[4], mac[5]);
+}
+
 void makePassword(uint32_t (*random)(void), char out[PASSWORD_LENGTH + 1])
 {
   constexpr uint32_t ACCEPT_BELOW = 256 / PASSWORD_ALPHABET_SIZE * PASSWORD_ALPHABET_SIZE; // 248

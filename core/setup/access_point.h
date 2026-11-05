@@ -1,9 +1,9 @@
 #ifndef ACCESS_POINT_H
 #define ACCESS_POINT_H
 
-// The setup-mode access point's credentials: the network name from the MAC,
-// a random password (made once, then kept by the bridge), and the joining
-// QR code's text.
+// The access points' credentials, for setup mode and for WiFi drive: the
+// network names from the MAC, a random password per network (made once,
+// then kept by the bridge), and the joining QR code's text.
 // Hardware-free (snprintf only): the bridge supplies the MAC, the random
 // source and the storage; host tests drive it directly.
 #include <stdint.h>
@@ -11,7 +11,9 @@
 namespace access_point
 {
 
-constexpr int SSID_SIZE = 13; // "spooder-" + 4 hex digits + NUL
+// Either network name: "spooder-" (setup) or "spooder-drive-" (WiFi drive),
+// 4 hex digits and NUL.
+constexpr int SSID_SIZE = 19;
 constexpr int PASSWORD_LENGTH = 10;
 // No characters that are easily confused (0/o, 1/l/i), and no upper case,
 // so the password is easy to type from the screen.
@@ -24,6 +26,11 @@ constexpr int JOIN_CODE_SIZE = 13 + (SSID_SIZE - 1) + 3 + PASSWORD_LENGTH + 2 + 
  * @brief "spooder-" and the last four hex digits (lower case) of @p mac.
  */
 void ssid(const uint8_t mac[6], char out[SSID_SIZE]);
+
+/**
+ * @brief The WiFi drive network: "spooder-drive-" and the same four digits.
+ */
+void driveSsid(const uint8_t mac[6], char out[SSID_SIZE]);
 
 /**
  * @brief A random password of PASSWORD_LENGTH characters from

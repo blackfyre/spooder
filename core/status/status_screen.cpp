@@ -130,6 +130,19 @@ static void stripAdd(Strip &s, int &line, const char *word)
   }
 }
 
+// True if stripAdd would place @p word whole, without cutting it.
+static bool stripFits(const Strip &s, int line, const char *word)
+{
+  for (; line < STRIP_LINES; line++)
+  {
+    int used = (int)strlen(s.lines[line]);
+    int need = used ? used + 2 + (int)strlen(word) : (int)strlen(word);
+    if (need <= STRIP_LINE_CHARS)
+      return true;
+  }
+  return false;
+}
+
 static void composeStrip(const Inputs &in, Strip &s)
 {
   int line = 0;
@@ -172,7 +185,14 @@ static void composeStrip(const Inputs &in, Strip &s)
     stripAdd(s, line, "LINK LOST");
     bad = true;
   }
-  if (!bad && !warn)
+  // The switch notice follows the faults and the source state, and is left
+  // out rather than cut one of them.
+  if (in.switchNotice && stripFits(s, line, SWITCH_NOTICE))
+  {
+    stripAdd(s, line, SWITCH_NOTICE);
+    warn = true;
+  }
+  if (!bad && !warn && !in.switchNotice)
     stripAdd(s, line, "NO FAULTS");
   s.tone = bad ? Tone::Bad : (warn ? Tone::Warn : Tone::Good);
 }
@@ -188,7 +208,22 @@ static void composeHeader(const Inputs &in, Header &h)
     text(h.mode, Tone::Normal, "%s " DOT " %s", name(BODY_MODE_LABELS, 6, t.bodyMode), name(GAIT_LABELS, 6, t.gait));
 
   int battery = batteryPercent(in.gamepadBattery);
-  if (!in.gamepadConnected)
+  if (in.driveMode == drive_mode::Mode::Wifi)
+  {
+    switch (in.handheld)
+    {
+    case handheld_controller::State::InControl:
+      text(h.gamepad, Tone::Good, "WF CTRL");
+      break;
+    case handheld_controller::State::Idle:
+      text(h.gamepad, Tone::Warn, "WF IDLE");
+      break;
+    default:
+      text(h.gamepad, Tone::Warn, "WF NONE");
+      break;
+    }
+  }
+  else if (!in.gamepadConnected)
     text(h.gamepad, Tone::Warn, "NO PAD");
   else if (battery < 0)
     text(h.gamepad, Tone::Good, "PAD");
@@ -212,8 +247,12 @@ static void composeDrive(const Inputs &in, DriveBody &d)
   d.heightBar = {true, fraction(want.height, 0, 100), false, 0.0f};
   text(d.speed, Tone::Normal, "SPD %u", want.speed);
   d.speedBar = {true, fraction(want.speed, 0, 100), false, 0.0f};
-  text(d.modes, Tone::Muted, "%s " DOT " %s", want.stride == StrideMode::Fixed ? "FIXED" : "DYNAMIC",
-       want.stickMode == gamepad_mapping::StickMode::Crab ? "CRAB" : "STEER");
+  const char *stride = want.stride == StrideMode::Fixed ? "FIXED" : "DYNAMIC";
+  if (in.driveMode == drive_mode::Mode::Wifi)
+    text(d.modes, Tone::Muted, "%s", stride); // command frames carry no stick mode
+  else
+    text(d.modes, Tone::Muted, "%s " DOT " %s", stride,
+         want.stickMode == gamepad_mapping::StickMode::Crab ? "CRAB" : "STEER");
 
   if (!in.telemetryFresh)
   {
@@ -322,6 +361,30 @@ static void composeLink(const Inputs &in, LinkBody &l)
       text(l.source, Tone::Good, "SOURCE BRIDGE");
   }
 
+  if (in.driveMode == drive_mode::Mode::Wifi)
+  {
+    if (in.network)
+      text(l.network, Tone::Normal, "NET %s", in.network);
+    else
+      none(l.network, "NET");
+    if (in.password)
+      text(l.password, Tone::Normal, "PASS %s", in.password);
+    else
+      none(l.password, "PASS");
+    switch (in.handheld)
+    {
+    case handheld_controller::State::InControl:
+      text(l.handheld, Tone::Good, "HANDHELD IN CONTROL");
+      break;
+    case handheld_controller::State::Idle:
+      text(l.handheld, Tone::Warn, "HANDHELD IDLE");
+      break;
+    default:
+      text(l.handheld, Tone::Warn, "HANDHELD NONE");
+      break;
+    }
+    return;
+  }
   int battery = batteryPercent(in.gamepadBattery);
   if (!in.gamepadConnected)
     text(l.gamepad, Tone::Warn, "PAD NONE");
