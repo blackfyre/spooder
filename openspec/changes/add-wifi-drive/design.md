@@ -100,6 +100,9 @@ The relay: the link task's `takeFrames` copies each frame's raw bytes into `core
 - The UDP task reads into a buffer one byte longer than a command frame, so lwIP's truncation of a longer datagram still reads as too long; relayed frames wait at most one receive timeout (20 ms) before they are sent.
 - The outcome counts, the relay's drops and failed sends go to the bridge console every 10 s when they changed; the screen does not show them.
 - The access point password is kept in NVS namespace `spooder` under `drive_pass`, made by the setup mode's password loader, shared with setup mode and given the key.
+- The probe's flood datagrams are copies of its latest regular frame (same sequence number), so the bridge accepts at most one of them and discards the rest as stale; flooding with new sequence numbers would make the bridge see jumps and end the session, which tests the sequence rule rather than the rate limit.
+- The probe waits 150 ms after it starts before its first frame, as a handheld must (D4); its times (`--mode-after`, `--estop-clear-after`, `--clear-after`, `--pause-after`) are measured from its start, and a counter changes only in a frame after the first, which the bridge takes as the session's baseline. It reports a connected controller in every frame, with a gamepad's rest values (no translation or rotation, height 0, speed 44).
+- The probe counts calibration set frames as errors too, since a robot never sends them; its socket is connected to the bridge's address, so the kernel drops datagrams from anyone else. `mise run desktop-build` also builds it, without cgo, to `build/desktop/spooder-wifi-probe`.
 
 ## Risks / Trade-offs
 
