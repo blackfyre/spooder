@@ -384,15 +384,18 @@ void test_healthy_link_rates()
   for (uint32_t now = 0; now <= 3000; now += 20)
   {
     t.validFrames++; // 50 command frames per second
-    if (now % 100 == 0)
-      bridgeOk++; // 10 telemetry frames per second
+    // Telemetry, pose and diagnostics at 10 Hz each, on ticks 0, 2 and 4 of
+    // every five: 30 frames per second.
+    if (now % 100 == 0 || now % 100 == 40 || now % 100 == 80)
+      bridgeOk++;
     updateRates(m, now, true, t, bridgeOk, 0);
   }
   TEST_ASSERT_TRUE(m.rates.robotValid);
   TEST_ASSERT_UINT16_WITHIN(1, 50, m.rates.robotAccepted);
   TEST_ASSERT_EQUAL_UINT16(0, m.rates.robotRejected);
   TEST_ASSERT_TRUE(m.rates.bridgeValid);
-  TEST_ASSERT_UINT16_WITHIN(1, 10, m.rates.bridgeAccepted);
+  TEST_ASSERT_UINT16_WITHIN(1, 30, m.rates.bridgeAccepted);
+  TEST_ASSERT_EQUAL_UINT16(0, m.rates.bridgeRejected);
 
   Inputs in = healthy();
   in.rates = m.rates;
@@ -402,6 +405,9 @@ void test_healthy_link_rates()
   snprintf(expected, sizeof(expected), "ROBOT %u/S REJ 0/S", m.rates.robotAccepted);
   TEST_ASSERT_EQUAL_STRING(expected, view.link.robot.text);
   TEST_ASSERT_TRUE(view.link.robot.tone == Tone::Normal);
+  snprintf(expected, sizeof(expected), "BRIDGE %u/S REJ 0/S", m.rates.bridgeAccepted);
+  TEST_ASSERT_EQUAL_STRING(expected, view.link.bridge.text);
+  TEST_ASSERT_TRUE(view.link.bridge.tone == Tone::Normal);
   TEST_ASSERT_EQUAL_STRING("AGE 40 MS", view.link.age.text);
   TEST_ASSERT_EQUAL_STRING("SOURCE BRIDGE", view.link.source.text);
   TEST_ASSERT_EQUAL_STRING("PAD CONNECTED 80%", view.link.gamepad.text);
