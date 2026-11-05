@@ -45,6 +45,11 @@ func pakDir(t *testing.T, binary string) (dir string, env []string) {
 	write(filepath.Join(pak, "launch.sh"), string(script))
 	write(filepath.Join(pak, "spooder-handheld"), binary)
 	write(filepath.Join(bin, "iw"), stubIW)
+	realSleep, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(filepath.Join(bin, "sleep"), "#!/bin/sh\necho $$ >> \"$SLEEPS\"\nexec "+realSleep+" \"$@\"\n")
 	write(filepath.Join(dir, "state"), "on\n")
 	env = append(os.Environ(),
 		"PATH="+bin+":"+os.Getenv("PATH"),
@@ -53,9 +58,23 @@ func pakDir(t *testing.T, binary string) (dir string, env []string) {
 		"MARK="+filepath.Join(dir, "running"),
 		"ARGS="+filepath.Join(dir, "args"),
 		"GRAND="+filepath.Join(dir, "grandchild"),
+		"SLEEPS="+filepath.Join(dir, "sleeps"),
 		"LOGS_PATH=",
 	)
 	return dir, env
+}
+
+// launch runs the pak's launch.sh with sh, or with the shell that
+// $SPOODER_LAUNCH_SHELL names (such as "dash" or "busybox sh"), to check it
+// under the shells it meets: dash on Debian and Ubuntu, BusyBox ash on the
+// device, bash as sh on Fedora.
+func launch(dir string) *exec.Cmd {
+	shell := strings.Fields(os.Getenv("SPOODER_LAUNCH_SHELL"))
+	if len(shell) == 0 {
+		shell = []string{"sh"}
+	}
+	args := append(shell[1:], filepath.Join(dir, "Spooder.pak", "launch.sh"))
+	return exec.Command(shell[0], args...)
 }
 
 func read(t *testing.T, path string) string {
@@ -65,6 +84,59 @@ func read(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return strings.TrimSpace(string(b))
+}
+
+// running tells whether pid still runs. A process that has ended but is
+// not reaped yet (a zombie, which an init or subreaper slow to reap leaves
+// for a while) still answers signal 0, so on Linux its state in /proc
+// decides.
+func running(pid int) bool {
+	if syscall.Kill(pid, 0) != nil {
+		return false
+	}
+	stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if os.IsNotExist(err) {
+		// Gone since the signal, or no /proc to ask.
+		_, noProc := os.Stat("/proc/self")
+		return noProc != nil
+	}
+	if err != nil {
+		// Unreadable (hidepid, say): it answered signal 0, so it runs.
+		return true
+	}
+	// The state follows the command name, which is in parentheses.
+	i := strings.LastIndexByte(string(stat), ')')
+	return i < 0 || i+2 >= len(stat) || stat[i+2] != 'Z'
+}
+
+// sleepsLeft lists the pids of the sleeps started under the pak (the
+// stub sleep logs each to $SLEEPS) that still run a second after the script
+// ended: the watchdog's, the binary's or its children's.
+func sleepsLeft(t *testing.T, dir string) []int {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, "sleeps"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(time.Second)
+	var left []int
+	for _, f := range strings.Fields(string(b)) {
+		pid, err := strconv.Atoi(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for running(pid) && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if running(pid) {
+			left = append(left, pid)
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	}
+	return left
 }
 
 // waitFor waits until path exists.
@@ -88,8 +160,8 @@ echo "$@" > "$ARGS"
 iw dev wlan0 set power_save off
 exit 1
 `)
-	cmd := exec.Command("sh", filepath.Join(dir, "Spooder.pak", "launch.sh"))
-	cmd.Env = env
+	cmd := launch(dir)
+	cmd.Env = append(env, "STOP_GRACE=30")
 	err := cmd.Run()
 	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 1 {
 		t.Fatalf("launch.sh: %v, want exit status 1", err)
@@ -102,6 +174,9 @@ exit 1
 	}
 	if got := read(t, filepath.Join(dir, "iw.log")); got != "set off\nset on" {
 		t.Errorf("iw sets %q, want off then on", got)
+	}
+	if left := sleepsLeft(t, dir); left != nil {
+		t.Errorf("the watchdog's sleep %v outlived the script", left)
 	}
 }
 
@@ -117,7 +192,7 @@ exec sleep 30
 
 func TestLaunchRestoresAfterBinaryKilled(t *testing.T) {
 	dir, env := pakDir(t, waitingBinary)
-	cmd := exec.Command("sh", filepath.Join(dir, "Spooder.pak", "launch.sh"))
+	cmd := launch(dir)
 	cmd.Env = env
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -140,7 +215,7 @@ func TestLaunchRestoresAfterBinaryKilled(t *testing.T) {
 
 func TestLaunchRestoresAndStopsBinaryOnSIGTERM(t *testing.T) {
 	dir, env := pakDir(t, waitingBinary)
-	cmd := exec.Command("sh", filepath.Join(dir, "Spooder.pak", "launch.sh"))
+	cmd := launch(dir)
 	cmd.Env = env
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -180,7 +255,7 @@ exit 0
 	if err := os.WriteFile(filepath.Join(dir, "state"), []byte("unknown\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("sh", filepath.Join(dir, "Spooder.pak", "launch.sh"))
+	cmd := launch(dir)
 	cmd.Env = env
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("launch.sh: %v", err)
@@ -197,12 +272,9 @@ func alive(t *testing.T, path string) bool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A zombie no one reaps would still answer signal 0; the test's
-	// processes are reaped by launch.sh or reparented to init, which reaps
-	// them, so a short wait settles it.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if syscall.Kill(pid, 0) != nil {
+		if !running(pid) {
 			return false
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -220,7 +292,7 @@ sleep 30 &
 echo $! > "$GRAND"
 kill -SEGV $$
 `)
-	cmd := exec.Command("sh", filepath.Join(dir, "Spooder.pak", "launch.sh"))
+	cmd := launch(dir)
 	cmd.Env = env
 	if err := cmd.Run(); err == nil {
 		t.Error("launch.sh exited 0 after the binary crashed")
@@ -235,7 +307,7 @@ kill -SEGV $$
 
 func TestLaunchStopsBinaryChildrenOnSIGTERM(t *testing.T) {
 	dir, env := pakDir(t, waitingBinary)
-	cmd := exec.Command("sh", filepath.Join(dir, "Spooder.pak", "launch.sh"))
+	cmd := launch(dir)
 	cmd.Env = env
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -259,7 +331,7 @@ iw dev wlan0 set power_save off
 echo $$ > "$MARK"
 while :; do sleep 1; done
 `)
-	cmd := exec.Command("sh", filepath.Join(dir, "Spooder.pak", "launch.sh"))
+	cmd := launch(dir)
 	cmd.Env = append(env, "STOP_GRACE=0.3")
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -289,7 +361,7 @@ while :; do sleep 1; done
 // the grace period.
 func TestLaunchEndsPromptlyOnSIGTERM(t *testing.T) {
 	dir, env := pakDir(t, waitingBinary)
-	cmd := exec.Command("sh", filepath.Join(dir, "Spooder.pak", "launch.sh"))
+	cmd := launch(dir)
 	cmd.Env = append(env, "STOP_GRACE=5")
 	out, err := cmd.StdoutPipe()
 	if err != nil {
@@ -322,5 +394,8 @@ func TestLaunchEndsPromptlyOnSIGTERM(t *testing.T) {
 	_ = cmd.Wait()
 	if d := time.Since(start); d > 2*time.Second {
 		t.Errorf("output closed %v after SIGTERM, want well under the 5 s grace", d)
+	}
+	if left := sleepsLeft(t, dir); left != nil {
+		t.Errorf("sleeps %v outlived the script", left)
 	}
 }

@@ -27,25 +27,29 @@ group=""
 # has exited, crashed or is still running.
 stop() {
   [ -n "$group" ] || return 0
-  kill -TERM -- "-$group" 2>/dev/null || kill -TERM "$group" 2>/dev/null
+  # "kill -SIG -PGID", without "--": dash and BusyBox ash take no "--" there.
+  kill -TERM "-$group" 2>/dev/null || kill -TERM "$group" 2>/dev/null
   # A binary that ignores SIGTERM or hangs on its way out gets SIGKILL after
-  # STOP_GRACE seconds, so the setting is restored all the same.
-  # Cancelled once the binary has gone: its sleep is stopped with it, and it
-  # holds none of the script's output, so nothing outlives the script.
-  (
-    exec </dev/null >/dev/null 2>&1
-    sleep "${STOP_GRACE:-2}" &
-    timer=$!
-    trap 'kill "$timer"; exit 0' TERM
-    wait "$timer" || exit 0
-    kill -KILL -- "-$group" || kill -KILL "$group"
-  ) &
+  # STOP_GRACE seconds, so the setting is restored all the same. The
+  # watchdog leads a process group of its own too, its sleep in it, and holds
+  # none of the script's output.
+  watch='sleep "$1"; kill -KILL "-$2" || kill -KILL "$2"'
+  if command -v setsid >/dev/null 2>&1; then
+    setsid sh -c "$watch" sh "${STOP_GRACE:-2}" "$group" </dev/null >/dev/null 2>&1 &
+  else
+    sh -c "$watch" sh "${STOP_GRACE:-2}" "$group" </dev/null >/dev/null 2>&1 &
+  fi
   watchdog=$!
   wait "$group" 2>/dev/null
-  kill "$watchdog" 2>/dev/null
+  # Cancelled once the binary has gone, with SIGKILL (dash can hold a
+  # trapped SIGTERM back until a sleep ends): the watchdog first, then its
+  # group. Killed before its setsid, it has started nothing; after, its
+  # sleep is in the group, which outlives the watchdog for the second kill.
+  kill -KILL "$watchdog" 2>/dev/null
+  kill -KILL "-$watchdog" 2>/dev/null
   wait "$watchdog" 2>/dev/null
   # Anything of the group that ignored SIGTERM.
-  kill -KILL -- "-$group" 2>/dev/null
+  kill -KILL "-$group" 2>/dev/null
   group=""
 }
 
