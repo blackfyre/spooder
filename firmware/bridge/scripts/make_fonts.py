@@ -23,7 +23,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[3]
-FONT_DIR = ROOT / "desktop/internal/ui/fonts"
+FONT_DIR = ROOT / "desktop/internal/ui/fonts/files"
 OUT_DIR = ROOT / "firmware/bridge/main/fonts"
 
 # Printable ASCII and the middle dot.

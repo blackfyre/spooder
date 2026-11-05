@@ -1,15 +1,17 @@
 // Package fonts embeds the Blackfyre typefaces: Archivo SemiBold for text
 // and JetBrains Mono Regular for labels, buttons and values. Both are under
-// the SIL Open Font License 1.1, whose texts are embedded next to them
-// (Archivo-OFL.txt, JetBrainsMono-OFL.txt) and shipped in the binary.
+// the SIL Open Font License 1.1, whose texts are embedded with them
+// (package files: Archivo-OFL.txt, JetBrainsMono-OFL.txt) and shipped in the
+// binary.
 package fonts
 
 import (
-	_ "embed"
 	"fmt"
 
 	"gioui.org/font"
 	"gioui.org/font/opentype"
+
+	"github.com/blackfyre/spooder/desktop/internal/ui/fonts/files"
 )
 
 // Typeface names.
@@ -19,16 +21,12 @@ const (
 )
 
 var (
-	//go:embed Archivo-SemiBold.ttf
-	archivo []byte
-	//go:embed JetBrainsMono-Regular.ttf
-	jetBrainsMono []byte
+	archivo       = files.ArchivoSemiBold
+	jetBrainsMono = files.JetBrainsMonoRegular
 
 	// ArchivoLicence and JetBrainsMonoLicence are the fonts' OFL texts.
-	//go:embed Archivo-OFL.txt
-	ArchivoLicence string
-	//go:embed JetBrainsMono-OFL.txt
-	JetBrainsMonoLicence string
+	ArchivoLicence       = files.ArchivoLicence
+	JetBrainsMonoLicence = files.JetBrainsMonoLicence
 )
 
 // Collection returns both faces for a text shaper.

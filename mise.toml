@@ -206,7 +206,8 @@ run = "build/virtual-robot/virtual-robot --link build/virtual-robot/usb --echo"
 
 [tasks.e2e]
 description = "End-to-end tests against the virtual robot: the desktop calibrator's link and session, and the handheld's run loop through the virtual bridge (--wifi-bridge)"
-depends = ["virtual-robot"]
+# handheld-fork: the nested module's graph names the patched gabagool's directory.
+depends = ["virtual-robot", "handheld-fork"]
 dir = "desktop"
 env = { CGO_ENABLED = "1" }
 run = [
@@ -288,3 +289,38 @@ for target in protocol:FuzzDecoder link:FuzzSplitArbitrary link:FuzzSplitInterle
   go test -run '^$' -fuzz "^$name\$" -fuzztime "${usage_time:-60s}" -fuzzminimizetime 2s "./internal/$pkg" || exit 1
 done
 '''
+
+# The handheld controller (desktop/handheld, a nested Go module with SDL2 and
+# gabagool): a NextUI tool pak for the TrimUI Smart Pro. Every handheld task
+# builds against the patched gabagool in build/handheld/gabagool.
+[tasks.handheld-fork]
+description = "Download gabagool v2.26.6 (checksum-checked), copy it to build/handheld/gabagool and apply the power-button hook patch"
+run = "desktop/handheld/scripts/fork-gabagool.sh"
+
+[tasks.handheld-deps]
+description = "Check the Linux packages the handheld's SDL2 build needs"
+run = "desktop/handheld/scripts/check-deps.sh"
+
+[tasks.handheld-build]
+description = "Build the handheld for desktop Linux (build/handheld/amd64/spooder-handheld; --addr, no WiFi steps)"
+depends = ["handheld-fork", "handheld-deps"]
+dir = "desktop/handheld"
+env = { CGO_ENABLED = "1" }
+run = "go build -trimpath -o ../../build/handheld/amd64/spooder-handheld ./cmd/spooder-handheld"
+
+[tasks.handheld-test]
+description = "Run the handheld's Go checks (gofmt, go vet, staticcheck, then go test)"
+depends = ["handheld-fork", "handheld-deps"]
+dir = "desktop/handheld"
+env = { CGO_ENABLED = "1" }
+run = ["test -z \"$(gofmt -l .)\" || { gofmt -l .; exit 1; }", "go vet ./...", "go tool staticcheck ./...", "go test ./..."]
+
+[tasks.handheld-build-device]
+description = "Build the handheld for the TrimUI (linux/arm64, glibc 2.31) under rootless Podman to build/handheld/arm64"
+depends = ["handheld-fork"]
+run = "desktop/handheld/scripts/build-device.sh"
+
+[tasks.handheld-package]
+description = "Build the device binary, then zip Spooder.pak (launch.sh, the binary, lib/) to build/handheld/Spooder.pak.zip"
+depends = ["handheld-build-device"]
+run = "desktop/handheld/scripts/package.sh"

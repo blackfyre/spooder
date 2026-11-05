@@ -6,6 +6,8 @@
 .codegraph/
 reference_books/
 build/
+# The handheld's device build definition (desktop/handheld/build/Containerfile).
+!/desktop/handheld/build/
 .pio-core
 firmware/bridge/managed_components/
 firmware/bridge/sdkconfig.*
