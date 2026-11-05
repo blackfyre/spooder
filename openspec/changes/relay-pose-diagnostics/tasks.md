@@ -1,0 +1,15 @@
+# Tasks
+
+## 1. Pose and diagnostics on every link
+
+- [ ] 1.1 In `core/robot/robot_tick`, send the pose frame (tick `POSE_TICK`) and the diagnostics frame (tick `DIAGNOSTICS_TICK`) to every link in link order, as `sendTelemetry` does: build the pose and the diagnostics once per tick (the diagnostics window restarts once), encode each with that link's sequence number, which advances only when that link sent it, and let a refusal on one link not stop the other (design D1). Update the "USB only" comments in `robot_tick.h`, `core/protocol/protocol.h` and `link_receiver.h`. Verify with host tests in `test/test_robot_tick` that over 50 ticks each link receives 10 pose and 10 diagnostics frames, none on a tick shared with telemetry or with each other; that both links' diagnostics frames carry identical values for each window and the window still reports the five ticks before it; that with the USB link refusing, the bridge link still receives every pose and diagnostics frame (and the reverse); that the bridge link's decoder in the test records no discarded frame; and that `mise run test` passes, with the existing USB-only assertions (`countOf(Link::Bridge, …) == 0`) changed to the new counts.
+- [ ] 1.2 In `firmware/servo2040/src/link.cpp`, add a `static_assert` that a calibration report and a pose frame fit the transmit queue together, beside the existing one, and update the queue's comment (design D2). Verify `mise run build` and `mise run build --serial` pass with no warning in Spooder's sources.
+- [ ] 1.3 In `firmware/bridge/main/link.cpp`, comment that pose and diagnostics frames arrive and are ignored until `add-wifi-drive` (design D4), with no behaviour change. Verify `mise run build-bridge` passes, `mise run bridge-screenshots` leaves the images unchanged, and `mise run virtual-robot` and `mise run e2e` pass.
+
+## 2. Documentation
+
+- [ ] 2.1 Update the `spooder-firmware-shape` skill (the tick schedule and the frames paragraph: pose and diagnostics on both links, the bridge ignoring them), `core/CLAUDE.md`, the frame-type comments in `desktop/internal/protocol/protocol.go`, the readme where it describes the link, and `CHANGELOG.md` under Unreleased. Verify `grep -rn -i "usb only\|usb host only\|never sent on UART1" core firmware desktop/internal/protocol .claude/skills/spooder-firmware-shape Readme.md` finds no remaining claim that pose or diagnostics frames are USB only, and `mise run lint` and `mise run desktop-test` pass.
+
+## 3. Hardware confirmation
+
+- [ ] 3.1 Flash the robot only (the bridge keeps its current firmware), run it with the bridge in Bluetooth drive and then in setup mode, and with the desktop calibrator on USB. Verify the bridge's link page shows about 30 frames per second accepted by the bridge and none rejected, driving and the portal work as before, the calibrator's legs pane and diagnostics still update, and the diagnostics frame's mean and longest tick times on the board are within 50 µs of the same readings taken with the previous firmware, standing and walking (design D3).
