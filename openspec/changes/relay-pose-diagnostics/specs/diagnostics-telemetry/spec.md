@@ -8,8 +8,12 @@ The robot SHALL send the diagnostics frame on its USB link and on the bridge lin
 - **THEN** the host and the bridge each receive diagnostics frames at about 10 Hz, on the same ticks, with the same values for each window
 
 #### Scenario: One window per period
-- **WHEN** the robot sends a diagnostics frame on both links
-- **THEN** the window restarts once, after both, and each frame reports the five ticks before it
+- **WHEN** a diagnostics tick comes, whichever links send the frame
+- **THEN** the window is read and restarted once on that tick, and each frame sent reports the five ticks before it
+
+#### Scenario: Both links refusing, then recovering
+- **WHEN** both links refuse the diagnostics frames for several periods and then accept them again
+- **THEN** the first frame sent after the recovery reports only the five ticks before it, and no earlier window is retried or accumulated
 
 ## MODIFIED Requirements
 
