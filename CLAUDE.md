@@ -49,6 +49,7 @@ mise run cad-preview     # render the electronics mount to hardware/spooder-elec
 mise run vulncheck       # govulncheck of desktop/ against desktop/vulncheck-baseline.txt (shrink-only)
 mise run worktree-add <name>     # delivery worktree .claude/worktrees/<name> on deliver/<name>, from origin/main
 mise run worktree-remove <name>  # remove it and its local branch
+mise run worktree-init           # ready a worktree another tool made (Orca's setup command: mise trust -q && mise run worktree-init)
 mise run clean
 ```
 

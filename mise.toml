@@ -127,6 +127,10 @@ arg "[base]" help="Start point (default: origin/main after a fetch)"
 '''
 run = 'tools/worktree.sh add "${usage_name}" ${usage_base:-}'
 
+[tasks.worktree-init]
+description = "Ready a worktree made by another tool (e.g. Orca): submodules from the primary checkout, shared .pio-core"
+run = "tools/worktree.sh init"
+
 [tasks.worktree-remove]
 description = "Remove a delivery worktree and its local branch"
 usage = 'arg "<name>"'

@@ -4,18 +4,25 @@
 #
 #   tools/worktree.sh add <name> [base]   (base: origin/main after a fetch)
 #   tools/worktree.sh remove <name>       (the worktree and its local branch)
+#   tools/worktree.sh init                (prepare the worktree it is run in,
+#                                          one made by another tool, e.g. Orca)
 #
-# The SDK submodules are cloned from this checkout's own (it must have run
-# `mise run setup`), so they are the pinned commits and take seconds. The
+# The SDK submodules are cloned from the primary checkout's own (it must have
+# run `mise run setup`), so they are the pinned commits and take seconds. The
 # bridge's PlatformIO core (.pio-core, git-ignored) is shared by a symlink.
 set -euo pipefail
 
-root=$(git rev-parse --show-toplevel)
+usage() {
+  echo "usage: $0 add <name> [base] | remove <name> | init   (name: lower-case, digits, dashes)" >&2
+  exit 2
+}
+
+# The primary checkout: the one holding the repository's common git directory.
+root=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
 cmd=${1:-}
 name=${2:-}
-if [[ -z $cmd || -z $name || ! $name =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
-  echo "usage: $0 add <name> [base] | remove <name>   (name: lower-case, digits, dashes)" >&2
-  exit 2
+if [[ $cmd != init && (-z $name || ! $name =~ ^[a-z0-9][a-z0-9-]*$) ]]; then
+  usage
 fi
 dir=$root/.claude/worktrees/$name
 branch=deliver/$name
@@ -32,6 +39,24 @@ clone_local() {
   git -C "$repo" -c protocol.file.allow=always submodule update -q "$@"
 }
 
+# Readies the worktree at $1 for every gate: its SDK submodules from the
+# primary checkout's, the shared PlatformIO core, and mise trust.
+prepare() {
+  local wt=$1
+  if [[ ! -e $root/external/pico-sdk/lib/tinyusb/.git ]]; then
+    echo "$root has no SDK submodules: run mise run setup there first" >&2
+    exit 1
+  fi
+  clone_local "$wt" "$root" external/pico-sdk external/pimoroni-pico external/bluepad32-template external/LovyanGFX
+  clone_local "$wt/external/pico-sdk" "$root/external/pico-sdk" lib/tinyusb
+  mapfile -t bp < <(git -C "$wt/external/bluepad32-template" config --file .gitmodules --get-regexp '\.path$' | awk '{print $2}')
+  clone_local "$wt/external/bluepad32-template" "$root/external/bluepad32-template" "${bp[@]}"
+  if [[ -d $root/.pio-core && ! -e $wt/.pio-core ]]; then
+    ln -s "$root/.pio-core" "$wt/.pio-core"
+  fi
+  (cd "$wt" && mise trust -q)
+}
+
 case $cmd in
 add)
   base=${3:-}
@@ -44,15 +69,17 @@ add)
     exit 1
   fi
   git -C "$root" worktree add -q -b "$branch" "$dir" "$base"
-  clone_local "$dir" "$root" external/pico-sdk external/pimoroni-pico external/bluepad32-template external/LovyanGFX
-  clone_local "$dir/external/pico-sdk" "$root/external/pico-sdk" lib/tinyusb
-  mapfile -t bp < <(git -C "$dir/external/bluepad32-template" config --file .gitmodules --get-regexp '\.path$' | awk '{print $2}')
-  clone_local "$dir/external/bluepad32-template" "$root/external/bluepad32-template" "${bp[@]}"
-  if [[ -d $root/.pio-core ]]; then
-    ln -s "$root/.pio-core" "$dir/.pio-core"
-  fi
-  (cd "$dir" && mise trust -q)
+  prepare "$dir"
   echo "$dir on $branch from $base"
+  ;;
+init)
+  here=$(git rev-parse --show-toplevel)
+  if [[ $here == "$root" ]]; then
+    echo "$here is the primary checkout: use mise run setup" >&2
+    exit 1
+  fi
+  prepare "$here"
+  echo "$here ready"
   ;;
 remove)
   if [[ -d $dir ]]; then
@@ -64,7 +91,6 @@ remove)
   echo "removed $name"
   ;;
 *)
-  echo "unknown command: $cmd" >&2
-  exit 2
+  usage
   ;;
 esac
