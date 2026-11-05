@@ -33,7 +33,7 @@ In WiFi drive the bridge SHALL run a WPA2 access point on channel 1 at address 1
 - **THEN** it does not join the setup network on its own, since the network names differ
 
 ### Requirement: Handheld command datagrams
-In WiFi drive the bridge SHALL listen on UDP port 52040. A datagram SHALL count as a handheld frame only when it holds exactly one command frame of protocol version 3 with a valid CRC and nothing else; every other datagram SHALL be discarded and counted. The bridge SHALL take at most 8 datagrams per 20 ms command period and discard the rest unprocessed. Within one handheld session, a frame whose sequence number is not newer than that of the last accepted frame (a difference of 1 to 127, modulo 256) SHALL be discarded and counted, so that a late or repeated datagram changes nothing.
+In WiFi drive the bridge SHALL listen on UDP port 52040. A datagram SHALL count as a handheld frame only when it holds exactly one command frame of protocol version 3 with a valid CRC and nothing else; every other datagram SHALL be discarded and counted. The bridge SHALL take at most 8 datagrams per 20 ms window and leave the rest unread until the next window, with a receive backlog smaller than one window's budget, so that no datagram is taken more than 20 ms after it arrived. Within one handheld session, with the difference d between a frame's sequence number and that of the last accepted frame taken modulo 256: a frame with d from 1 to 8 SHALL be newer; a frame with d of 0 or from 128 to 255 SHALL be discarded and counted, so that a late or repeated datagram changes nothing; a frame with d from 9 to 127 SHALL be discarded and counted, and SHALL end the session at once as a lapse does, since it means the sender restarted.
 
 #### Scenario: Valid frame
 - **WHEN** the handheld sends a datagram holding one valid version 3 command frame
@@ -46,6 +46,18 @@ In WiFi drive the bridge SHALL listen on UDP port 52040. A datagram SHALL count 
 #### Scenario: Reordered datagram
 - **WHEN** a frame with sequence number 41 arrives after the frame with sequence number 42
 - **THEN** the bridge discards the frame with sequence number 41
+
+#### Scenario: Sequence wrap
+- **WHEN** a frame with sequence number 0 arrives after the frame with sequence number 255
+- **THEN** the bridge accepts it as newer
+
+#### Scenario: Sequence jump
+- **WHEN** the last accepted frame had sequence number 200 and, within 150 ms, a valid frame from the same sender carries sequence number 0
+- **THEN** the bridge discards it and ends the session, and the following valid frame starts a new session in which the bridge's counters do not change and its command frames request Sleep until the handheld's mode-request counter next changes
+
+#### Scenario: Flood
+- **WHEN** a sender sends 200 valid datagrams within one 20 ms window
+- **THEN** the bridge takes at most 8 of them in that window, still sends its own command frames every 20 ms, and, once the sender stops, reports no controller within 190 ms of its last datagram
 
 ### Requirement: One handheld at a time
 The bridge SHALL lock to the sender (address and port) of the first accepted handheld frame and discard, and count, datagrams from every other sender until the locked sender's liveness lapses. After a lapse, the next sender of a valid frame SHALL become the locked sender.
@@ -63,11 +75,19 @@ A handheld session SHALL be live while the newest accepted frame from the locked
 
 #### Scenario: Handheld goes quiet
 - **WHEN** the handheld's frames stop arriving
-- **THEN** within 150 ms plus one command period the bridge's command frames report no controller, so the robot sleeps
+- **THEN** within 190 ms of the last frame's arrival (150 ms, plus at most one 20 ms window before it was taken, plus one command period) the bridge's command frames report no controller, so the robot sleeps
 
 #### Scenario: Occasional losses
-- **WHEN** up to seven consecutive frames of a 50 Hz handheld are lost
+- **WHEN** up to six consecutive frames of a 50 Hz handheld are lost, so that accepted frames are at most 140 ms apart
 - **THEN** the session stays live and the controller stays connected
+
+#### Scenario: Gap past the timeout
+- **WHEN** the gap between two accepted frames of a session is 151 ms
+- **THEN** the session lapses before the second frame, and the second frame starts a new session
+
+#### Scenario: Handheld releases control
+- **WHEN** a live handheld's frames clear the controller-connected flag
+- **THEN** the session stays live and the bridge's command frames report no controller
 
 #### Scenario: Handheld returns
 - **WHEN** the handheld sends again after a lapse, with its mode set to Walk
@@ -77,7 +97,7 @@ A handheld session SHALL be live while the newest accepted frame from the locked
 The bridge SHALL keep its own fault-clear, mode-request and gesture-request counters for WiFi drive. The first accepted frame of a session SHALL only set the baselines of the handheld's three counters. In later frames of the session, each change of a handheld counter from the previous accepted frame SHALL advance the bridge's matching counter by one: a mode-request change SHALL also set the requested mode to the frame's mode, and a gesture-request change SHALL also set the gesture to the frame's gesture. Between mode requests, the requested mode SHALL NOT change. The other fields of the desired state (translate, rotate, height, speed, gait and stride) SHALL follow the newest accepted frame while the session is live, and SHALL be zero or their defaults otherwise.
 
 #### Scenario: Restarted handheld app
-- **WHEN** the handheld app restarts, so that its first frame carries counters starting again from zero, while the robot still sees the bridge's heartbeat
+- **WHEN** the handheld app restarts, so that its first frame carries counters starting again from zero, while the robot still sees the bridge's heartbeat, and the first frame comes from a new source port, or after the session lapsed, or with a sequence number 9 to 127 ahead of the last accepted one
 - **THEN** the bridge's counters do not change, and the robot receives no fault clear, mode request or gesture request
 
 #### Scenario: Clear requested
@@ -104,7 +124,7 @@ The bridge's command frames SHALL carry the emergency stop when the bridge's own
 - **THEN** the bridge's command frames keep carrying the emergency stop until an accepted frame without the flag arrives
 
 ### Requirement: Relay of robot frames
-In WiFi drive, while a handheld session is live, the bridge SHALL send every valid frame it receives from the robot to the locked sender's address and port, one frame per datagram, byte for byte as received. It SHALL relay nothing while no session is live. It SHALL NOT send its own command frames to the handheld.
+In WiFi drive, while a handheld session is live, the bridge SHALL send every valid frame it receives from the robot to the locked sender's address and port, one frame per datagram, byte for byte as received, except frames dropped, and counted, because the relay's buffer of 8 frames is full. Relaying SHALL NOT delay the bridge's command frames or the emergency-stop sampling. It SHALL relay nothing while no session is live, and no frame received during one session SHALL be sent to the sender of another. It SHALL NOT send its own command frames to the handheld.
 
 #### Scenario: Telemetry relayed
 - **WHEN** the robot sends a telemetry frame while a handheld is live
@@ -113,3 +133,11 @@ In WiFi drive, while a handheld session is live, the bridge SHALL send every val
 #### Scenario: No handheld
 - **WHEN** no handheld session is live
 - **THEN** the bridge sends no datagrams
+
+#### Scenario: Relay buffer full
+- **WHEN** the robot's frames arrive while 8 frames already wait to be relayed
+- **THEN** the bridge drops and counts the new frame, and its command frames keep going out every 20 ms
+
+#### Scenario: Handover clears the relay
+- **WHEN** frames wait to be relayed as the locked handheld's session ends and another device then locks
+- **THEN** the other device receives none of the frames that waited
