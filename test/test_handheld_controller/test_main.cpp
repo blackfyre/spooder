@@ -228,10 +228,12 @@ void test_window_budget_and_the_next_window()
     TEST_ASSERT_TRUE(send(pad(), (uint8_t)i, 100 + (uint32_t)i) == Outcome::Accepted);
   }
   TEST_ASSERT_TRUE(budgetSpent(c, 119));
+  TEST_ASSERT_EQUAL_UINT32(1, readDelayMs(c, 119)); // the UDP task waits for the next window
   TEST_ASSERT_TRUE(send(pad(), 8, 119) == Outcome::RateLimited);
   TEST_ASSERT_EQUAL_UINT32(1, count(c, Outcome::RateLimited));
   // The first of the next window is accepted.
   TEST_ASSERT_FALSE(budgetSpent(c, 120));
+  TEST_ASSERT_EQUAL_UINT32(0, readDelayMs(c, 120));
   TEST_ASSERT_TRUE(send(pad(), 8, 120) == Outcome::Accepted);
 }
 
@@ -259,6 +261,60 @@ void test_flood_takes_eight_and_lapses_after_the_last()
   // The last accepted datagram came at 40 at the latest + 19: the controller
   // is gone 151 ms after it.
   TEST_ASSERT_FALSE(desired(c, 59 + LIVENESS_MS + 1).controllerConnected);
+}
+
+// The flood through the bridge's read path: lwIP's receive mailbox
+// (CONFIG_LWIP_UDP_RECVMBOX_SIZE in firmware/bridge/sdkconfig.defaults)
+// drops datagrams that find it full; the UDP task reads while the window's
+// budget lasts; the link task judges liveness every 20 ms. 200 datagrams
+// arrive within one window, each one that enters the mailbox the sender's
+// next sequence number (the worst case: every datagram read is newer).
+// None is taken more than a window after it arrived, at most 8 are taken
+// per window, and the link task's commands report no controller within
+// 190 ms of the last datagram.
+void test_flood_through_the_mailbox_lapses_within_190_ms()
+{
+  constexpr int MAILBOX = 6;
+  TEST_ASSERT_LESS_THAN_INT(WINDOW_BUDGET, MAILBOX);
+  constexpr uint32_t FIRST = 40, LAST = 59, DEADLINE_MS = 190;
+  uint8_t mailbox[MAILBOX][protocol::COMMAND_FRAME_SIZE];
+  uint32_t arrivedAt[MAILBOX];
+  int head = 0, waiting = 0, sent = 0;
+  uint8_t seq = 0;
+  int takenInWindow[32] = {};
+  uint32_t lapsedAt = 0;
+  for (uint32_t now = 0; now <= 400 && lapsedAt == 0; now++)
+  {
+    // Arrivals: ten per millisecond over [40, 60).
+    for (int i = 0; i < 10 && now >= FIRST && now <= LAST && sent < 200; i++, sent++)
+    {
+      if (waiting == MAILBOX)
+        continue; // lwIP drops it
+      int slot = (head + waiting) % MAILBOX;
+      protocol::encodeCommand(pad(), ++seq, mailbox[slot]);
+      arrivedAt[slot] = now;
+      waiting++;
+    }
+    // The UDP task, with the bridge's read policy.
+    while (waiting > 0 && readDelayMs(c, now) == 0)
+    {
+      TEST_ASSERT_LESS_OR_EQUAL_UINT32(WINDOW_MS, now - arrivedAt[head]);
+      accept(c, mailbox[head], protocol::COMMAND_FRAME_SIZE, HANDHELD, now);
+      takenInWindow[now / WINDOW_MS]++; // every read, whatever its outcome
+      head = (head + 1) % MAILBOX;
+      waiting--;
+    }
+    // The link task.
+    if (now % 20 == 0 && now > LAST && !desired(c, now).controllerConnected)
+      lapsedAt = now;
+  }
+  TEST_ASSERT_EQUAL_INT(200, sent);
+  TEST_ASSERT_EQUAL_UINT32(0, count(c, Outcome::RateLimited)); // the policy never over-reads
+  for (int w = 0; w < 32; w++)
+    TEST_ASSERT_LESS_OR_EQUAL_INT(WINDOW_BUDGET, takenInWindow[w]);
+  TEST_ASSERT_GREATER_THAN_INT(0, takenInWindow[FIRST / WINDOW_MS]);
+  TEST_ASSERT_NOT_EQUAL_UINT32(0, lapsedAt);
+  TEST_ASSERT_LESS_OR_EQUAL_UINT32(LAST + DEADLINE_MS, lapsedAt);
 }
 
 // --- one handheld at a time ------------------------------------------------------
@@ -573,6 +629,7 @@ int main()
   RUN_TEST(test_window_budget_and_the_next_window);
   RUN_TEST(test_malformed_datagrams_spend_the_budget);
   RUN_TEST(test_flood_takes_eight_and_lapses_after_the_last);
+  RUN_TEST(test_flood_through_the_mailbox_lapses_within_190_ms);
   RUN_TEST(test_second_sender_is_ignored_while_live);
   RUN_TEST(test_handover_after_a_lapse);
   RUN_TEST(test_handheld_goes_quiet);

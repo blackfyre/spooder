@@ -38,6 +38,11 @@ bool budgetSpent(const Controller &c, uint32_t nowMs)
   return c.windowStarted && c.window == nowMs / WINDOW_MS && c.windowUsed >= WINDOW_BUDGET;
 }
 
+uint32_t readDelayMs(const Controller &c, uint32_t nowMs)
+{
+  return budgetSpent(c, nowMs) ? WINDOW_MS - nowMs % WINDOW_MS : 0;
+}
+
 // Exactly one valid command frame of this protocol version, and nothing else.
 static bool decodeCommand(const uint8_t *datagram, int length, protocol::Frame &f)
 {

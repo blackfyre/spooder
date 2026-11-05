@@ -248,6 +248,8 @@ public:
   // The frame next() last returned, as received; 0 bytes before the first.
   const uint8_t *frameBytes() const { return frame_; }
   int frameLength() const { return frameLen_; }
+  // Bytes held for a frame not yet complete (0 between frames).
+  int pending() const { return len_; }
 
 private:
   enum class Candidate

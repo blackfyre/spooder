@@ -146,6 +146,13 @@ static void receive()
   static uint32_t lastByteMs = 0;
   static bool idleHandled = true;
   uint32_t now = millis();
+  if (handheldMode)
+  {
+    // Before the drain: the bytes waiting arrived since the previous poll.
+    portENTER_CRITICAL(&lock);
+    relay_queue::beginPoll(relay, handheld, millis());
+    portEXIT_CRITICAL(&lock);
+  }
   int avail = Serial1.available();
   if (avail > 0)
   {
@@ -167,6 +174,8 @@ static void receive()
   }
 
   portENTER_CRITICAL(&lock);
+  if (handheldMode)
+    relay_queue::endPoll(relay, decoder.pending() == 0);
   validFrames = decoder.validFrames();
   discardedFrames = decoder.discardedFrames();
   portEXIT_CRITICAL(&lock);
@@ -305,12 +314,12 @@ handheld_controller::Outcome handheldAccept(const uint8_t *datagram, int length,
   return o;
 }
 
-bool handheldBudgetSpent(uint32_t nowMs)
+uint32_t handheldReadDelayMs(uint32_t nowMs)
 {
   portENTER_CRITICAL(&lock);
-  bool spent = handheld_controller::budgetSpent(handheld, nowMs);
+  uint32_t delayMs = handheld_controller::readDelayMs(handheld, nowMs);
   portEXIT_CRITICAL(&lock);
-  return spent;
+  return delayMs;
 }
 
 int handheldTakeRelay(uint8_t *out, handheld_controller::Sender &to)

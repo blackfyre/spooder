@@ -49,11 +49,34 @@ static void sync(Queue &q, handheld_controller::Controller &c, uint32_t nowMs)
   }
 }
 
+void beginPoll(Queue &q, handheld_controller::Controller &c, uint32_t nowMs)
+{
+  uint32_t e = handheld_controller::epoch(c, nowMs);
+  if (e != q.pollEpoch)
+    q.clean = false;
+  q.pollEpoch = e;
+}
+
+void endPoll(Queue &q, bool decoderEmpty)
+{
+  // The UART was drained after this poll began, so with the decoder empty
+  // too every byte still to come arrived after the poll began.
+  if (decoderEmpty)
+    q.clean = true;
+}
+
 bool relayFor(Queue &q, handheld_controller::Controller &c, uint32_t nowMs, const uint8_t *bytes, int length)
 {
   sync(q, c, nowMs);
   if (!handheld_controller::live(c, nowMs))
     return false;
+  // The bytes may have arrived before the session that is live now began
+  // (or the session changed during the poll).
+  if (!q.clean || q.epoch != q.pollEpoch)
+  {
+    q.dropped++;
+    return false;
+  }
   return push(q, bytes, length);
 }
 

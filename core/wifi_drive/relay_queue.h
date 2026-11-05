@@ -9,7 +9,13 @@
 // relayFor() and takeFor() tie it to the handheld's sessions: they clear it
 // at every change of session (handheld_controller::epoch), queue only while
 // a session is live and hand each frame out with the live session's sender,
-// so no frame reaches another session's sender.
+// so no frame reaches another session's sender. The link task drains the
+// UART once per poll, and a frame decoded in a poll may have arrived at any
+// time since the previous one, and the decoder can hold bytes of an earlier
+// poll. After a session change relayFor() drops (and counts) every frame
+// until a poll of the new session ends with the decoder empty (endPoll()):
+// from then on every byte arrived during that session, so a frame received
+// during one session never reaches the next one's sender.
 // Hardware-free: the bridge calls it under its link lock; host tests drive
 // it directly.
 #include <stdint.h>
@@ -34,6 +40,10 @@ struct Queue
   int count = 0; // frames waiting
   uint32_t dropped = 0;
   uint32_t epoch = 0; // the handheld session the waiting frames belong to
+  // The session live at the start of the current poll, and whether a poll
+  // of it has ended with the decoder empty.
+  uint32_t pollEpoch = 0;
+  bool clean = false;
 };
 
 /**
@@ -55,10 +65,26 @@ int take(Queue &q, uint8_t *out);
 void clear(Queue &q);
 
 /**
+ * @brief Starts a poll of the robot's bytes at @p nowMs (the link task,
+ * before it drains the UART): a session changed since the previous poll
+ * stops the relay until endPoll() finds the decoder empty.
+ */
+void beginPoll(Queue &q, handheld_controller::Controller &c, uint32_t nowMs);
+
+/**
+ * @brief Ends the poll (the link task, after the drain and the idle check):
+ * @p decoderEmpty, the decoder holding no bytes, lets the next poll's frames
+ * go to the session of this one.
+ */
+void endPoll(Queue &q, bool decoderEmpty);
+
+/**
  * @brief Queues one robot frame for the handheld of @p c at @p nowMs: after
  * clearing the queue if the session changed, and only while a session is
- * live.
- * @return false if nothing was queued (no live session, full, bad length)
+ * live. A frame decoded before the session's first clean poll end
+ * (endPoll) is dropped and counted, as a frame that finds the queue full is.
+ * @return false if nothing was queued (no live session, not yet clean,
+ * full, bad length)
  */
 bool relayFor(Queue &q, handheld_controller::Controller &c, uint32_t nowMs, const uint8_t *bytes, int length);
 

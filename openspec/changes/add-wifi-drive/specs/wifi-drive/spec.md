@@ -124,7 +124,7 @@ The bridge's command frames SHALL carry the emergency stop when the bridge's own
 - **THEN** the bridge's command frames keep carrying the emergency stop until an accepted frame without the flag arrives
 
 ### Requirement: Relay of robot frames
-In WiFi drive, while a handheld session is live, the bridge SHALL send every valid frame it receives from the robot to the locked sender's address and port, one frame per datagram, byte for byte as received, except frames dropped, and counted, because the relay's buffer of 8 frames is full. Relaying SHALL NOT delay the bridge's command frames or the emergency-stop sampling. It SHALL relay nothing while no session is live, and no frame received during one session SHALL be sent to the sender of another. It SHALL NOT send its own command frames to the handheld.
+In WiFi drive, while a handheld session is live, the bridge SHALL send every valid frame it receives from the robot to the locked sender's address and port, one frame per datagram, byte for byte as received, except frames dropped, and counted, because the relay's buffer of 8 frames is full or because they were decoded after the session changed and before the bridge's first receive poll of the new session that ended with no robot bytes held (their receipt may predate the session). Relaying SHALL NOT delay the bridge's command frames or the emergency-stop sampling. It SHALL relay nothing while no session is live, and no frame received during one session SHALL be sent to the sender of another. It SHALL NOT send its own command frames to the handheld.
 
 #### Scenario: Telemetry relayed
 - **WHEN** the robot sends a telemetry frame while a handheld is live
@@ -141,3 +141,7 @@ In WiFi drive, while a handheld session is live, the bridge SHALL send every val
 #### Scenario: Handover clears the relay
 - **WHEN** frames wait to be relayed as the locked handheld's session ends and another device then locks
 - **THEN** the other device receives none of the frames that waited
+
+#### Scenario: Handover with bytes still in the UART
+- **WHEN** a robot frame reaches the bridge's UART receive buffer during one session, or is held by its decoder behind an unfinished candidate, and that session ends and another device locks before the bridge decodes it
+- **THEN** the other device does not receive that frame, and the bridge counts it as dropped

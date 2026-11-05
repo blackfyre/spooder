@@ -127,6 +127,38 @@ static handheld_controller::Outcome send(uint8_t seq, uint32_t nowMs, handheld_c
   return handheld_controller::accept(hc, buf, n, from, nowMs);
 }
 
+// One link-task poll of the robot's bytes, starting at nowMs, that leaves
+// the decoder empty.
+static void poll(uint32_t nowMs)
+{
+  relay_queue::beginPoll(q, hc, nowMs);
+  relay_queue::endPoll(q, true);
+}
+
+// One link-task poll as the bridge's receive() runs it: drain the bytes
+// into the decoder, relay each frame, then the idle check and the poll's
+// end. Returns the frames relayed.
+static int receivePoll(protocol::Decoder &dec, const uint8_t *bytes, int length, uint32_t nowMs, bool idle)
+{
+  relay_queue::beginPoll(q, hc, nowMs);
+  int relayed = 0;
+  protocol::Frame f;
+  for (int i = 0; i < length; i++)
+  {
+    dec.push(bytes[i]);
+    while (dec.next(f))
+      relayed += relay_queue::relayFor(q, hc, nowMs, dec.frameBytes(), dec.frameLength());
+  }
+  if (idle)
+  {
+    dec.idle();
+    while (dec.next(f))
+      relayed += relay_queue::relayFor(q, hc, nowMs, dec.frameBytes(), dec.frameLength());
+  }
+  relay_queue::endPoll(q, dec.pending() == 0);
+  return relayed;
+}
+
 // Queues golden frames [first, first + count) for the handheld at nowMs.
 static void relayGolden(int first, int count, uint32_t nowMs)
 {
@@ -147,6 +179,8 @@ void test_frames_go_to_the_live_sender_in_order()
 {
   TEST_ASSERT_TRUE(golden_frames::load(__FILE__, golden));
   TEST_ASSERT_TRUE(send(1, 100, A) == handheld_controller::Outcome::Accepted);
+  poll(100);
+  poll(105);
   relayGolden(0, 3, 105);
   uint8_t out[protocol::MAX_FRAME_SIZE];
   for (int i = 0; i < 3; i++)
@@ -166,17 +200,101 @@ void test_handover_after_a_lapse_sends_none_of_the_waiting_frames()
 {
   TEST_ASSERT_TRUE(golden_frames::load(__FILE__, golden));
   TEST_ASSERT_TRUE(send(1, 100, A) == handheld_controller::Outcome::Accepted);
+  poll(100);
+  poll(110);
   relayGolden(0, 3, 110);
   // No call between: the lapse and B's lock fall between two link periods.
   TEST_ASSERT_TRUE(send(7, 100 + handheld_controller::LIVENESS_MS + 1, B) == handheld_controller::Outcome::Accepted);
   uint8_t out[protocol::MAX_FRAME_SIZE];
   handheld_controller::Sender to = {};
   TEST_ASSERT_EQUAL_INT(0, relay_queue::takeFor(q, hc, 260, out, to));
-  relayGolden(3, 1, 262);
-  int n = relay_queue::takeFor(q, hc, 264, out, to);
+  poll(260);
+  poll(280);
+  relayGolden(3, 1, 282);
+  int n = relay_queue::takeFor(q, hc, 284, out, to);
   TEST_ASSERT_EQUAL_UINT8_ARRAY(golden.frames[3].bytes, out, n);
   TEST_ASSERT_EQUAL_UINT16(B.port, to.port);
-  TEST_ASSERT_EQUAL_INT(0, relay_queue::takeFor(q, hc, 264, out, to));
+  TEST_ASSERT_EQUAL_INT(0, relay_queue::takeFor(q, hc, 284, out, to));
+}
+
+// Bytes A's session left in the UART: the robot's frame arrives after one
+// poll, A lapses and B locks before the next, which decodes it. It may have
+// arrived during A's session, so B never gets it; the poll after relays.
+void test_frame_decoded_in_the_poll_of_a_handover_is_dropped()
+{
+  TEST_ASSERT_TRUE(golden_frames::load(__FILE__, golden));
+  TEST_ASSERT_TRUE(send(1, 0, A) == handheld_controller::Outcome::Accepted);
+  poll(0);
+  poll(140); // the frame arrives at 149, after this poll's drain
+  TEST_ASSERT_TRUE(send(7, handheld_controller::LIVENESS_MS + 2, B) == handheld_controller::Outcome::Accepted);
+  relay_queue::beginPoll(q, hc, 160);
+  TEST_ASSERT_FALSE(relay_queue::relayFor(q, hc, 160, golden.frames[0].bytes, golden.frames[0].length));
+  relay_queue::endPoll(q, true);
+  TEST_ASSERT_EQUAL_UINT32(1, relay_queue::dropped(q));
+  uint8_t out[protocol::MAX_FRAME_SIZE];
+  handheld_controller::Sender to = {};
+  TEST_ASSERT_EQUAL_INT(0, relay_queue::takeFor(q, hc, 162, out, to));
+  poll(180);
+  relayGolden(1, 1, 180);
+  int n = relay_queue::takeFor(q, hc, 182, out, to);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(golden.frames[1].bytes, out, n);
+  TEST_ASSERT_EQUAL_UINT16(B.port, to.port);
+}
+
+// Bytes the decoder holds across polls: during A's session the robot's
+// bytes are a false start (a calibration report's header, never finished)
+// and then a whole telemetry frame. B locks; the next poll ends with the
+// decoder still holding them, the one after abandons the false start at
+// idle and finds A's telemetry: B gets none of it. A frame that arrives
+// after the decoder was empty goes to B.
+void test_frame_held_by_the_decoder_across_a_handover_is_dropped()
+{
+  TEST_ASSERT_TRUE(golden_frames::load(__FILE__, golden));
+  const golden_frames::Frame *report = nullptr, *telemetry = nullptr;
+  for (int i = 0; i < golden.count; i++)
+  {
+    if (golden.frames[i].bytes[2] == (uint8_t)protocol::FrameType::CalibrationReport && report == nullptr)
+      report = &golden.frames[i];
+    if (golden.frames[i].bytes[2] == (uint8_t)protocol::FrameType::Telemetry && telemetry == nullptr)
+      telemetry = &golden.frames[i];
+  }
+  TEST_ASSERT_NOT_NULL(report);
+  TEST_ASSERT_NOT_NULL(telemetry);
+  uint8_t held[protocol::MAX_FRAME_SIZE];
+  int n = 0;
+  for (int i = 0; i < protocol::HEADER_SIZE; i++)
+    held[n++] = report->bytes[i];
+  for (int i = 0; i < telemetry->length; i++)
+    held[n++] = telemetry->bytes[i];
+  TEST_ASSERT_TRUE(n < report->length); // the false start stays incomplete
+
+  protocol::Decoder dec;
+  TEST_ASSERT_TRUE(send(1, 0, A) == handheld_controller::Outcome::Accepted);
+  TEST_ASSERT_EQUAL_INT(0, receivePoll(dec, nullptr, 0, 0, false));
+  TEST_ASSERT_EQUAL_INT(0, receivePoll(dec, held, n, 20, false)); // A's bytes, held
+  TEST_ASSERT_TRUE(dec.pending() > 0);
+  TEST_ASSERT_TRUE(send(7, handheld_controller::LIVENESS_MS + 2, B) == handheld_controller::Outcome::Accepted);
+  TEST_ASSERT_EQUAL_INT(0, receivePoll(dec, nullptr, 0, 160, false));
+  TEST_ASSERT_EQUAL_INT(0, receivePoll(dec, nullptr, 0, 180, true)); // A's telemetry decoded, dropped
+  TEST_ASSERT_EQUAL_UINT32(1, relay_queue::dropped(q));
+  TEST_ASSERT_EQUAL_INT(0, relay_queue::size(q));
+  TEST_ASSERT_EQUAL_INT(1, receivePoll(dec, telemetry->bytes, telemetry->length, 200, false));
+  uint8_t out[protocol::MAX_FRAME_SIZE];
+  handheld_controller::Sender to = {};
+  int len = relay_queue::takeFor(q, hc, 202, out, to);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(telemetry->bytes, out, len);
+  TEST_ASSERT_EQUAL_UINT16(B.port, to.port);
+}
+
+// A session that starts or ends during a poll: that poll's later frames are
+// not relayed either.
+void test_session_change_during_a_poll_drops_its_frames()
+{
+  TEST_ASSERT_TRUE(golden_frames::load(__FILE__, golden));
+  poll(0);
+  TEST_ASSERT_TRUE(send(1, 5, A) == handheld_controller::Outcome::Accepted);
+  TEST_ASSERT_FALSE(relay_queue::relayFor(q, hc, 6, golden.frames[0].bytes, golden.frames[0].length));
+  TEST_ASSERT_EQUAL_INT(0, relay_queue::size(q));
 }
 
 // The same with a sequence jump ending A's session, A's next frame starting
@@ -185,6 +303,8 @@ void test_session_ended_by_a_jump_sends_none_of_the_waiting_frames()
 {
   TEST_ASSERT_TRUE(golden_frames::load(__FILE__, golden));
   TEST_ASSERT_TRUE(send(200, 100, A) == handheld_controller::Outcome::Accepted);
+  poll(100);
+  poll(105);
   relayGolden(0, 2, 105);
   TEST_ASSERT_TRUE(send(0, 110, A) == handheld_controller::Outcome::Jump);
   TEST_ASSERT_TRUE(send(1, 112, A) == handheld_controller::Outcome::Accepted);
@@ -198,6 +318,8 @@ void test_lapse_drops_the_waiting_frames()
 {
   TEST_ASSERT_TRUE(golden_frames::load(__FILE__, golden));
   TEST_ASSERT_TRUE(send(1, 100, A) == handheld_controller::Outcome::Accepted);
+  poll(100);
+  poll(105);
   relayGolden(0, 2, 105);
   uint8_t out[protocol::MAX_FRAME_SIZE];
   handheld_controller::Sender to = {};
@@ -218,5 +340,8 @@ int main()
   RUN_TEST(test_handover_after_a_lapse_sends_none_of_the_waiting_frames);
   RUN_TEST(test_session_ended_by_a_jump_sends_none_of_the_waiting_frames);
   RUN_TEST(test_lapse_drops_the_waiting_frames);
+  RUN_TEST(test_frame_decoded_in_the_poll_of_a_handover_is_dropped);
+  RUN_TEST(test_session_change_during_a_poll_drops_its_frames);
+  RUN_TEST(test_frame_held_by_the_decoder_across_a_handover_is_dropped);
   return UNITY_END();
 }

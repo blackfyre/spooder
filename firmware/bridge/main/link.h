@@ -111,9 +111,10 @@ void portalView(PortalView &out);
 handheld_controller::Outcome handheldAccept(const uint8_t *datagram, int length, handheld_controller::Sender sender);
 
 /**
- * @brief True when the rate window holding @p nowMs has no budget left.
+ * @brief The UDP task's read policy (handheld_controller::readDelayMs): 0 to
+ * read now, else the milliseconds until the next rate window.
  */
-bool handheldBudgetSpent(uint32_t nowMs);
+uint32_t handheldReadDelayMs(uint32_t nowMs);
 
 /**
  * @brief Takes the oldest frame waiting for the relay, and where to send it.

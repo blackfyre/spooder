@@ -137,9 +137,9 @@ static void udpTask(void *)
   {
     relay();
     uint32_t now = millis();
-    if (robot_link::handheldBudgetSpent(now))
+    uint32_t untilNext = robot_link::handheldReadDelayMs(now);
+    if (untilNext > 0)
     {
-      uint32_t untilNext = handheld_controller::WINDOW_MS - now % handheld_controller::WINDOW_MS;
       vTaskDelay(pdMS_TO_TICKS(untilNext) > 0 ? pdMS_TO_TICKS(untilNext) : 1);
       continue;
     }

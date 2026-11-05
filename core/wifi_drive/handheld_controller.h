@@ -100,6 +100,13 @@ Outcome accept(Controller &c, const uint8_t *datagram, int length, Sender sender
 bool budgetSpent(const Controller &c, uint32_t nowMs);
 
 /**
+ * @brief The UDP task's read policy at @p nowMs: 0 while the window holding
+ * @p nowMs has budget left (read now), else the milliseconds to the next
+ * window (leave the datagrams unread until then).
+ */
+uint32_t readDelayMs(const Controller &c, uint32_t nowMs);
+
+/**
  * @brief Ends a session whose newest frame is older than LIVENESS_MS at
  * @p nowMs (no controller, Sleep, sender lock released). The other calls
  * do this themselves.

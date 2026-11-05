@@ -138,7 +138,7 @@ One radio at a time: WiFi drive is a boot path of its own and never starts Bluet
 
 - **The handheld's datagrams are untrusted input**, validated in `core/wifi_drive/handheld_controller`: exactly one version 3 command frame of 21 bytes with a valid CRC, from the locked sender (the first valid one, until its 150 ms liveness lapses), with a sequence number 1–8 ahead of the last (0 or 128–255 behind is stale; 9–127 is a jump, which ends the session).
 - **The bridge owns the link's safety rules for the handheld:** the first frame of a session only sets the counter baselines; each later change of the handheld's fault-clear, mode-request or gesture-request counter advances the bridge's own by one; a session starts in Sleep until its first mode request; a lapse reports no controller.
-- The relay sends a frame only to the live session's sender, and a session change clears the ring (`epoch`), so no frame crosses sessions. The bridge never sends its own command frames to the handheld.
+- The relay sends a frame only to the live session's sender, and a session change clears the ring (`epoch`); after a session change, frames are dropped and counted until a link poll of the new session ends with the decoder empty (`relay_queue::beginPoll`/`endPoll`: until then they may have reached the UART during the previous session), so no frame crosses sessions. The bridge never sends its own command frames to the handheld.
 
 ### Setup mode
 
