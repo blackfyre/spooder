@@ -1,6 +1,6 @@
 ---
 name: spooder-hardware-check
-description: Workflow for wiring, powering, flashing and bringing up the Spooder firmwares on the Pimoroni Servo 2040 and the TTGO T-Display gamepad bridge — power and ground rules, J6 header and link wiring, the staged bring-up order (USB only, bench supply, one servo, all servos, then the bridge), what the serial console, LEDs and bridge screen show, the gamepad controls, how to exercise and verify power protection and the emergency stop, the bridge's setup mode with the portal calibration workflow, and bench calibration with the desktop calibrator on USB (dialout, Linux packages, workflow). Use when a change must be confirmed on the robot or bridge, when flashing or boot fails, or when the user asks to flash, test on hardware or read a console.
+description: Workflow for wiring, powering, flashing and bringing up the Spooder firmwares on the Pimoroni Servo 2040 and the TTGO T-Display gamepad bridge — power and ground rules, J6 header and link wiring, the staged bring-up order (USB only, bench supply, one servo, all servos, then the bridge), what the serial console, LEDs and bridge screen show, the gamepad controls, how to exercise and verify power protection and the emergency stop, the bridge's drive mode switch (GPIO32) and WiFi drive with the spooder-wifi-probe checks, the bridge's setup mode with the portal calibration workflow, and bench calibration with the desktop calibrator on USB (dialout, Linux packages, workflow). Use when a change must be confirmed on the robot or bridge, when flashing or boot fails, or when the user asks to flash, test on hardware or read a console.
 ---
 
 # Spooder hardware check
@@ -34,6 +34,16 @@ J6 (unpopulated 17-pin header), pin → signal: 1 GND, 2 USER_SW, 3 GND, 4 RESET
 
 - **Never connect the boards' 5 V rails together.** Power the bridge from its own USB or a separate 5 V supply.
 - Cross TX to RX. With the bridge unplugged, the robot's RX pull-up keeps the line idle.
+
+**Drive mode switch** (two wires, on the bridge only):
+
+| TTGO T-Display | Switch |
+|---|---|
+| GPIO32 (header) | one terminal of a latching switch |
+| GND (header) | the other terminal |
+
+- Before soldering, confirm on the fitted T-Display v1.1 that GPIO32 reaches the header and has nothing else on it (the schematic in `hardware/lilygo-t-display/` routes IO32 to the header, with the 32 kHz crystal not fitted). GPIO33 is the spare alternative; using it is a firmware change.
+- No resistor: the bridge enables GPIO32's internal pull-up. Open (or unfitted, or a broken wire) boots Bluetooth drive; closed to ground boots WiFi drive. The switch is read once at boot; moving it later only shows `SWITCH MOVED: RESTART` in the status strip.
 
 **Battery wiring** (2S pack in the frame bottom's bay; the rest on the frame top, in the printed electronics mount, `hardware/spooder-electronics-mount/`, whose README gives the cable routes and the assembly order):
 
@@ -222,12 +232,35 @@ The status screen has three pages: **drive** (the mode chip, voltage and current
 
 Record results in `openspec/changes/archive/2026-10-20-add-gamepad-bridge/tasks.md` (task 4.2).
 
+## WiFi drive and the probe
+
+WiFi drive turns the bridge into a WiFi access point for one handheld instead of a Bluetooth gamepad; Bluetooth is off throughout. The handheld app does not exist yet (`add-handheld-controller`): `spooder-wifi-probe` on a laptop stands in for it. The link, the 20 ms command frames and the bridge's e-stop button work as in Bluetooth drive.
+
+- **Boot:** close the drive mode switch and power up or reset the bridge. The console shows `spooder bridge: build <id>`, then `spooder bridge: WiFi drive (Bluetooth off)` and `WiFi drive: access point spooder-drive-XXXX, UDP port 52040`; the Bluepad32 banner does not appear. The start-up log begins with `Build <id>` and names WiFi drive, `Net spooder-drive-XXXX` and `Handheld: UDP 52040`.
+- **Screen:** the header's controller field shows `WF NONE` (no handheld), `WF IDLE` (a live handheld that clears its controller-connected flag) or `WF CTRL` (in control). The link page shows `NET spooder-drive-XXXX`, `PASS <password>` and `HANDHELD NONE`, `IDLE` or `IN CONTROL` in place of the pad line. The drive page shows no stick mode.
+- **Join:** join the laptop (or handheld) to `spooder-drive-XXXX` with the password on the link page. The password is made once, kept by the bridge, and differs from setup mode's. One station at a time: the laptop joins instead of the handheld, not beside it.
+- **Setup mode** is still the left-button hold during the logo; leaving it returns to WiFi drive while the switch stays closed.
+- **Counts:** every 10 s, when they changed, the console prints the datagrams accepted, rate-limited, malformed, from another sender, stale and jumps, and the relay's drops and failed sends.
+
+**Probe checks** (robot on the bench supply; build it with `mise run desktop-build`, then run `build/desktop/spooder-wifi-probe`; `--help` lists the flags). It sends a connected controller at 50 Hz to `192.168.4.1:52040` (`--addr`), after a 150 ms wait, and prints each second the frames sent, the robot frames received per type, the errors (datagrams that are not exactly one robot frame, with command frames counted among them) and the telemetry's body mode, outputs and faults.
+
+1. **Telemetry:** `spooder-wifi-probe` alone. About 10 telemetry frames a second arrive, errors and command frames stay at zero; the screen shows `WF CTRL`.
+2. **Mode request:** `--mode stand` makes the robot stand (at `--mode-after`, default 300 ms). Restarting the probe gives no fault clear and no mode change until its own mode request.
+3. **Lapse:** `--mode stand --pause-after 5s --pause-for 2s`. Within about 150 ms of the pause, plus the robot's own response, the robot sleeps and the screen shows `WF NONE`; after the pause the robot stays in Sleep (a new session requests Sleep until its first mode request).
+4. **Flood:** `--mode stand --flood 1000`. The robot stands, the link page still shows about 50 frames per second accepted by the robot, and the bridge console counts the extra datagrams as stale or rate-limited. Stopping the probe (Ctrl+C) still makes the robot sleep.
+5. **E-stop button:** with the robot standing from a `--mode stand` run, press GPIO35: `E-STOP` in the strip and `OUT OFF` within 20 ms. Press it again to release: output stays off (the emergency-stop fault stays latched). Stop the probe.
+6. **E-stop flag and recovery:** start a `--clear-after 1s --mode stand --mode-after 2s` run (the fault clear unlatches step 5's stop, the later request stands the robot), wait for the stand, stop it (the robot sleeps with output on), and at once start `--estop --estop-clear-after 5s --clear-after 8s --mode stand --mode-after 10s`. Output goes off at the first frame; at 5 s the flag clears and output stays off; at 8 s the fault clear unlatches it, and the robot still does not move; at 10 s the mode request makes it stand. A mode request made after the latch but before the clear would also count, so keep `--mode-after` after `--clear-after` to see the two apart.
+7. **Second sender:** a second probe on the same laptop (another terminal, so another source port) is ignored while the first runs: the bridge counts it as another sender, and the robot follows the first.
+
+Record results in `openspec/changes/add-wifi-drive/tasks.md` (tasks 6.1 and 6.2).
+
 ## Setup mode and portal calibration
 
-Setup mode turns the bridge into a WiFi access point with a captive portal; Bluetooth is off throughout, so no gamepad can connect. The link and the bridge's e-stop button work as in normal operation.
+Setup mode turns the bridge into a WiFi access point with a captive portal; Bluetooth is off throughout, so no gamepad can connect. The link and the bridge's e-stop button work as in Bluetooth drive.
 
 - **Enter:** power up or reset the bridge, and once the logo is up, hold the left button (GPIO0) for 1 s. Never hold it while pressing RST or plugging in: that enters the ROM download mode instead. The bridge restarts and shows `SETUP MODE`, the network name (`spooder-` and four hex digits), the password, `192.168.4.1`, `Portal: yes/no`, the link state, the e-stop and the body mode, with a joining QR code on the right.
-- **Leave:** Exit on the portal, or RST. Both restart into normal operation; a power-up always starts normally.
+- **Enter from WiFi drive:** the same hold, with the drive mode switch closed; setup mode shows the setup network (`spooder-XXXX`), not the WiFi drive one.
+- **Leave:** Exit on the portal, or RST. Both restart into the drive mode the switch selects; a power-up always starts in that mode.
 - **Join:** scan the QR code with the phone's camera, or type the password. The password is made once and kept by the bridge. The phone's sign-in page opens the portal by itself (on Android, tap the "sign in to network" notification if it does not); otherwise browse to `http://192.168.4.1/`. One phone at a time.
 - **Console:** `mise run monitor-bridge` shows `spooder bridge: build <id>`, then `spooder bridge: setup mode (Bluetooth off)` and the access point line; the Bluepad32 console is not running.
 

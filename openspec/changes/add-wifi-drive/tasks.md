@@ -20,7 +20,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 Update `firmware/bridge/CLAUDE.md` (the third boot path, the radio rule as never both, the UDP task), `core/CLAUDE.md` (`wifi_drive/`), `desktop/CLAUDE.md` (the probe), the `spooder-firmware-shape` skill (bridge tasks and boot paths), the `spooder-hardware-check` skill (wiring the switch, joining WiFi drive, the probe checks), `Readme.md` and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec deltas, and that `grep` finds GPIO32 in `firmware/bridge/CLAUDE.md` and the skill, and port 52040 in the skill.
+- [x] 4.1 Update `firmware/bridge/CLAUDE.md` (the third boot path, the radio rule as never both, the UDP task), `core/CLAUDE.md` (`wifi_drive/`), `desktop/CLAUDE.md` (the probe), the `spooder-firmware-shape` skill (bridge tasks and boot paths), the `spooder-hardware-check` skill (wiring the switch, joining WiFi drive, the probe checks), `Readme.md` and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec deltas, and that `grep` finds GPIO32 in `firmware/bridge/CLAUDE.md` and the skill, and port 52040 in the skill.
 
 ## 5. Gates
 

@@ -2,7 +2,7 @@
 
 Spooder is firmware for a hexapod robot, derived from [Aecert's Hexapod V1](https://github.com/Ryan-Mirch/Aecerts_Hexapod_V1). There are two firmwares:
 - the robot, on a **Pimoroni Servo 2040** (RP2040), in C++ on the pico-sdk with pimoroni-pico;
-- the gamepad bridge, on a **LilyGO TTGO T-Display v1.1** (original ESP32), on ESP-IDF + Arduino + Bluepad32. It sends gamepad commands to the robot over a UART link and shows robot status on its screen. Its setup mode (left button held during the boot logo) replaces Bluetooth with a WiFi access point and captive portal, through which a phone calibrates the robot.
+- the gamepad bridge, on a **LilyGO TTGO T-Display v1.1** (original ESP32), on ESP-IDF + Arduino + Bluepad32. It sends gamepad commands to the robot over a UART link and shows robot status on its screen. Its setup mode (left button held during the boot logo) replaces Bluetooth with a WiFi access point and captive portal, through which a phone calibrates the robot. A drive mode switch on GPIO32, read at boot, selects WiFi drive instead of Bluetooth drive: an access point through which one handheld (for now `spooder-wifi-probe` on a laptop) sends command frames over UDP, with the robot's frames relayed back.
 
 A computer can speak the same link protocol on the robot's USB port, alongside the debug text, to calibrate, monitor, control and drive (from the keyboard) the robot without the bridge. Joint calibration can be changed live (in RAM) and exported as the compiled defaults. The desktop calibrator (`desktop/`, Go with a Gio UI) is that computer-side front-end.
 

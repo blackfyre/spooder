@@ -1,6 +1,6 @@
 ---
 name: spooder-firmware-shape
-description: Structural rules for the Spooder firmwares (robot on the Pimoroni Servo 2040, gamepad bridge on the TTGO T-Display) — core/ versus firmware/ split, the core 0 control loop, the power-protection layer between commands, movement and servo output, the bridge link boundary, J6 pin allocation, PIO/DMA/UART usage, the bridge's task layout and setup mode, state machines, named constants and failure handling. Use before adding a module or sensor, moving code, using the second core, changing the link, or reviewing a change for structure.
+description: Structural rules for the Spooder firmwares (robot on the Pimoroni Servo 2040, gamepad bridge on the TTGO T-Display) — core/ versus firmware/ split, the core 0 control loop, the power-protection layer between commands, movement and servo output, the bridge link boundary, J6 pin allocation, PIO/DMA/UART usage, the bridge's boot paths (Bluetooth drive, WiFi drive, setup mode), task layout and WiFi drive UDP task, state machines, named constants and failure handling. Use before adding a module or sensor, moving code, using the second core, changing the link, or reviewing a change for structure.
 ---
 
 # Spooder firmware shape
@@ -96,6 +96,24 @@ The board has no pull-ups on GPIO19–21 or 26–28. Check for clashes before cl
 
 ## The bridge (TTGO T-Display, ESP32)
 
+Three boot paths, chosen once in `app_main` before either radio starts (`bridge_boot_mode_select`, the decision in `core/wifi_drive/drive_mode`). The bridge never runs WiFi and Bluetooth together, and leaves a path only by restarting.
+
+```mermaid
+flowchart TD
+  A[app_main] --> B{RTC magic and software restart?}
+  B -- yes --> S[setup mode: setup network, portal]
+  B -- no --> C{GPIO32 closed to ground?}
+  C -- no, open or unfitted --> BT[Bluetooth drive: BTstack, Bluepad32]
+  C -- yes --> W[WiFi drive: drive network, UDP task]
+  BT -- left button held during logo --> R[restart with RTC magic]
+  W -- left button held during logo --> R
+  R --> A
+```
+
+- **Drive mode switch:** a latching switch from GPIO32 to ground, internal pull-up, read through ESP-IDF's GPIO driver about 1 ms after the pull-up is enabled (never Arduino's `digitalRead`, which reads 0 for a pin it did not configure). Setup mode ignores it. While running, both drive modes sample it only for the status strip's `SWITCH MOVED: RESTART` notice (100 ms debounce); it never changes the drive mode.
+
+### Bluetooth drive
+
 | Context | Core | Work |
 |---|---|---|
 | BTstack / Bluepad32 | 0 | Bluetooth; callbacks into `bridge.cpp` |
@@ -104,21 +122,36 @@ The board has no pull-ups on GPIO19–21 or 26–28. Check for clashes before cl
 
 - Shared state between `loop()` and the link task is copied under one spinlock (`portMUX`); nothing else is shared.
 - The screen must never delay command frames: keep drawing in `loop()`, never in the link task.
-- One controller slot (`CONFIG_BLUEPAD32_MAX_DEVICES=1`, plus a refusal in `onConnected`). WiFi is never started in normal operation.
-- Pins: link UART1 TX GPIO27, RX GPIO26; e-stop GPIO35 (input only, board pull-up); display SPI MOSI 19, SCLK 18, CS 5, DC 16, RST 23, backlight 4. GPIO0 (left button) is a strapping pin: it is read while the logo is shown (setup mode) and once the status screen is up (`page_button`), never at reset.
+- One controller slot (`CONFIG_BLUEPAD32_MAX_DEVICES=1`, plus a refusal in `onConnected`). WiFi is never started in Bluetooth drive.
+- Pins: link UART1 TX GPIO27, RX GPIO26; e-stop GPIO35 (input only, board pull-up); display SPI MOSI 19, SCLK 18, CS 5, DC 16, RST 23, backlight 4. drive mode switch GPIO32 (internal pull-up; GPIO33 stays spare). GPIO0 (left button) is a strapping pin: it is read while the logo is shown (setup mode) and once the status screen is up (`page_button`), never at reset.
+
+### WiFi drive
+
+One radio at a time: WiFi drive is a boot path of its own and never starts Bluetooth (`wifi_drive_start`, `main/wifi_drive.cpp`). A handheld (or `spooder-wifi-probe`) sends link-protocol command frames over UDP; the bridge builds its own command frames to the robot every 20 ms from them, and relays the robot's frames back while the session is live.
+
+| Context | Core | Work |
+|---|---|---|
+| WiFi, lwIP | 0 | the access point `spooder-drive-XXXX` (WPA2, channel 1, 192.168.4.1, one station; password in NVS `spooder`/`drive_pass`, separate from setup mode's) |
+| `robot_link` task, priority 5 | 1 | as in Bluetooth drive, but the desired state is `handheld_controller::desired(now)` judged every period, its e-stop flag ORed with the GPIO35 toggle; the robot's raw frames go into `relay_queue` (8 frames, never waiting: a full ring drops and counts) |
+| `udp` task, priority 2 | 1 | UDP port 52040: `recvfrom` with a one-window timeout, each datagram stamped on receipt inside the link lock and passed to `handheld_controller::accept`; at most 8 per 20 ms window, the rest left in lwIP's mailbox (`CONFIG_LWIP_UDP_RECVMBOX_SIZE=6`, below the budget); then the relay, `sendto(MSG_DONTWAIT)` to `relayTarget` |
+| `wifi-drive` task, priority 1 | 1 | the screen, the logo hold into setup mode, the page button, the switch notice, the outcome counts on the console |
+
+- **The handheld's datagrams are untrusted input**, validated in `core/wifi_drive/handheld_controller`: exactly one version 3 command frame of 21 bytes with a valid CRC, from the locked sender (the first valid one, until its 150 ms liveness lapses), with a sequence number 1–8 ahead of the last (0 or 128–255 behind is stale; 9–127 is a jump, which ends the session).
+- **The bridge owns the link's safety rules for the handheld:** the first frame of a session only sets the counter baselines; each later change of the handheld's fault-clear, mode-request or gesture-request counter advances the bridge's own by one; a session starts in Sleep until its first mode request; a lapse reports no controller.
+- The relay sends a frame only to the live session's sender, and a session change clears the ring (`epoch`), so no frame crosses sessions. The bridge never sends its own command frames to the handheld.
 
 ### Setup mode
 
 One radio at a time: setup mode is a boot path of its own and never starts Bluetooth.
 
-- **Entry:** GPIO0 held 1 s while the logo is shown (`setup_entry::update` in `loop()`; the logo stays up while the button is down). `setup_mode::restartIntoSetup()` writes `setup_entry::MAGIC` to an `RTC_NOINIT_ATTR` variable and calls `esp_restart()`.
-- **Boot:** `app_main` calls `setup_mode_requested()` first. Only the magic **and** `ESP_RST_SW` start setup mode, and the magic is cleared either way, so a power-up or reset always starts normally. `setup_mode_start()` releases the Bluetooth controller's memory, calls `initArduino()` (never `BP32`), and starts the link, the access point, the DNS and HTTP servers and the setup task.
-- **Leaving:** the portal's Exit or RST; both restart into normal operation.
+- **Entry:** GPIO0 held 1 s while the logo is shown (`setup_entry::update`, in `loop()` in Bluetooth drive and in the `wifi-drive` task in WiFi drive; the logo stays up while the button is down). `setup_mode::restartIntoSetup()` writes `setup_entry::MAGIC` to an `RTC_NOINIT_ATTR` variable and calls `esp_restart()`.
+- **Boot:** `app_main` calls `setup_mode_requested()` first. Only the magic **and** `ESP_RST_SW` start setup mode, and the magic is cleared either way, so a power-up or reset always starts in the drive mode the switch selects. `setup_mode_start()` releases the Bluetooth controller's memory, calls `initArduino()` (never `BP32`), and starts the link, the access point, the DNS and HTTP servers and the setup task.
+- **Leaving:** the portal's Exit or RST; both restart into the drive mode the switch selects.
 
 | Context | Core | Work |
 |---|---|---|
 | WiFi, lwIP (`CONFIG_LWIP_TCPIP_TASK_AFFINITY_CPU0`), DNS server (async UDP) | 0 | the access point (one station), every DNS name → 192.168.4.1 |
-| `robot_link` task, priority 5 | 1 | as in normal operation, but the desired state is `portal_controller::desired()` judged every period; at most one calibration set per period after the command frame; reports into `calibration_sync` |
+| `robot_link` task, priority 5 | 1 | as in Bluetooth drive, but the desired state is `portal_controller::desired()` judged every period; at most one calibration set per period after the command frame; reports into `calibration_sync` |
 | `setup` task, priority 1 | 1 | `WebServer::handleClient()` and the setup screen (≤ 4 Hz) |
 
 - The HTTP handlers reach the portal controller and calibration sync only through `robot_link`'s portal functions, under the link's spinlock. `GET /api/state`, mode posts and joint posts count as polls; captive-portal probes do not.
@@ -131,7 +164,7 @@ One radio at a time: setup mode is a boot path of its own and never starts Bluet
 
 ## Untrusted input and output
 
-Every byte that arrives from outside the board is untrusted: link and USB frames, serial keys, portal requests, gamepad reports.
+Every byte that arrives from outside the board is untrusted: link and USB frames, serial keys, portal requests, gamepad reports, WiFi drive datagrams.
 
 - **Decode, then validate in `core/`.** `core/protocol` checks framing (version, length, CRC) and discards what fails; the meaning is then checked against allow-lists in core before anything acts on it: enum and index ranges (mode, gait, gesture, joint), calibration guards (`link_receiver`, `joint_calibration::clampJoint`), command ranges (`body::clampCommand`).
 - **Reject, or clamp visibly; never repair silently.** A value outside a defined set (unknown mode, joint index, portal field) is rejected. Clamping is reserved for physical ranges where it is the safety rule (stick deflection, joint travel), and is reported: a clamped calibration set comes back as `CalibrationResult::Clamped`, so the front-end shows what was applied.

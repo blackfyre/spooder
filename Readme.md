@@ -19,6 +19,7 @@ Spooder is the firmware and tooling for a six-legged, eighteen-servo walking rob
 flowchart LR
   pad["Gamepad"] -- "Bluetooth" --> bridge["TTGO T-Display<br/>(the bridge)"]
   phone["Phone"] -. "WiFi portal<br/>(setup mode only)" .-> bridge
+  handheld["WiFi handheld<br/>or spooder-wifi-probe"] <-. "UDP 52040: commands · relayed robot frames<br/>(WiFi drive only)" .-> bridge
   bridge <-- "UART link, 115200<br/>commands · telemetry, reports,<br/>pose, diagnostics" --> robot["Servo 2040<br/>(the robot)"]
   robot -- "pulses" --> servos["18 servos"]
   desktop["Desktop calibrator"] <-- "USB: link frames<br/>+ debug text" --> robot
@@ -27,7 +28,8 @@ flowchart LR
 
 - **The robot**: a Pimoroni Servo 2040 (RP2040), C++ on the pico-sdk with pimoroni-pico. It runs a 20 ms control tick: link input → power protection → supervisor → calibration → body state machine → servo output → status LEDs → telemetry.
 - **The gamepad bridge**: a LilyGO TTGO T-Display v1.1 (ESP32), on ESP-IDF, Arduino and Bluepad32. It pairs a Bluetooth gamepad, sends commands to the robot every 20 ms, and shows the robot's status on its screen.
-  - Hold the left button during the boot logo to enter **setup mode**. The bridge then starts a WiFi access point (joined via a QR code on the screen) and a captive portal, through which a phone calibrates the robot. Bluetooth and WiFi never run together.
+  - A latching switch from GPIO32 to ground selects the drive mode at boot: open (or not fitted) is **Bluetooth drive**, closed is **WiFi drive**, in which the bridge runs a WiFi access point (`spooder-drive-XXXX`) instead of Bluetooth and one handheld drives the robot with link-protocol command frames over UDP. The bridge keeps the link's safety rules for the handheld (150 ms liveness, its own fault-clear and request counters, one sender at a time) and relays the robot's frames back to it. Until the handheld app exists, `spooder-wifi-probe` on a laptop stands in for it.
+  - Hold the left button during the boot logo to enter **setup mode**, from either drive mode. The bridge then starts a WiFi access point (joined via a QR code on the screen) and a captive portal, through which a phone calibrates the robot. Bluetooth and WiFi never run together.
 - **The desktop calibrator**: Go with a Gio UI, in the Blackfyre look. It speaks the same link protocol on the robot's USB port, to monitor, drive and calibrate it without the bridge.
 - **The virtual robot**: the robot's own control tick, compiled natively, behind a pseudo-terminal that behaves like the board's USB port. It runs the calibrator and the end-to-end tests without hardware.
 
@@ -92,6 +94,10 @@ The gamepad bridge's 240×135 screen, rendered on the host by its own drawing co
 | --- | --- | --- |
 | ![The drive page after a brown-out: low V and brown-out in the orange status strip, output off](docs/images/bridge-fault.png) | ![The power page with the emergency stop in the orange status strip](docs/images/bridge-estop.png) | ![The drive page with the link lost: no robot values, LINK LOST in the strip](docs/images/bridge-lost.png) |
 
+| WiFi drive | WiFi drive link |
+| --- | --- |
+| ![The drive page in WiFi drive: WF CTRL, the handheld in control, in the header, and the stride mode without a stick mode](docs/images/bridge-wifi-drive.png) | ![The link page in WiFi drive before a handheld joins: the rates, the network name and the password, and HANDHELD NONE in place of the pad](docs/images/bridge-wifi-link.png) |
+
 ## Getting started
 
 [mise](https://mise.jdx.dev) provides every toolchain. The SDKs are pinned git submodules.
@@ -132,7 +138,7 @@ Flash both boards together when the link protocol changes. A mismatched pair fai
 | GPIO26 (RX) | J6 pin 14, GPIO20 (TX) |
 | GND | J6 pin 16 (logic GND) |
 
-3.3 V logic only, and no 5 V on these pins. The bridge's right button (GPIO35) toggles the emergency stop.
+3.3 V logic only, and no 5 V on these pins. The bridge's right button (GPIO35) toggles the emergency stop. For WiFi drive, wire a latching switch between the bridge's GPIO32 and GND (no resistor: the bridge enables the pull-up); the [hardware check](.claude/skills/spooder-hardware-check/SKILL.md) covers joining the network and the probe's checks.
 
 ## Gamepad controls
 
@@ -168,10 +174,10 @@ Hardware behaviour (timing, wiring, power) can only be confirmed on the boards. 
 
 | Path | What |
 |---|---|
-| `core/` | Hardware-free C++ shared by both firmwares, the virtual robot and the host tests: movement, protection, protocol, the control tick, gamepad mapping, status, setup mode |
+| `core/` | Hardware-free C++ shared by both firmwares, the virtual robot and the host tests: movement, protection, protocol, the control tick, gamepad mapping, status, setup mode, WiFi drive |
 | `firmware/servo2040/` | The robot: pico-sdk CMake project |
 | `firmware/bridge/` | The bridge: ESP-IDF PlatformIO project, including the portal page |
-| `desktop/` | The desktop calibrator and the console monitor, a separate Go module |
+| `desktop/` | The desktop calibrator, the console monitor and the WiFi drive probe, a separate Go module |
 | `tools/virtual-robot/` | The virtual robot |
 | `test/` | Unity host tests; `test/golden/` holds the fixtures other implementations test against |
 | `openspec/` | Specifications and changes: the source of truth for intended behaviour |
