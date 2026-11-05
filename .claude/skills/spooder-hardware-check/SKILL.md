@@ -207,7 +207,7 @@ The status screen has three pages: **drive** (the mode chip, voltage and current
 1. **Bridge alone, on USB.** The header shows `NO PAD` and `LOST`, the strip `LINK LOST`. The console prints `spooder bridge: build <id>` (the same form and rules as the robot's banner), then the Bluepad32 banner. The start-up log on the screen, after the logo, begins with `Build <id>` (`Build ..` and the id's end when it is longer than 22 characters), then `Boot`.
 2. **Link on a bench cable.** Wire the three link wires.
    - Within a second the header shows `LINK` and the robot's mode, the strip `NO FAULTS`, and the drive page the supply voltage and current and `OUT ON`/`OUT OFF`. `USB IN CONTROL` or `SOURCE CONFLICT` in the strip means a USB host claims control too.
-   - The link page shows about 50 frames per second accepted by the robot and about 10 by the bridge, none rejected.
+   - The link page shows about 50 frames per second accepted by the robot and about 30 by the bridge (telemetry, pose and diagnostics at 10 Hz each), none rejected.
    - LED 6 on the robot blinks magenta (link up, no gamepad).
    - Pull the cable: the strip shows `LINK LOST` within about 1 s on whichever page is shown, the power traces stop (a gap), and the robot sleeps (LED 6 fast amber).
 3. **Gamepad.** Put the pad in pairing mode (see below).
