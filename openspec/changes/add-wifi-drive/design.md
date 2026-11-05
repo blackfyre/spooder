@@ -10,7 +10,7 @@ The robot applies a baseline-after-gap rule to the three command counters (`link
 
 **Goals:** the smallest bridge-side mode that a handheld app (or the probe) can drive through, with its safety rules in host-tested `core/` code.
 
-**Non-goals:** the handheld app and its virtual bridge (`add-handheld-controller`); relaying pose and diagnostics, which the robot sends only on USB today (`relay-pose-diagnostics`; the relay here forwards whatever the robot sends, so it needs no change then); calibration over WiFi drive; more than one handheld; a protocol version change; any robot firmware change.
+**Non-goals:** the handheld app and its virtual bridge (`add-handheld-controller`); relaying pose and diagnostics as a separate feature (`relay-pose-diagnostics`, merged to main before this change, puts them on the bridge link; the relay here forwards whatever the robot sends, so they reach the handheld with no further change); calibration over WiFi drive; more than one handheld; a protocol version change; any robot firmware change.
 
 ## Decisions
 

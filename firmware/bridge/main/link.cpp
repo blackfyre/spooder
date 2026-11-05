@@ -136,8 +136,8 @@ static void takeFrames(uint32_t now)
       portEXIT_CRITICAL(&lock);
     }
     // Pose and diagnostics frames arrive too (the robot sends them on every
-    // link); the decoder counts them as accepted and they are ignored here,
-    // in both modes, until add-wifi-drive relays them.
+    // link); the decoder counts them as accepted. In WiFi drive the relay
+    // above forwards them with every other frame; otherwise they are ignored.
   }
 }
 
