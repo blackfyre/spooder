@@ -28,8 +28,8 @@ const (
 	TypeTelemetry         FrameType = 2
 	TypeCalibrationSet    FrameType = 3
 	TypeCalibrationReport FrameType = 4
-	TypePose              FrameType = 5 // robot to the USB host only
-	TypeDiagnostics       FrameType = 6 // robot to the USB host only
+	TypePose              FrameType = 5 // robot to every link (the bridge ignores it)
+	TypeDiagnostics       FrameType = 6 // robot to every link (the bridge ignores it)
 )
 
 const (
@@ -181,16 +181,14 @@ type PoseJoint struct {
 	PulseUs           uint16 // last pulse set for the output; 0 = never set
 }
 
-// Pose is what the robot commands each joint, sent to the USB host only,
-// at 10 Hz.
+// Pose is what the robot commands each joint, sent on every link at 10 Hz.
 type Pose struct {
 	Flags  uint8 // Pose* bits
 	Joints [CalibrationJoints]PoseJoint
 }
 
 // Diagnostics are the robot's internals over the last telemetry window
-// (five ticks) and its configured limits, sent to the USB host only, at
-// 10 Hz.
+// (five ticks) and its configured limits, sent on every link at 10 Hz.
 type Diagnostics struct {
 	MotionSharePermille uint16 // smallest share the joint speed budget allowed; 1000 = full
 	BackstopTicks       uint16 // ticks the output rate backstop held a joint back (wraps)

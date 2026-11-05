@@ -19,7 +19,7 @@ Spooder is the firmware and tooling for a six-legged, eighteen-servo walking rob
 flowchart LR
   pad["Gamepad"] -- "Bluetooth" --> bridge["TTGO T-Display<br/>(the bridge)"]
   phone["Phone"] -. "WiFi portal<br/>(setup mode only)" .-> bridge
-  bridge <-- "UART link, 115200<br/>commands · telemetry, reports" --> robot["Servo 2040<br/>(the robot)"]
+  bridge <-- "UART link, 115200<br/>commands · telemetry, reports,<br/>pose, diagnostics" --> robot["Servo 2040<br/>(the robot)"]
   robot -- "pulses" --> servos["18 servos"]
   desktop["Desktop calibrator"] <-- "USB: link frames<br/>+ debug text" --> robot
   desktop <-. "same frames,<br/>pseudo-terminal" .-> virtual["Virtual robot<br/>(no hardware)"]
@@ -35,7 +35,7 @@ flowchart LR
 
 - **Gaits**: tri, wave, ripple, bi, quad and hop, from the upstream gait table, with dynamic or fixed stride and adjustable height and speed.
 - **Power protection**: overcurrent, overload, brown-out, low and high voltage, and an emergency stop. Faults latch, and clearing one never restarts motion by itself: a new mode request must follow.
-- **Link protocol v3**: CRC-16 framed messages for commands (with gesture requests), telemetry, calibration sets and reports, and the pose. It is pinned by golden vectors that the C++ and Go implementations both test against.
+- **Link protocol v3**: CRC-16 framed messages for commands (with gesture requests), telemetry, calibration sets and reports, the pose and the diagnostics; the robot sends the pose and the diagnostics on both links, and the bridge ignores them for now. It is pinned by golden vectors that the C++ and Go implementations both test against.
 - **Live joint calibration**: per joint, an offset, the pulses for 0° and 180°, and the direction.
   - Changes are guarded (Calibrate only, offset within ±30° of the default, pulses 400–2600 µs) and rate-limited to 60°/s.
   - They are held in RAM, confirmed by the robot's reports, and exported as the compiled defaults.

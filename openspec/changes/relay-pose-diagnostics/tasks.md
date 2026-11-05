@@ -8,7 +8,7 @@
 
 ## 2. Documentation
 
-- [ ] 2.1 Update the `spooder-firmware-shape` skill (the tick schedule and the frames paragraph: pose and diagnostics on both links, the bridge ignoring them), `core/CLAUDE.md`, `firmware/servo2040/CLAUDE.md` (the `src/usb_link` entry), the frame-type comments in `desktop/internal/protocol/protocol.go`, the readme where it describes the link, and `CHANGELOG.md` under Unreleased. Verify `grep -rn -i -E "usb only|usb host only|only usb|usb link only|never sent on uart1|not (sent )?on (the )?bridge" core firmware desktop/internal/protocol .claude/skills/spooder-firmware-shape Readme.md CLAUDE.md` finds no remaining claim that pose or diagnostics frames are USB only, and `mise run lint` and `mise run desktop-test` pass.
+- [x] 2.1 Update the `spooder-firmware-shape` skill (the tick schedule and the frames paragraph: pose and diagnostics on both links, the bridge ignoring them), `core/CLAUDE.md`, `firmware/servo2040/CLAUDE.md` (the `src/usb_link` entry), the frame-type comments in `desktop/internal/protocol/protocol.go`, the readme where it describes the link, and `CHANGELOG.md` under Unreleased. Verify `grep -rn -i -E "usb only|usb host only|only usb|usb link only|never sent on uart1|not (sent )?on (the )?bridge" core firmware desktop/internal/protocol .claude/skills/spooder-firmware-shape Readme.md CLAUDE.md` finds no remaining claim that pose or diagnostics frames are USB only, and `mise run lint` and `mise run desktop-test` pass.
 
 ## 3. Hardware confirmation
 

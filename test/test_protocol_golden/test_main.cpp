@@ -344,7 +344,7 @@ static void buildGolden(Text &t)
   bytes[n - 1] ^= 0x01;
   addRejected(t, "reject_bad_crc_calibration_set", bytes, n);
 
-  // Pose frames (type 5, USB only), appended after the frames above.
+  // Pose frames (type 5, robot to every link), appended after the frames above.
   // The calibration pose: commanded 0/90/90 on every leg, servo angles with
   // the default offsets, pulses through the default 500-2500 us range.
   f = frame(FrameType::Pose, 3);
@@ -377,7 +377,7 @@ static void buildGolden(Text &t)
   bytes[n - 2] ^= 0x80;
   addRejected(t, "reject_bad_crc_pose", bytes, n);
 
-  // Diagnostics frames (type 6, USB only), appended after the frames above.
+  // Diagnostics frames (type 6, robot to every link), appended after the frames above.
   // Governed walking with the example limits and the MG996R profile.
   f = frame(FrameType::Diagnostics, 4);
   f.diagnostics = {412, 0, 6480, 5210, 2380, 9000, 6000, 5200, 6800, 4800, 257, 429};

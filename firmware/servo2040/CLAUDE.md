@@ -4,7 +4,7 @@ The robot's pico-sdk CMake project (`mise run build` → `build/servo2040/spoode
 
 - `src/main.cpp`: the core 0 loop, every 20 ms: read both links' bytes (or the serial keys) and the power reading, run `robot_tick::tick` (`core/robot`), which drives the adapters below. It passes the build identity (`build_identity::ID`, from the generated `build_identity_id.cpp` the `spooder_build_identity` target writes in the build directory) to `robot_tick::init`, and `stdio_usb_connected()` as `Inputs::usbConnected`, so the banner reaches a console opened after boot.
 - `src/link`: UART1 on GPIO20/21 (J6), interrupt-driven RX ring and a 256-byte TX queue of whole frames.
-- `src/usb_link`: bytes over USB stdio, sharing the port with `printf`; frames are written whole or dropped. Only USB carries the 10 Hz pose and diagnostics frames.
+- `src/usb_link`: bytes over USB stdio, sharing the port with `printf`; frames are written whole or dropped. It carries the 10 Hz pose and diagnostics frames, as `src/link` (UART1) does.
 - `src/servo_output`: `ServoCluster` on PIO 0, GPIO0–17.
 - `src/power_monitor`: current and voltage via the analog mux.
 - `src/status_leds`: WS2812 on PIO 1, drawing `core/status/led_pattern`.
