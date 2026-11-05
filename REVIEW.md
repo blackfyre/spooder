@@ -53,7 +53,7 @@ Look for these first; each has happened here:
 - a leg entering its cycle part-way through and jumping onto the path;
 - a servo enabled without a pulse going to mid-travel;
 - non-ASCII debug text on the USB port, which carries binary frames too;
-- a counter baseline missed after a link gap, replaying a request;
+- state carried across a session boundary (a link gap, a restarted sender, a handover to another sender): a counter baseline missed, replaying a request, or frames buffered during one session delivered in the next;
 - a spec scenario or task with no measurable acceptance (no limit, conditions or units that can fail), or a requirement no task verifies;
 - a printed part's size taken as given (a board's height, a module's thickness) without a source in the repository or a place in "Measure before printing".
 

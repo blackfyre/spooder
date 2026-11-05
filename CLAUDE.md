@@ -33,7 +33,7 @@ mise run upload-bridge   # flash the bridge (BRIDGE_PORT, default /dev/ttyUSB0)
 mise run monitor-bridge  # the bridge's Bluepad32 console
 mise run test         # host-side Unity tests of core/ (PlatformIO native env), sanitised (ASan, UBSan), after a source-list check; and the bridge and robot build checks' tests
 mise run lint         # C++ formatting check and clang-tidy on core/; reformat with clang-format -i on the files it names
-mise run desktop-build   # the desktop calibrator -> build/desktop/spooder-calibrator
+mise run desktop-build   # the desktop calibrator -> build/desktop/spooder-calibrator, and the WiFi drive probe -> build/desktop/spooder-wifi-probe
 mise run desktop-run     # build and start it (run from the checkout: it exports there)
 mise run desktop-test    # gofmt, go vet, staticcheck and go test of desktop/
 mise run fuzz           # fuzz the desktop's link decoder and text/frame split (--time per target, default 60s)
