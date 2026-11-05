@@ -88,11 +88,18 @@ The relay: the link task's `takeFrames` copies each frame's raw bytes into `core
 - UDP port 52040, the fixed address 192.168.4.1 and channel 1 need no configuration.
 - The switch is read about 1 ms after enabling the pull-up; GPIO32 has no external load on the T-Display v1.1 (to be confirmed on the board).
 - The rate window is a fixed grid (`nowMs / 20`), so the UDP task knows when the next window starts; every datagram read counts against the budget, malformed ones included.
-- `handheld_controller::epoch` advances at every session start and end; the bridge clears `relay_queue` whenever it changes (checked under the link lock, where both the push and the take happen), so a frame never crosses sessions even when a lapse and a new session fall between two link periods.
+- `handheld_controller::epoch` advances at every session start and end; `relay_queue::relayFor` and `takeFor` clear the queue whenever it changes (called under the link lock, where both the push and the take happen), so a frame never crosses sessions even when a lapse and a new session fall between two link periods.
+- A datagram is stamped inside the link lock, as soon as `recvfrom` returns, not before taking the lock: the link task judges liveness against a time it takes inside the lock, and a stamp taken earlier could be older than a judgement made in between and end a live session.
 - `protocol::Decoder::frameBytes()` is a copy of the returned frame, kept until `next()` returns another one (stronger than "until the next push").
 - `access_point::SSID_SIZE` is 19, the drive network's size; the setup network's join code still fits `JOIN_CODE_SIZE`.
 - The header's controller field stays within 8 characters (the width of `PAD 100%`): `WF NONE`, `WF IDLE` (both in the warning tone) and `WF CTRL` (good). The link page's WiFi drive lines are `NET <name>`, `PASS <password>` and `HANDHELD NONE`, `HANDHELD IDLE` or `HANDHELD IN CONTROL`; how they share the body's height with the four rate lines is the bridge's drawing (task 2.3).
 - With the switch notice alone the strip shows the notice, not `NO FAULTS`.
+- The bridge reads the switch through ESP-IDF's GPIO driver (`gpio_get_level`), in `app_main` and while it runs, not through Arduino's `digitalRead`, which reads 0 (closed) for a pin it did not configure itself.
+- In WiFi drive the screen's e-stop (the status strip, and the status screen shown at once) is the one the command frames carry: the GPIO35 toggle or the handheld's flag.
+- The WiFi drive link page draws its seven lines in the 10 px font at 11 px spacing, in place of the five 12 px lines of Bluetooth drive.
+- The UDP task reads into a buffer one byte longer than a command frame, so lwIP's truncation of a longer datagram still reads as too long; relayed frames wait at most one receive timeout (20 ms) before they are sent.
+- The outcome counts, the relay's drops and failed sends go to the bridge console every 10 s when they changed; the screen does not show them.
+- The access point password is kept in NVS namespace `spooder` under `drive_pass`, made by the setup mode's password loader, shared with setup mode and given the key.
 
 ## Risks / Trade-offs
 

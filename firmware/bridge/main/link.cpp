@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "setup/portal_controller.h"
+#include "wifi_drive/relay_queue.h"
 
 namespace robot_link
 {
@@ -31,11 +32,15 @@ static uint32_t discardedFrames;
 static bool haveReport;
 static uint32_t reportAtMs;
 static protocol::CalibrationReport report;
-// Setup mode only. portalMode is set before the task starts and never
-// changes afterwards.
+// Setup mode only. portalMode and handheldMode are set before the task
+// starts and never change afterwards.
 static bool portalMode;
 static portal_controller::Controller portal;
 static calibration_sync::Sync calibration;
+// WiFi drive only.
+static bool handheldMode;
+static handheld_controller::Controller handheld;
+static relay_queue::Queue relay;
 
 static protocol::Decoder decoder;
 
@@ -65,11 +70,18 @@ static void sendCommand(uint8_t seq)
 {
   portENTER_CRITICAL(&lock);
   // In setup mode the portal's heartbeat is judged here, every period, so a
-  // stalled web server cannot keep the controller connected. The time is
-  // taken inside the lock, so no poll can be stamped after it.
+  // stalled web server cannot keep the controller connected; in WiFi drive
+  // the handheld's liveness, so a stalled UDP task cannot either. The time
+  // is taken inside the lock, so no poll or datagram can be stamped after it.
+  bool stop = emergencyStop;
   if (portalMode)
     desired = portal_controller::desired(portal, millis());
-  protocol::Command c = gamepad_mapping::toCommand(desired, emergencyStop);
+  else if (handheldMode)
+  {
+    desired = handheld_controller::desired(handheld, millis());
+    stop = stop || handheld_controller::emergencyStop(handheld);
+  }
+  protocol::Command c = gamepad_mapping::toCommand(desired, stop);
   portEXIT_CRITICAL(&lock);
   uint8_t frame[protocol::MAX_FRAME_SIZE];
   int n = protocol::encodeCommand(c, seq, frame);
@@ -97,6 +109,14 @@ static void takeFrames(uint32_t now)
   protocol::Frame f;
   while (decoder.next(f))
   {
+    if (handheldMode)
+    {
+      // Every valid frame, byte for byte, while a session is live. A full
+      // relay drops the frame (counted): this never waits.
+      portENTER_CRITICAL(&lock);
+      relay_queue::relayFor(relay, handheld, millis(), decoder.frameBytes(), decoder.frameLength());
+      portEXIT_CRITICAL(&lock);
+    }
     if (f.type == protocol::FrameType::Telemetry)
     {
       portENTER_CRITICAL(&lock);
@@ -183,12 +203,21 @@ static void startTask()
 void start()
 {
   portalMode = false;
+  handheldMode = false;
   startTask();
 }
 
 void startPortal()
 {
   portalMode = true;
+  handheldMode = false;
+  startTask();
+}
+
+void startHandheld()
+{
+  portalMode = false;
+  handheldMode = true;
   startTask();
 }
 
@@ -259,6 +288,51 @@ void portalView(PortalView &out)
   out.connected = portal_controller::connected(c, nowMs);
   out.desired = portal_controller::desired(c, nowMs);
   out.sync = calibration;
+  portEXIT_CRITICAL(&lock);
+}
+
+// --- WiFi drive ----------------------------------------------------------------
+
+handheld_controller::Outcome handheldAccept(const uint8_t *datagram, int length, handheld_controller::Sender sender)
+{
+  portENTER_CRITICAL(&lock);
+  // Stamped inside the lock, where the link task judges liveness against a
+  // time it also takes there: a stamp taken before the lock could be older
+  // than a judgement made in between, and end a session the datagram keeps
+  // live. The UDP task calls this as soon as recvfrom returns.
+  handheld_controller::Outcome o = handheld_controller::accept(handheld, datagram, length, sender, millis());
+  portEXIT_CRITICAL(&lock);
+  return o;
+}
+
+bool handheldBudgetSpent(uint32_t nowMs)
+{
+  portENTER_CRITICAL(&lock);
+  bool spent = handheld_controller::budgetSpent(handheld, nowMs);
+  portEXIT_CRITICAL(&lock);
+  return spent;
+}
+
+int handheldTakeRelay(uint8_t *out, handheld_controller::Sender &to)
+{
+  portENTER_CRITICAL(&lock);
+  int n = relay_queue::takeFor(relay, handheld, millis(), out, to);
+  portEXIT_CRITICAL(&lock);
+  return n;
+}
+
+void handheldView(HandheldView &out)
+{
+  portENTER_CRITICAL(&lock);
+  uint32_t nowMs = millis();
+  // Judged on a copy, so a view has no effect on the frames or the relay.
+  handheld_controller::Controller c = handheld;
+  out.state = handheld_controller::state(c, nowMs);
+  out.desired = handheld_controller::desired(c, nowMs);
+  out.emergencyStop = handheld_controller::emergencyStop(c);
+  for (int i = 0; i < handheld_controller::OUTCOME_COUNT; i++)
+    out.counts[i] = handheld_controller::count(c, (handheld_controller::Outcome)i);
+  out.relayDropped = relay_queue::dropped(relay);
   portEXIT_CRITICAL(&lock);
 }
 

@@ -15,8 +15,10 @@
 #include <arduino_platform.h>
 #include <uni.h>
 
-// Spooder: the setup-mode boot path (setup_mode.cpp).
+// Spooder: the setup-mode and WiFi drive boot paths (setup_mode.cpp,
+// wifi_drive.cpp).
 #include "setup_mode.h"
+#include "wifi_drive.h"
 
 //
 // Autostart
@@ -28,11 +30,16 @@ void initBluepad32()
 int app_main(void)
 {
 #endif // !CONFIG_AUTOSTART_ARDUINO
-  // Spooder: setup mode skips BTstack and Bluepad32 entirely, so Bluetooth
-  // never starts; the bridge leaves setup mode only by restarting.
-  if (setup_mode_requested())
+  // Spooder: the boot mode is decided once, before either radio starts.
+  // Setup mode and WiFi drive skip BTstack and Bluepad32 entirely, so
+  // Bluetooth never starts; the bridge leaves either only by restarting.
+  enum bridge_boot_mode boot = bridge_boot_mode_select(setup_mode_requested());
+  if (boot != BRIDGE_BOOT_BLUETOOTH)
   {
-    setup_mode_start();
+    if (boot == BRIDGE_BOOT_SETUP)
+      setup_mode_start();
+    else
+      wifi_drive_start();
 #if !CONFIG_AUTOSTART_ARDUINO
     return 0;
 #else

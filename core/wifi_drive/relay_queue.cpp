@@ -38,6 +38,36 @@ void clear(Queue &q)
   q.count = 0;
 }
 
+// A change of session empties the queue.
+static void sync(Queue &q, handheld_controller::Controller &c, uint32_t nowMs)
+{
+  uint32_t e = handheld_controller::epoch(c, nowMs);
+  if (e != q.epoch)
+  {
+    clear(q);
+    q.epoch = e;
+  }
+}
+
+bool relayFor(Queue &q, handheld_controller::Controller &c, uint32_t nowMs, const uint8_t *bytes, int length)
+{
+  sync(q, c, nowMs);
+  if (!handheld_controller::live(c, nowMs))
+    return false;
+  return push(q, bytes, length);
+}
+
+int takeFor(Queue &q, handheld_controller::Controller &c, uint32_t nowMs, uint8_t *out, handheld_controller::Sender &to)
+{
+  sync(q, c, nowMs);
+  if (!handheld_controller::relayTarget(c, nowMs, to))
+  {
+    clear(q); // nothing goes out without a live session
+    return 0;
+  }
+  return take(q, out);
+}
+
 int size(const Queue &q)
 {
   return q.count;

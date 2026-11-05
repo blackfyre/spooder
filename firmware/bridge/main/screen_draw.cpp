@@ -216,6 +216,15 @@ void drawPower(lgfx::LovyanGFX &g, int y0, const status_screen::PowerBody &p, co
 void drawLink(lgfx::LovyanGFX &g, int y0, const status_screen::LinkBody &l)
 {
   ground(g, BODY, y0);
+  // WiFi drive fills the network lines (status_screen::composeLink) in place
+  // of the gamepad line: seven rows in the smaller font instead of five.
+  if (l.network.text[0] != '\0')
+  {
+    const status_screen::Text *rows[] = {&l.robot, &l.bridge, &l.age, &l.source, &l.network, &l.password, &l.handheld};
+    for (int i = 0; i < 7; i++)
+      text(g, mono10, rows[i]->text, toneColour(rows[i]->tone), bf::INK, PAD, y0 + 1 + i * 11);
+    return;
+  }
   const status_screen::Text *rows[] = {&l.robot, &l.bridge, &l.age, &l.source, &l.gamepad};
   for (int i = 0; i < 5; i++)
     text(g, mono12, rows[i]->text, toneColour(rows[i]->tone), bf::INK, PAD, y0 + 1 + i * 16);

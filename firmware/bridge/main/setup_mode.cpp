@@ -51,6 +51,7 @@ constexpr int MAX_STATIONS = 1;
 constexpr int WIFI_CHANNEL = 1;
 constexpr uint32_t EXIT_DELAY_MS = 300; // lets the reply to Exit go out first
 constexpr uint32_t TASK_PERIOD_MS = 2;
+static const char PASSWORD_KEY[] = "ap_pass"; // in NVS namespace "spooder"
 
 static char ssid[access_point::SSID_SIZE];
 static char password[access_point::PASSWORD_LENGTH + 1];
@@ -64,26 +65,25 @@ static DNSServer *dns;
 static bool exitRequested;
 static uint32_t exitAtMs;
 
-// The password: made once from the hardware random source, then kept in NVS.
-static void loadPassword()
+void loadPassword(const char *key, char out[access_point::PASSWORD_LENGTH + 1])
 {
   Preferences prefs;
   prefs.begin("spooder", false);
-  String stored = prefs.getString("ap_pass", "");
+  String stored = prefs.getString(key, "");
   if (access_point::validPassword(stored.c_str()))
   {
     // validPassword checked the length; the precision tells the compiler.
-    snprintf(password, sizeof(password), "%.*s", access_point::PASSWORD_LENGTH, stored.c_str());
+    snprintf(out, access_point::PASSWORD_LENGTH + 1, "%.*s", access_point::PASSWORD_LENGTH, stored.c_str());
   }
   else
   {
     // WiFi is not running yet, so the RNG needs this entropy source to be
     // truly random.
     bootloader_random_enable();
-    access_point::makePassword(esp_random, password);
+    access_point::makePassword(esp_random, out);
     bootloader_random_disable();
-    prefs.putString("ap_pass", password);
-    printf("setup mode: new access point password stored\n");
+    prefs.putString(key, out);
+    printf("new access point password stored (%s)\n", key);
   }
   prefs.end();
 }
@@ -343,7 +343,7 @@ void setup_mode_start(void)
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
   access_point::ssid(mac, ssid);
-  loadPassword();
+  loadPassword(PASSWORD_KEY, password);
   access_point::joinCode(ssid, password, joinCode, sizeof(joinCode));
 
   display::setupStart(joinCode);

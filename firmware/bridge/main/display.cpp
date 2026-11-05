@@ -289,7 +289,8 @@ static bool same(const status_screen::DriveBody &a, const status_screen::DriveBo
 static bool same(const status_screen::LinkBody &a, const status_screen::LinkBody &b)
 {
   return same(a.robot, b.robot) && same(a.bridge, b.bridge) && same(a.age, b.age) && same(a.source, b.source) &&
-         same(a.gamepad, b.gamepad);
+         same(a.gamepad, b.gamepad) && same(a.network, b.network) && same(a.password, b.password) &&
+         same(a.handheld, b.handheld);
 }
 
 static power_history::History history;
@@ -299,7 +300,7 @@ static status_screen::View shownView;
 static uint32_t historyMarkShown; // count + next: changes with every sample
 
 void update(uint32_t nowMs, bool gamepadConnected, uint8_t gamepadBattery, page_button::Page page,
-            const gamepad_mapping::Desired &desired, const robot_link::Status &linkStatus)
+            const gamepad_mapping::Desired &desired, const robot_link::Status &linkStatus, const Drive &drive)
 {
   // The history and rates run whatever is shown.
   power_history::record(history, nowMs, linkStatus.telemetryFresh, linkStatus.telemetry.voltageMv,
@@ -331,6 +332,11 @@ void update(uint32_t nowMs, bool gamepadConnected, uint8_t gamepadBattery, page_
   in.history = &history;
   in.currentPeak = currentPeak;
   in.voltageLow = voltageLow;
+  in.driveMode = drive.mode;
+  in.handheld = drive.handheld;
+  in.network = drive.network;
+  in.password = drive.password;
+  in.switchNotice = drive.switchNotice;
   static status_screen::View view; // too large for loop()'s stack
   status_screen::composePage(in, page, view);
 

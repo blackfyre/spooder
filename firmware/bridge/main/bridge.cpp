@@ -16,6 +16,8 @@
 #include "setup/setup_entry.h"
 #include "status/page_button.h"
 #include "setup_mode.h"
+#include "wifi_drive.h"
+#include "wifi_drive/drive_mode.h"
 
 // The mapping's button bits are Bluepad32's.
 static_assert(gamepad_mapping::BUTTON_A == BUTTON_A && gamepad_mapping::BUTTON_B == BUTTON_B &&
@@ -41,6 +43,8 @@ static rumble::State rumbleState;
 constexpr int SETUP_BUTTON_PIN = 0;
 static setup_entry::Hold setupHold;
 static page_button::State pageButton;
+// The drive mode switch, sampled for the restart notice only.
+static drive_mode::Notice switchNotice;
 
 static void onConnected(ControllerPtr ctl)
 {
@@ -135,7 +139,10 @@ void loop()
     controller->playDualRumble(0, r.durationMs, r.weak, r.strong);
 
   uint8_t battery = pad.connected ? controller->battery() : 0; // 0: not reported
-  display::update(now, pad.connected, battery, pageButton.page, desired, link);
+  display::Drive drive = {};
+  drive.mode = drive_mode::Mode::Bluetooth;
+  drive.switchNotice = drive_mode::update(switchNotice, drive_mode::Mode::Bluetooth, drive_switch_closed(), now);
+  display::update(now, pad.connected, battery, pageButton.page, desired, link, drive);
 
   // Yield so the idle task runs (watchdog) between gamepad updates.
   delay(1);

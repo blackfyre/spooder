@@ -16,6 +16,10 @@
 #include <stdbool.h>
 
 #ifdef __cplusplus
+#include "setup/access_point.h"
+#endif
+
+#ifdef __cplusplus
 extern "C"
 {
 #endif
@@ -42,6 +46,13 @@ namespace setup_mode
  * @brief Sets the RTC magic and restarts the bridge into setup mode.
  */
 [[noreturn]] void restartIntoSetup();
+
+/**
+ * @brief Loads an access point's password from NVS under @p key, or makes
+ * one from the hardware random source and stores it. Call before WiFi
+ * starts (the random source needs the bootloader's entropy then).
+ */
+void loadPassword(const char *key, char out[access_point::PASSWORD_LENGTH + 1]);
 
 } // namespace setup_mode
 #endif

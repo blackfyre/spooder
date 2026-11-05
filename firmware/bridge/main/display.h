@@ -14,6 +14,8 @@
 #include "gamepad_mapping/gamepad_mapping.h"
 #include "link.h"
 #include "status/page_button.h"
+#include "wifi_drive/drive_mode.h"
+#include "wifi_drive/handheld_controller.h"
 
 namespace display
 {
@@ -34,13 +36,24 @@ void setup(const char *buildId);
  */
 void bootMessage(const char *text, bool ok = true);
 
+// The running drive mode's part of the status screen.
+struct Drive
+{
+  drive_mode::Mode mode; // zero: Bluetooth drive
+  // WiFi drive only.
+  handheld_controller::State handheld;
+  const char *network;  // the access point's network name
+  const char *password; // its password
+  bool switchNotice;    // the switch selects the other drive mode
+};
+
 /**
  * @brief Records the power history and link rates, and redraws @p page when
- * due. Call on every loop() pass. @p gamepadBattery is Bluepad32's level
- * (0 = not reported).
+ * due. Call on every pass of the drive mode's screen loop. @p gamepadBattery
+ * is Bluepad32's level (0 = not reported).
  */
 void update(uint32_t nowMs, bool gamepadConnected, uint8_t gamepadBattery, page_button::Page page,
-            const gamepad_mapping::Desired &desired, const robot_link::Status &linkStatus);
+            const gamepad_mapping::Desired &desired, const robot_link::Status &linkStatus, const Drive &drive);
 
 /**
  * @brief True once the status screen is shown (the start-up sequence is over):

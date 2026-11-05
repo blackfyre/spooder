@@ -18,6 +18,7 @@ idf_component_register(
     "screen_draw.cpp"
     "link.cpp"
     "setup_mode.cpp"
+    "wifi_drive.cpp"
     "${SPOODER_BUILD_IDENTITY_SOURCE}"
     "${SPOODER_CORE}/gamepad_mapping/gamepad_mapping.cpp"
     "${SPOODER_CORE}/gamepad_mapping/rumble.cpp"
@@ -32,6 +33,9 @@ idf_component_register(
     "${SPOODER_CORE}/status/peak_hold.cpp"
     "${SPOODER_CORE}/status/power_history.cpp"
     "${SPOODER_CORE}/status/status_screen.cpp"
+    "${SPOODER_CORE}/wifi_drive/drive_mode.cpp"
+    "${SPOODER_CORE}/wifi_drive/handheld_controller.cpp"
+    "${SPOODER_CORE}/wifi_drive/relay_queue.cpp"
   INCLUDE_DIRS "." "${SPOODER_CORE}"
   REQUIRES bluepad32 bluepad32_arduino arduino btstack LovyanGFX bootloader_support bt
 )

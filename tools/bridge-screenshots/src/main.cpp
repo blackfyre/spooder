@@ -81,7 +81,7 @@ int main(int argc, char **argv)
   static power_history::History history;
   benchMinute(history);
 
-  Shot shots[7];
+  Shot shots[9];
   shots[0] = {"bridge-drive", Page::Drive, healthy()};
   shots[1] = {"bridge-power", Page::Power, healthy()};
   shots[1].in.history = &history;
@@ -110,6 +110,18 @@ int main(int argc, char **argv)
   shots[6].in.telemetry.voltageMv = 5540;
   shots[6].in.currentPeak = {true, 4300, 0, 0, true, 0};
   shots[6].in.voltageLow = {true, 5540, 0, 0, true, 0};
+  // WiFi drive: a handheld in control, then the link page before one joins.
+  shots[7] = {"bridge-wifi-drive", Page::Drive, healthy()};
+  shots[7].in.gamepadConnected = false;
+  shots[7].in.gamepadBattery = 0;
+  shots[7].in.driveMode = drive_mode::Mode::Wifi;
+  shots[7].in.handheld = handheld_controller::State::InControl;
+  shots[7].in.network = "spooder-drive-3f2a";
+  shots[7].in.password = "k7m2qw9xhe";
+  shots[8] = {"bridge-wifi-link", Page::Link, shots[7].in};
+  shots[8].in.handheld = handheld_controller::State::None;
+  shots[8].in.telemetry.bodyMode = 3; // Sleep: no handheld, no controller
+  shots[8].in.telemetry.outputsOn = false;
 
   LGFX_Sprite screen;
   screen.setColorDepth(16);

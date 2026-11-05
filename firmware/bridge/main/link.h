@@ -10,10 +10,17 @@
 // counts at once, and sends at most one calibration set per period after the
 // command frame. The HTTP handlers reach both only through the portal
 // functions below.
+//
+// In WiFi drive (startHandheld) the task takes its desired state from the
+// handheld controller, judged at each period so a stalled UDP task counts
+// as a lapse at once, ORs the handheld's e-stop flag with its own toggle,
+// and queues every frame it decodes for the relay to the handheld. The UDP
+// task reaches both only through the handheld functions below.
 #include <stdint.h>
 #include "gamepad_mapping/gamepad_mapping.h"
 #include "protocol/protocol.h"
 #include "setup/calibration_sync.h"
+#include "wifi_drive/handheld_controller.h"
 
 namespace robot_link
 {
@@ -47,6 +54,12 @@ void start();
  * the portal controller, and calibration edits go out as calibration sets.
  */
 void startPortal();
+
+/**
+ * @brief Starts UART1 and the link task in WiFi drive: commands come from
+ * the handheld controller, and the robot's frames are queued for the relay.
+ */
+void startHandheld();
 
 /**
  * @brief Hands the newest desired state to the link task (normal operation).
@@ -88,6 +101,41 @@ struct PortalView
  * @brief Copies the portal state, for the HTTP handlers and the screen.
  */
 void portalView(PortalView &out);
+
+// --- WiFi drive: the UDP task's side ----------------------------------------
+
+/**
+ * @brief Hands one datagram from @p sender, just received, to the handheld
+ * controller (handheld_controller::accept), stamped inside the lock.
+ */
+handheld_controller::Outcome handheldAccept(const uint8_t *datagram, int length, handheld_controller::Sender sender);
+
+/**
+ * @brief True when the rate window holding @p nowMs has no budget left.
+ */
+bool handheldBudgetSpent(uint32_t nowMs);
+
+/**
+ * @brief Takes the oldest frame waiting for the relay, and where to send it.
+ * With no live session the waiting frames are dropped.
+ * @param out at least protocol::MAX_FRAME_SIZE bytes
+ * @return its length, or 0 when there is nothing to send
+ */
+int handheldTakeRelay(uint8_t *out, handheld_controller::Sender &to);
+
+struct HandheldView
+{
+  handheld_controller::State state;
+  gamepad_mapping::Desired desired; // what the command frames request
+  bool emergencyStop;               // the handheld's e-stop flag
+  uint32_t counts[handheld_controller::OUTCOME_COUNT];
+  uint32_t relayDropped; // robot frames dropped because the relay was full
+};
+
+/**
+ * @brief Copies the handheld state, for the screen and the console.
+ */
+void handheldView(HandheldView &out);
 
 /**
  * @brief The link state now. Freshness is judged inside the lock, against a
