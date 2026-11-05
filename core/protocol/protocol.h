@@ -29,8 +29,8 @@ enum class FrameType : uint8_t
   Telemetry = 2,
   CalibrationSet = 3,
   CalibrationReport = 4,
-  Pose = 5,        // robot to USB host only
-  Diagnostics = 6, // robot to USB host only
+  Pose = 5,        // robot to every link (the bridge ignores it)
+  Diagnostics = 6, // robot to every link (the bridge ignores it)
 };
 
 constexpr int HEADER_SIZE = 5;
@@ -171,14 +171,14 @@ struct PoseJoint
   uint16_t pulseUs;          // last pulse set for the output; 0 = never set
 };
 
-// Robot to the USB host only, at 10 Hz: what the robot commands each joint.
+// Robot to every link, at 10 Hz: what the robot commands each joint.
 struct Pose
 {
   uint8_t flags;                        // POSE_* bits
   PoseJoint joints[CALIBRATION_JOINTS]; // servo output order
 };
 
-// Robot to the USB host only, at 10 Hz: the robot's internals over the last
+// Robot to every link, at 10 Hz: the robot's internals over the last
 // telemetry window (five ticks), and its configured limits.
 struct Diagnostics
 {

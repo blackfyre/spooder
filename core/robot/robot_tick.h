@@ -13,8 +13,9 @@
 //   applied calibration follows the requested table at the rate limit
 //   body step with the applied offsets; servo output
 //   status LEDs
-//   every fifth tick: telemetry on both links; two ticks later the pose on
-//   USB; calibration reports when due
+//   every fifth tick: telemetry on both links; two ticks later the pose, and
+//   four ticks later the diagnostics, on both links; calibration reports when
+//   due
 //   once a second (or on request in --serial builds): the status line
 // Before all of it, on the first tick and on each tick that sees a USB host
 // connect: the build banner, `spooder robot: build <identity>`.
@@ -44,10 +45,10 @@ constexpr int TELEMETRY_EVERY_TICKS = 5; // 100 ms
 // Legs switched on per tick once servo output switches on, so the servos'
 // start surges do not coincide: legs 1-2, then 3-4, then 5-6.
 constexpr int SWITCH_ON_LEGS_PER_TICK = 2;
-// Pose frames (USB only) at the telemetry rate, two ticks after it, so the
-// two never share one tick's USB transmit buffer.
+// Pose frames, on every link, at the telemetry rate, two ticks after it, so
+// the two never share one tick's transmit buffer.
 constexpr int POSE_TICK = 2;
-// Diagnostics frames (USB only) likewise, four ticks after telemetry.
+// Diagnostics frames, on every link, likewise, four ticks after telemetry.
 constexpr int DIAGNOSTICS_TICK = 4;
 // Longest debug text line, including the newline.
 constexpr int MAX_LOG_LINE = 160;

@@ -515,26 +515,117 @@ void test_walking_up_to_the_default_dial_never_engages_the_backstop()
 
 // --- diagnostics -----------------------------------------------------------------
 
-// Spec "Diagnostics frame on USB only": once per telemetry period, on its own
-// tick, never on the bridge link.
-void test_diagnostics_on_usb_only_on_their_own_tick()
+// Spec "Diagnostics frame on both links": once per telemetry period on each
+// link, on its own tick, with the same values on both.
+void test_diagnostics_on_both_links_on_their_own_tick()
 {
   standOnUsb();
   bridge().active = true;
-  board.frames[(int)Link::Usb].clear();
+  for (std::vector<SentFrame> &v : board.frames)
+    v.clear();
   ticks(50);
-  int diagnostics = 0;
-  for (const SentFrame &f : board.frames[(int)Link::Usb])
+  for (int l = 0; l < LINK_COUNT; l++)
   {
-    if (f.frame.type != protocol::FrameType::Diagnostics)
-      continue;
-    diagnostics++;
-    for (const SentFrame &g : board.frames[(int)Link::Usb])
-      if (g.tick == f.tick && g.frame.type != protocol::FrameType::Diagnostics)
-        TEST_FAIL_MESSAGE("diagnostics share a tick with another frame");
+    int diagnostics = 0;
+    for (const SentFrame &f : board.frames[l])
+    {
+      if (f.frame.type != protocol::FrameType::Diagnostics)
+        continue;
+      diagnostics++;
+      for (const SentFrame &g : board.frames[l])
+        if (g.tick == f.tick && g.frame.type != protocol::FrameType::Diagnostics)
+          TEST_FAIL_MESSAGE("diagnostics share a tick with another frame");
+    }
+    TEST_ASSERT_EQUAL(10, diagnostics);
   }
-  TEST_ASSERT_EQUAL(10, diagnostics);
-  TEST_ASSERT_EQUAL(0, countOf(Link::Bridge, protocol::FrameType::Diagnostics));
+  std::vector<const SentFrame *> on[LINK_COUNT];
+  for (int l = 0; l < LINK_COUNT; l++)
+    for (const SentFrame &f : board.frames[l])
+      if (f.frame.type == protocol::FrameType::Diagnostics)
+        on[l].push_back(&f);
+  for (size_t i = 0; i < on[0].size(); i++)
+  {
+    const protocol::Diagnostics &b = on[(int)Link::Bridge][i]->frame.diagnostics;
+    const protocol::Diagnostics &u = on[(int)Link::Usb][i]->frame.diagnostics;
+    TEST_ASSERT_EQUAL(on[(int)Link::Bridge][i]->tick, on[(int)Link::Usb][i]->tick);
+    TEST_ASSERT_EQUAL_MEMORY(&b, &u, sizeof b);
+  }
+  TEST_ASSERT_EQUAL(0, (int)board.decoders[(int)Link::Bridge].discardedFrames());
+}
+
+// Both links' frames of one window carry its five ticks: the window is read
+// and restarted once, not once per link.
+void test_diagnostics_window_is_the_same_on_both_links()
+{
+  standOnUsb();
+  while (board.frames[(int)Link::Usb].empty() ||
+         board.frames[(int)Link::Usb].back().frame.type != protocol::FrameType::Diagnostics)
+    tick();
+  const uint32_t times[5] = {1000, 2000, 3000, 4000, 5000};
+  for (uint32_t us : times)
+  {
+    tickUs = us;
+    tick();
+  }
+  tickUs = 9000;
+  tick();
+  for (int l = 0; l < LINK_COUNT; l++)
+  {
+    const protocol::Frame *f = lastOf((Link)l, protocol::FrameType::Diagnostics);
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_EQUAL(5000, f->diagnostics.tickMaxUs);
+    TEST_ASSERT_EQUAL(3000, f->diagnostics.tickMeanUs);
+  }
+}
+
+// Spec "Host not reading" and "Bridge link full": a refusal on one link does
+// not stop the pose or the diagnostics on the other.
+void test_refusal_on_one_link_does_not_stop_the_other()
+{
+  standOnUsb();
+  for (int refused = 0; refused < LINK_COUNT; refused++)
+  {
+    int other = 1 - refused;
+    board.refuse[refused] = true;
+    board.refuse[other] = false;
+    int pose = countOf((Link)other, protocol::FrameType::Pose);
+    int diagnostics = countOf((Link)other, protocol::FrameType::Diagnostics);
+    ticks(50);
+    TEST_ASSERT_EQUAL(10, countOf((Link)other, protocol::FrameType::Pose) - pose);
+    TEST_ASSERT_EQUAL(10, countOf((Link)other, protocol::FrameType::Diagnostics) - diagnostics);
+  }
+}
+
+// Spec "Both links refusing, then recovering": the first frame after the
+// recovery reports only the five ticks before it.
+void test_diagnostics_after_both_links_refused_report_one_window()
+{
+  standOnUsb();
+  while (board.frames[(int)Link::Usb].empty() ||
+         board.frames[(int)Link::Usb].back().frame.type != protocol::FrameType::Diagnostics)
+    tick();
+  board.refuse[0] = board.refuse[1] = true;
+  tickUs = 9000; // only in the refused windows
+  ticks(15);     // three diagnostics frames refused on both links
+  board.refuse[0] = board.refuse[1] = false;
+  const uint32_t times[5] = {1000, 2000, 3000, 4000, 5000};
+  for (uint32_t us : times)
+  {
+    tickUs = us;
+    tick();
+  }
+  tickUs = 9000;
+  tick();
+  for (int l = 0; l < LINK_COUNT; l++)
+  {
+    int n = 0;
+    for (const SentFrame &f : board.frames[l])
+      n += f.frame.type == protocol::FrameType::Diagnostics && f.tick > board.tickNo - 6;
+    TEST_ASSERT_EQUAL(1, n);
+    const protocol::Frame *f = lastOf((Link)l, protocol::FrameType::Diagnostics);
+    TEST_ASSERT_EQUAL(5000, f->diagnostics.tickMaxUs);
+    TEST_ASSERT_EQUAL(3000, f->diagnostics.tickMeanUs);
+  }
 }
 
 // Spec "Diagnostics frame contents": the window's tick times, the motion
@@ -766,25 +857,38 @@ void test_telemetry_every_fifth_tick_on_both_links()
   }
 }
 
-void test_pose_on_usb_two_ticks_after_telemetry()
+// Spec "Pose frame on both links": on each link at the telemetry rate, two
+// ticks after telemetry, never on a telemetry or diagnostics tick.
+void test_pose_on_both_links_two_ticks_after_telemetry()
 {
   standOnUsb();
+  bridge().active = true;
   board.pulses[0] = 1500;
-  int before = countOf(Link::Usb, protocol::FrameType::Pose);
+  int before[LINK_COUNT];
+  for (int l = 0; l < LINK_COUNT; l++)
+    before[l] = countOf((Link)l, protocol::FrameType::Pose);
   ticks(50);
-  TEST_ASSERT_EQUAL(10, countOf(Link::Usb, protocol::FrameType::Pose) - before);
-  TEST_ASSERT_EQUAL(0, countOf(Link::Bridge, protocol::FrameType::Pose));
-  int lastTelemetry = -1;
-  for (const SentFrame &f : board.frames[(int)Link::Usb])
+  for (int l = 0; l < LINK_COUNT; l++)
   {
-    if (f.frame.type == protocol::FrameType::Telemetry)
-      lastTelemetry = f.tick;
-    else if (f.frame.type == protocol::FrameType::Pose && lastTelemetry >= 0)
-      TEST_ASSERT_EQUAL(lastTelemetry + POSE_TICK, f.tick);
+    TEST_ASSERT_EQUAL(10, countOf((Link)l, protocol::FrameType::Pose) - before[l]);
+    int lastTelemetry = -1;
+    for (const SentFrame &f : board.frames[l])
+    {
+      if (f.frame.type == protocol::FrameType::Telemetry)
+        lastTelemetry = f.tick;
+      else if (f.frame.type == protocol::FrameType::Pose && lastTelemetry >= 0)
+        TEST_ASSERT_EQUAL(lastTelemetry + POSE_TICK, f.tick);
+    }
+    for (const SentFrame &f : board.frames[l])
+      if (f.frame.type == protocol::FrameType::Pose)
+        for (const SentFrame &g : board.frames[l])
+          if (g.tick == f.tick && g.frame.type != protocol::FrameType::Pose)
+            TEST_FAIL_MESSAGE("pose shares a tick with another frame");
+    const protocol::Frame *p = lastOf((Link)l, protocol::FrameType::Pose);
+    TEST_ASSERT_EQUAL(1500, p->pose.joints[0].pulseUs);
+    TEST_ASSERT_EQUAL_HEX8(protocol::POSE_OUTPUTS_ON, p->pose.flags & protocol::POSE_OUTPUTS_ON);
   }
-  const protocol::Frame *p = lastOf(Link::Usb, protocol::FrameType::Pose);
-  TEST_ASSERT_EQUAL(1500, p->pose.joints[0].pulseUs);
-  TEST_ASSERT_EQUAL_HEX8(protocol::POSE_OUTPUTS_ON, p->pose.flags & protocol::POSE_OUTPUTS_ON);
+  TEST_ASSERT_EQUAL(0, (int)board.decoders[(int)Link::Bridge].discardedFrames());
 }
 
 void test_telemetry_reports_each_links_own_frame_counts()
@@ -836,7 +940,9 @@ void test_sequence_numbers_advance_only_for_sent_frames()
   const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
   TEST_ASSERT_NOT_NULL(t);
   TEST_ASSERT_EQUAL(2, t->seq);
-  TEST_ASSERT_EQUAL(3, lastOf(Link::Bridge, protocol::FrameType::Telemetry)->seq + 1);
+  // The bridge sent all nine: telemetry, pose and diagnostics three times.
+  TEST_ASSERT_EQUAL(9, (int)board.frames[(int)Link::Bridge].size());
+  TEST_ASSERT_EQUAL(8, lastOf(Link::Bridge, protocol::FrameType::Telemetry)->seq);
 }
 
 void test_refused_report_is_retried()
@@ -1013,7 +1119,10 @@ int main()
   RUN_TEST(test_banner_again_on_each_connect);
   RUN_TEST(test_banner_is_the_first_line_of_its_tick);
   RUN_TEST(test_banner_due_matches_the_banner);
-  RUN_TEST(test_diagnostics_on_usb_only_on_their_own_tick);
+  RUN_TEST(test_diagnostics_on_both_links_on_their_own_tick);
+  RUN_TEST(test_diagnostics_window_is_the_same_on_both_links);
+  RUN_TEST(test_refusal_on_one_link_does_not_stop_the_other);
+  RUN_TEST(test_diagnostics_after_both_links_refused_report_one_window);
   RUN_TEST(test_diagnostics_contents);
   RUN_TEST(test_diagnostics_window_holds_the_five_previous_ticks);
   RUN_TEST(test_diagnostics_report_the_budget_slowing_walking);
@@ -1031,7 +1140,7 @@ int main()
   RUN_TEST(test_calibration_set_rejected_outside_calibrate);
   RUN_TEST(test_calibration_set_accepted_in_calibrate_and_applied_at_the_rate_limit);
   RUN_TEST(test_telemetry_every_fifth_tick_on_both_links);
-  RUN_TEST(test_pose_on_usb_two_ticks_after_telemetry);
+  RUN_TEST(test_pose_on_both_links_two_ticks_after_telemetry);
   RUN_TEST(test_telemetry_reports_each_links_own_frame_counts);
   RUN_TEST(test_reports_in_calibrate_at_one_hertz_and_none_otherwise);
   RUN_TEST(test_reports_after_sets_no_more_than_five_per_second);

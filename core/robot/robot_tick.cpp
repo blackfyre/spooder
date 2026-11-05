@@ -160,16 +160,20 @@ static bool sendCalibrationReportOn(RobotState &s, Link link, Hardware &hw)
   return true;
 }
 
-// USB only: the bridge link has no pose.
-static bool sendPose(RobotState &s, Hardware &hw)
+// Encodes @p pose and sends it on every link, the bridge then USB; each link's
+// sequence number advances only if it was sent there, and a refusal on one
+// link does not stop the other.
+static void sendPose(RobotState &s, const protocol::Pose &pose, Hardware &hw)
 {
-  LinkEndpoint &e = s.links[(int)Link::Usb];
-  uint8_t frame[protocol::MAX_FRAME_SIZE];
-  int n = protocol::encodePose(link_receiver::makePose(s.body, hw.servoPulses(), hw.servosOn()), e.txSeq, frame);
-  if (!hw.sendFrame(Link::Usb, frame, n))
-    return false;
-  e.txSeq++;
-  return true;
+  for (int i = 0; i < LINK_COUNT; i++) // the bridge, then USB
+  {
+    Link link = (Link)i;
+    LinkEndpoint &e = s.links[(int)link];
+    uint8_t frame[protocol::MAX_FRAME_SIZE];
+    int n = protocol::encodePose(pose, e.txSeq, frame);
+    if (hw.sendFrame(link, frame, n))
+      e.txSeq++;
+  }
 }
 
 static uint16_t clamp16(float v)
@@ -203,15 +207,20 @@ static protocol::Diagnostics windowDiagnostics(RobotState &s, const protection::
   return d;
 }
 
-static bool sendDiagnostics(RobotState &s, const protection::Result &p, Hardware &hw)
+// Sends @p d on every link, as sendPose does. The caller builds @p d once per
+// diagnostics tick (windowDiagnostics restarts the window), so both links
+// carry the same window and a refused frame's window is not retried.
+static void sendDiagnostics(RobotState &s, const protocol::Diagnostics &d, Hardware &hw)
 {
-  LinkEndpoint &e = s.links[(int)Link::Usb];
-  uint8_t frame[protocol::MAX_FRAME_SIZE];
-  int n = protocol::encodeDiagnostics(windowDiagnostics(s, p), e.txSeq, frame);
-  if (!hw.sendFrame(Link::Usb, frame, n))
-    return false;
-  e.txSeq++;
-  return true;
+  for (int i = 0; i < LINK_COUNT; i++) // the bridge, then USB
+  {
+    Link link = (Link)i;
+    LinkEndpoint &e = s.links[(int)link];
+    uint8_t frame[protocol::MAX_FRAME_SIZE];
+    int n = protocol::encodeDiagnostics(d, e.txSeq, frame);
+    if (hw.sendFrame(link, frame, n))
+      e.txSeq++;
+  }
 }
 
 // @p gesture is the gesture being played, 0 when none or the body is stopped.
@@ -534,9 +543,9 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
                     run.runBody ? body::playingGesture(s.body) : 0, hw);
     }
     if (s.telemetryTick == POSE_TICK)
-      sendPose(s, hw);
+      sendPose(s, link_receiver::makePose(s.body, hw.servoPulses(), hw.servosOn()), hw);
     if (s.telemetryTick == DIAGNOSTICS_TICK)
-      sendDiagnostics(s, prot, hw);
+      sendDiagnostics(s, windowDiagnostics(s, prot), hw); // the window restarts once
 
     // In Calibrate, front-ends follow the table through these reports.
     bool calibrating = run.runBody && s.body.mode == body::Mode::Calibrate;

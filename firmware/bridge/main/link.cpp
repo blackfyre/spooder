@@ -115,6 +115,9 @@ static void takeFrames(uint32_t now)
         calibration_sync::onReport(calibration, f.calibrationReport);
       portEXIT_CRITICAL(&lock);
     }
+    // Pose and diagnostics frames arrive too (the robot sends them on every
+    // link); the decoder counts them as accepted and they are ignored here,
+    // in both modes, until add-wifi-drive relays them.
   }
 }
 

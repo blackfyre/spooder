@@ -22,11 +22,18 @@ static volatile uint32_t rxHead; // written by the interrupt
 static volatile uint32_t rxTail; // written by read()
 static volatile uint32_t rxDropped;
 
-// Transmit queue of whole frames, fed to the FIFO by the interrupt. Holds a
-// calibration report and a telemetry frame at once.
+// Transmit queue of whole frames, fed to the FIFO by the interrupt. Each tick
+// queues at most one of telemetry, the pose or the diagnostics (on their own
+// ticks) and a calibration report when due; the largest pair, a report and a
+// pose frame (252 B), fits when the tick starts with the queue empty. At
+// 115,200 baud it drains in about 22 ms, and reports on a link are at least
+// ten ticks apart, so every tick starts with at most about 22 B queued and
+// nothing is refused in steady state.
 constexpr uint32_t TX_QUEUE_SIZE = 256; // power of two
 static_assert(TX_QUEUE_SIZE >= protocol::CALIBRATION_REPORT_FRAME_SIZE + protocol::TELEMETRY_FRAME_SIZE,
               "a report and a telemetry frame fit together");
+static_assert(TX_QUEUE_SIZE >= protocol::CALIBRATION_REPORT_FRAME_SIZE + protocol::POSE_FRAME_SIZE,
+              "a report and a pose frame fit together");
 static volatile uint8_t txBuf[TX_QUEUE_SIZE];
 static volatile uint32_t txHead; // written by queueFrame()
 static volatile uint32_t txTail; // written by the interrupt (and queueFrame() with it masked)
