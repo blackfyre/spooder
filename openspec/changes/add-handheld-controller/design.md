@@ -117,7 +117,11 @@ A `handheld` job on the Ubuntu runner: `apt-get install` of `libsdl2-dev libsdl2
 
 ## Assumptions
 
-- The nested-module import of `desktop/internal/...` is allowed by the go command (D1); the fallback is stated there.
+- The nested-module import of `desktop/internal/...` is allowed by the go command (D1); the fallback is stated there. Confirmed by task 1.2: `desktop/handheld/internal/padmap` imports `desktop/internal/protocol` and builds, with no `go.sum` entries needed, so the fallback is not taken.
+- The handheld layer (D2) also masks, until released, every control held when driving begins (`Handheld.Begin`) and when the neutral pad of a leave ends (a return from suspend), L2 and R2 included: otherwise the port would see a button held through the start or the suspend as a fresh press (a Y held through a resume toggling Sleep off, L2 + R2 starting the ball gesture). Held controls never fire Select + Start or Select + Y either.
+- SDL stick axes are scaled to Bluepad32 units each half on its own (`v * 512 / 32767` for v ≥ 0, `v * 511 / 32768` below), so −32768, 0 and 32767 map to −511, 0 and 512.
+- The Go port keeps the C++'s float32 arithmetic, with the stick magnitude's products converted to float32 explicitly so the Go compiler cannot fuse them into a multiply-add on arm64; `go test` of `padmap` passes on amd64 and on arm64 (under qemu-user).
+- `test/test_gamepad_mapping_golden` and the Go golden test read another copy of the golden file when `SPOODER_GAMEPAD_GOLDEN` names one, so a changed expected value can be shown to fail without editing the fixture. The test adds no `core/` source, so the source list checked by `mise run test-sources` needs no entry.
 - The TrimUI's controls reach the pak as an SDL game controller through gabagool's SDL initialisation, with the sticks and L2/R2 as axes; the mapping from SDL buttons to the table in D2 is one table in `cmd/spooder-handheld`, confirmed on the device (task 7.1).
 - L2 and R2 count as pressed beyond half travel (16384 of 32767), standing for Bluepad32's trigger buttons.
 - Select is the modifier for the e-stop and fault-clear combos because it has no function of its own in the gamepad mapping (`miscBack` acts only with `miscHome`, for Calibrate, which the handheld does not offer); L3/R3 do not exist.
