@@ -25,7 +25,7 @@
 
 ## 5. Documentation
 
-- [ ] 5.1 Update `desktop/CLAUDE.md` (the nested module, its packages and rules), `tools/CLAUDE.md` (`--wifi-bridge`), the `spooder-hardware-check` skill (installing `Spooder.pak` at `Tools/tg5040/` on the SD card, joining `spooder-drive-XXXX` in NextUI's WiFi settings, the controls, leaving, the on-device checks), the root `CLAUDE.md` command list, `Readme.md` and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec deltas, and that `grep` finds `Tools/tg5040/Spooder.pak` in the skill and `--wifi-bridge` in `tools/CLAUDE.md`.
+- [x] 5.1 Update `desktop/CLAUDE.md` (the nested module, its packages and rules), `tools/CLAUDE.md` (`--wifi-bridge`), the `spooder-hardware-check` skill (installing `Spooder.pak` at `Tools/tg5040/` on the SD card, joining `spooder-drive-XXXX` in NextUI's WiFi settings, the controls, leaving, the on-device checks), the root `CLAUDE.md` command list, `Readme.md` and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec deltas, and that `grep` finds `Tools/tg5040/Spooder.pak` in the skill and `--wifi-bridge` in `tools/CLAUDE.md`.
 
 ## 6. Gates
 

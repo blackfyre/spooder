@@ -1,6 +1,6 @@
 ---
 name: spooder-hardware-check
-description: Workflow for wiring, powering, flashing and bringing up the Spooder firmwares on the Pimoroni Servo 2040 and the TTGO T-Display gamepad bridge — power and ground rules, J6 header and link wiring, the staged bring-up order (USB only, bench supply, one servo, all servos, then the bridge), what the serial console, LEDs and bridge screen show, bench simulation on USB only (the USER button on GPIO23, its LED patterns, refusal reasons and the simulation supply fault), the gamepad controls, how to exercise and verify power protection and the emergency stop, the bridge's drive mode switch (GPIO32) and WiFi drive with the spooder-wifi-probe checks, the bridge's setup mode with the portal calibration workflow, and bench calibration with the desktop calibrator on USB (dialout, Linux packages, workflow). Use when a change must be confirmed on the robot or bridge, when flashing or boot fails, or when the user asks to flash, test on hardware or read a console.
+description: Workflow for wiring, powering, flashing and bringing up the Spooder firmwares on the Pimoroni Servo 2040 and the TTGO T-Display gamepad bridge — power and ground rules, J6 header and link wiring, the staged bring-up order (USB only, bench supply, one servo, all servos, then the bridge), what the serial console, LEDs and bridge screen show, bench simulation on USB only (the USER button on GPIO23, its LED patterns, refusal reasons and the simulation supply fault), the gamepad controls, how to exercise and verify power protection and the emergency stop, the bridge's drive mode switch (GPIO32) and WiFi drive with the spooder-wifi-probe checks, the TrimUI handheld controller (installing Spooder.pak, joining the bridge, its controls, leaving, the on-device checks), the bridge's setup mode with the portal calibration workflow, and bench calibration with the desktop calibrator on USB (dialout, Linux packages, workflow). Use when a change must be confirmed on the robot or bridge, when flashing or boot fails, or when the user asks to flash, test on hardware or read a console.
 ---
 
 # Spooder hardware check
@@ -264,7 +264,7 @@ Record results in `openspec/changes/archive/2026-10-20-add-gamepad-bridge/tasks.
 
 ## WiFi drive and the probe
 
-WiFi drive turns the bridge into a WiFi access point for one handheld instead of a Bluetooth gamepad; Bluetooth is off throughout. The handheld app does not exist yet (`add-handheld-controller`): `spooder-wifi-probe` on a laptop stands in for it. The link, the 20 ms command frames and the bridge's e-stop button work as in Bluetooth drive.
+WiFi drive turns the bridge into a WiFi access point for one handheld instead of a Bluetooth gamepad; Bluetooth is off throughout. The handheld is the TrimUI Smart Pro with `Spooder.pak` (next section); `spooder-wifi-probe` on a laptop stands in for it in the checks below. The link, the 20 ms command frames and the bridge's e-stop button work as in Bluetooth drive.
 
 - **Boot:** close the drive mode switch and power up or reset the bridge. The console shows `spooder bridge: build <id>`, then `spooder bridge: WiFi drive (Bluetooth off)` and `WiFi drive: access point spooder-drive-XXXX, UDP port 52040`; the Bluepad32 banner does not appear. The start-up log begins with `Build <id>` and names WiFi drive, `Net spooder-drive-XXXX` and `Handheld: UDP 52040`.
 - **Screen:** the header's controller field shows `WF NONE` (no handheld), `WF IDLE` (a live handheld that clears its controller-connected flag) or `WF CTRL` (in control). The link page shows `NET spooder-drive-XXXX`, `PASS <password>` and `HANDHELD NONE`, `IDLE` or `IN CONTROL` in place of the pad line. The drive page shows no stick mode.
@@ -283,6 +283,62 @@ WiFi drive turns the bridge into a WiFi access point for one handheld instead of
 7. **Second sender:** a second probe on the same laptop (another terminal, so another source port) is ignored while the first runs: the bridge counts it as another sender, and the robot follows the first.
 
 Record results in `openspec/changes/add-wifi-drive/tasks.md` (tasks 6.1 and 6.2).
+
+## Handheld controller (TrimUI Smart Pro)
+
+The handheld is a TrimUI Smart Pro running NextUI (tg5040) with the tool pak `Spooder.pak` (`desktop/handheld/`). It drives the robot through the bridge's WiFi drive: command frames at 50 Hz in UDP datagrams to `192.168.4.1:52040`, the robot's frames relayed back to its drive screen. Calibration stays on the bridge's setup portal. Rehearse on the desktop first: `mise run virtual-robot`, `build/virtual-robot/virtual-robot --wifi-bridge` in one terminal, and `build/handheld/amd64/spooder-handheld --addr 127.0.0.1:52040` (from `mise run handheld-build`) in another; Escape or closing the window counts as Menu there.
+
+**Build and install:**
+
+1. Run `mise run handheld-package` (rootless Podman with qemu-user-static for arm64; the first run builds the image). It writes `build/handheld/Spooder.pak.zip`.
+2. Unzip it into `Tools/tg5040/` on the handheld's SD card, so the card holds `Tools/tg5040/Spooder.pak/launch.sh`, `spooder-handheld` and `lib/libSDL2_gfx-1.0.so.0`.
+3. Put the card back. The pak shows as **Spooder** under NextUI's Tools. To remove it, delete `Tools/tg5040/Spooder.pak`.
+
+The pak's output goes to `Spooder.txt` in NextUI's logs folder (`$LOGS_PATH`) when NextUI sets one.
+
+**Join the bridge:** with the bridge in WiFi drive, join `spooder-drive-XXXX` in NextUI's WiFi settings with the password from the bridge's link page, then start the pak. It checks that `wlan0` holds a 192.168.4.x address, renews the lease once (`udhcpc -i wlan0 -n -q -t 5`) if not, and otherwise shows a message to join the network, naming the one `wlan0` is on: A retries, B quits. It sends nothing until the check passes. One station at a time: the handheld and a laptop running the probe cannot both be joined.
+
+**Power saving:** the pak turns WiFi power saving off for its run (`iw dev wlan0 set power_save off`) and restores the previous setting however it exits: in the binary and in `launch.sh`'s trap, which also stops every process the binary started. It restores the setting before a suspend or power-off and turns it off again after a resume.
+
+**Controls** (by the TrimUI's labels; the mapping is the gamepad's, `core/gamepad_mapping`, ported to Go):
+
+| Input | Effect |
+|---|---|
+| Left stick | As the gamepad's: steer mode (Y walks, X steers) or crab mode |
+| Right stick X | Turn |
+| `B` | Toggle steer / crab mode |
+| `Start` | Toggle Stand / Walk |
+| `Y` | Toggle Sleep (the pak starts in Sleep: `Y` stands the robot, then `Start` walks it) |
+| `R1` / `L1` | Next / previous gait |
+| D-pad up / down | Body height ±10 |
+| D-pad right / left | Speed ±10 |
+| `X` | Toggle stride: dynamic / fixed |
+| `L2` beyond half travel + `A` / `B` / `X` / `Y` / `R2` | Gesture: say hi / wiggle / dance / attack / ball, from a settled Stand (dance, attack and ball are not scripted yet) |
+| `Select` + `Start` | Toggle the emergency stop (no mode change) |
+| `Select` + `Y` held 1 s | Clear faults (once per hold) |
+| `Menu` | Leave the pak |
+| `Power` short / held 2 s | Suspend / power off, after the Sleep request and wait below |
+
+- `Select` alone does nothing. A `Start` or `Y` pressed with `Select` does nothing more until it is released, whichever button is released first. There is no Calibrate.
+- The e-stop toggles like the bridge's GPIO35 button: releasing it leaves the emergency-stop fault latched; hold `Select` + `Y` for 1 s to clear it, then make a new mode request.
+
+**Leaving:** `Menu`, a short `Power` press or a 2 s hold first request Sleep, keep sending, and show `Leaving (...)` on the drive screen until two newer telemetry frames in a row report Sleep or output off, or 3 s pass; only then does the pak exit, suspend or power off. While it waits, only `Select` + `Start` changes what it sends, and a second press is ignored. After a resume it is back on the drive screen with Sleep requested. If the pak dies without leaving, the bridge's 150 ms lapse makes the robot sleep.
+
+**Drive screen:** left, the robot from its telemetry (body, gait, output, faults by name, gesture, supply voltage and current; `ROBOT (stale)` after 500 ms without telemetry) and the leave banner or a notice; right, what the pak requests (mode, height and speed, gait, stride, stick mode, e-stop) and the link: the signal on `wlan0`, telemetry, pose and diagnostics frames per second, invalid datagrams, lost and late frames by the robot's sequence numbers, and the time since the last frame. There is no round-trip time: the bridge echoes nothing.
+
+**On-device checks** (task 7.1 of `add-handheld-controller`): bridge in WiFi drive, robot board on USB power with no servos.
+
+1. **Libraries:** over a shell on the device (SSH or ADB), in `Tools/tg5040/Spooder.pak`, `LD_LIBRARY_PATH=/usr/trimui/lib:/usr/lib:$PWD/lib ldd ./spooder-handheld` lists no library as not found.
+2. **Joining:** joined to another network, start the pak: it runs `udhcpc` once, then names `spooder-drive-XXXX`. Join the bridge's network and retry: the drive screen appears, and the bridge's link page shows `HANDHELD IN CONTROL` (`WF CTRL` in the header).
+3. **Frames:** telemetry, pose and diagnostics at about 10 a second each; invalid, lost and late stay at zero over a minute.
+4. **Controls:** the screen's REQUESTED block shows the mode, height and speed, gait, stride, stick mode and e-stop, so `Y`, `Start`, `B`, `X`, `L1`/`R1`, the D-pad and `Select` + `Start` each change it as the table says; `Select` released before `Start` or `Y` changes nothing. The pak shows no stick or trigger values, and the gestures and the fault clear only through the robot, which on USB power alone stays stopped: with the bench supply on its terminals (still no servos), watch its telemetry on the drive screen's ROBOT block (body mode Walk under the left stick after `Start`, the gesture playing after `L2` + `A` from Stand, the emergency-stop fault gone after `Select` + `Y` held 1 s), and judge full stick travel by the robot's stride against the gamepad's (step 8.1, or the desktop calibrator's legs pane observing on USB).
+5. **Power saving:** `iw dev wlan0 get power_save` reads `off` while the pak runs; the previous value after `Menu`, and after `kill` of the binary; and `off` again after a suspend through `Power` and the resume.
+6. **Leaving:** `Menu`, a short `Power` press and a 2 s `Power` hold each request Sleep and act only once telemetry reports it.
+7. Confirm also what the design leaves to the device: the SDL controller table (the TrimUI's `A` is SDL's B, its `Y` SDL's X), `setsid` in NextUI's BusyBox with the binary still getting the display and the controls, and the press that wakes the device from suspend not reaching the pak as a fresh press.
+
+**On the robot** (task 8.1), assembled, on the bench supply, on a stand first: `Y` stands it and `Start` walks it; the sticks steer and crab as with the gamepad; gestures play from the `L2` layer; `Select` + `Start` stops the servos at once, and `Select` + `Y` held 1 s clears the fault once the e-stop is released; `Menu` while walking sits the robot down before the pak exits; `kill` of the binary makes the robot sleep within about 200 ms; the signal level and link counts stay plausible across the room.
+
+Record results in `openspec/changes/add-handheld-controller/tasks.md` (tasks 7.1 and 8.1).
 
 ## Setup mode and portal calibration
 

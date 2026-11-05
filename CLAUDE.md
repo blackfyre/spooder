@@ -6,6 +6,8 @@ Spooder is firmware for a hexapod robot, derived from [Aecert's Hexapod V1](http
 
 A computer can speak the same link protocol on the robot's USB port, alongside the debug text, to calibrate, monitor, control and drive (from the keyboard) the robot without the bridge. Joint calibration can be changed live (in RAM) and exported as the compiled defaults. The desktop calibrator (`desktop/`, Go with a Gio UI) is that computer-side front-end.
 
+In the bridge's WiFi drive, a handheld drives the robot instead of a Bluetooth gamepad: a TrimUI Smart Pro running NextUI with the tool pak `Spooder.pak` (`desktop/handheld/`, a nested Go module with gabagool and SDL2), sending command frames over UDP and showing the robot's relayed frames and the link's quality.
+
 Bench simulation (`core/robot/bench_sim`, spec `bench-simulation`) drives the real robot board end to end on USB alone, with no servo supply: a press of the USER button in the first 3 s after start-up enters it, servo output stays forced off until restart and protection, telemetry and the pose run on a modelled supply and servos (`core/robot/bench_model`, shared with the virtual robot). Telemetry flags it (`TELEMETRY_SIMULATED`), and the calibrator and the bridge screen show `SIM`.
 
 I²C sensors are planned (`add-body-sensing`, suspended). See `openspec/changes/`.
@@ -44,7 +46,12 @@ mise run desktop-install # the launcher and icon for this user (Linux); desktop-
 mise run virtual-robot   # the virtual robot -> build/virtual-robot/virtual-robot
 mise run virtual-robot-run  # run it, USB terminal linked at build/virtual-robot/usb
 mise run desktop-sim      # both: the virtual robot in this terminal, the calibrator on its port
-mise run e2e             # build it, then the desktop end-to-end tests against it
+mise run e2e             # build it, then the desktop and handheld end-to-end tests against it (--wifi-bridge for the handheld)
+mise run handheld-test      # gofmt, go vet, staticcheck and go test of desktop/handheld/ (needs the SDL2 development packages)
+mise run handheld-build     # the handheld for desktop Linux -> build/handheld/amd64/spooder-handheld (--addr, no WiFi steps)
+mise run handheld-package   # the TrimUI build (arm64, rootless Podman), then build/handheld/Spooder.pak.zip
+mise run handheld-fork      # fetch gabagool v2.26.6 and apply the power-button hook patch (handheld-test, -build, -build-device, -package and e2e run it)
+mise run handheld-deps      # name the missing Linux packages for the handheld's SDL2 build
 mise run bridge-screenshots  # render the bridge screen's pages to docs/images/bridge-*.png
 mise run cad             # check the electronics mount, then write its print/ and step/ files
 mise run cad-preview     # render the electronics mount to hardware/spooder-electronics-mount/images/
@@ -55,9 +62,9 @@ mise run worktree-init           # ready a worktree another tool made (Orca's se
 mise run clean
 ```
 
-**Verification gates:** `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e` and, when `hardware/spooder-electronics-mount/` changes, `mise run cad`. Compiler warnings in Spooder's own sources are errors in the robot build, the bridge build and the host tests (each area's `CLAUDE.md` says how); SDK warnings are not. Hardware behaviour can only be checked on the boards (the `spooder-hardware-check` skill).
+**Verification gates:** `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e`, `mise run handheld-test`, `mise run handheld-build`, `mise run handheld-package` and, when `hardware/spooder-electronics-mount/` changes, `mise run cad`. Compiler warnings in Spooder's own sources are errors in the robot build, the bridge build and the host tests (each area's `CLAUDE.md` says how); SDK warnings are not. Hardware behaviour can only be checked on the boards (the `spooder-hardware-check` skill).
 
-**CI** (`.github/workflows/ci.yml`) runs the same gates, except `mise run cad`, on a clean Ubuntu runner on every push to `main` and `deliver/*` and every pull request, and nightly with `mise run vulncheck`. It is an independent check, not a merge gate: the delivery workflow's own gates decide merges. Actions are pinned to commit SHAs.
+**CI** (`.github/workflows/ci.yml`) runs the same gates, except `mise run cad` and `mise run handheld-package` (the emulated arm64 build), on a clean Ubuntu runner on every push to `main` and `deliver/*` and every pull request, and nightly with `mise run vulncheck`. It is an independent check, not a merge gate: the delivery workflow's own gates decide merges. Actions are pinned to commit SHAs.
 
 **Flash both boards together** when the link protocol changes (`protocol::VERSION`, now 3). A mismatched pair fails safe: each side discards the other's frames, so the link looks lost and the robot sleeps.
 
@@ -66,7 +73,7 @@ mise run clean
 - `core/`: hardware-free C++ shared by both firmwares, the virtual robot and the host tests.
 - `firmware/servo2040/`: the robot's pico-sdk CMake project.
 - `firmware/bridge/`: the bridge's ESP-IDF PlatformIO project.
-- `desktop/`: the desktop calibrator (Go module).
+- `desktop/`: the desktop calibrator (Go module); `desktop/handheld/`, the handheld's pak (a nested Go module).
 - `tools/`: the virtual robot, the bridge screenshot renderer, the delivery worktree and risk-tier scripts.
 - `test/`: Unity host tests, and `test/golden/`, the fixtures other implementations test against.
 - `cmake/build_identity.cmake`: the build identity (`git describe --always --dirty --abbrev=12`, or `unknown`), written as a generated source by the robot's, the virtual robot's and the bridge's builds, rewritten only when it changes.

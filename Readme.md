@@ -19,7 +19,7 @@ Spooder is the firmware and tooling for a six-legged, eighteen-servo walking rob
 flowchart LR
   pad["Gamepad"] -- "Bluetooth" --> bridge["TTGO T-Display<br/>(the bridge)"]
   phone["Phone"] -. "WiFi portal<br/>(setup mode only)" .-> bridge
-  handheld["WiFi handheld<br/>or spooder-wifi-probe"] <-. "UDP 52040: commands · relayed robot frames<br/>(WiFi drive only)" .-> bridge
+  handheld["TrimUI handheld (Spooder.pak)<br/>or spooder-wifi-probe"] <-. "UDP 52040: commands · relayed robot frames<br/>(WiFi drive only)" .-> bridge
   bridge <-- "UART link, 115200<br/>commands · telemetry, reports,<br/>pose, diagnostics" --> robot["Servo 2040<br/>(the robot)"]
   robot -- "pulses" --> servos["18 servos"]
   desktop["Desktop calibrator"] <-- "USB: link frames<br/>+ debug text" --> robot
@@ -28,8 +28,9 @@ flowchart LR
 
 - **The robot**: a Pimoroni Servo 2040 (RP2040), C++ on the pico-sdk with pimoroni-pico. It runs a 20 ms control tick: link input → power protection → supervisor → calibration → body state machine → servo output → status LEDs → telemetry.
 - **The gamepad bridge**: a LilyGO TTGO T-Display v1.1 (ESP32), on ESP-IDF, Arduino and Bluepad32. It pairs a Bluetooth gamepad, sends commands to the robot every 20 ms, and shows the robot's status on its screen.
-  - A latching switch from GPIO32 to ground selects the drive mode at boot: open (or not fitted) is **Bluetooth drive**, closed is **WiFi drive**, in which the bridge runs a WiFi access point (`spooder-drive-XXXX`) instead of Bluetooth and one handheld drives the robot with link-protocol command frames over UDP. The bridge keeps the link's safety rules for the handheld (150 ms liveness, its own fault-clear and request counters, one sender at a time) and relays the robot's frames back to it. Until the handheld app exists, `spooder-wifi-probe` on a laptop stands in for it.
+  - A latching switch from GPIO32 to ground selects the drive mode at boot: open (or not fitted) is **Bluetooth drive**, closed is **WiFi drive**, in which the bridge runs a WiFi access point (`spooder-drive-XXXX`) instead of Bluetooth and one handheld drives the robot with link-protocol command frames over UDP. The bridge keeps the link's safety rules for the handheld (150 ms liveness, its own fault-clear and request counters, one sender at a time) and relays the robot's frames back to it. `spooder-wifi-probe` on a laptop stands in for the handheld in the bench checks.
   - Hold the left button during the boot logo to enter **setup mode**, from either drive mode. The bridge then starts a WiFi access point (joined via a QR code on the screen) and a captive portal, through which a phone calibrates the robot. Bluetooth and WiFi never run together.
+- **The handheld controller**: a TrimUI Smart Pro running NextUI, with the tool pak `Spooder.pak` (Go, gabagool and SDL2, in `desktop/handheld/`). It drives the robot through WiFi drive with the gamepad's mapping, and shows the robot's state and the WiFi link's quality on its 1280×720 screen. Before it exits, suspends or powers off it requests Sleep and waits up to 3 s for telemetry to report Sleep or output off; if the pak stops sending without that, the bridge's 150 ms lapse makes the robot sleep.
 - **The desktop calibrator**: Go with a Gio UI, in the Blackfyre look. It speaks the same link protocol on the robot's USB port, to monitor, drive and calibrate it without the bridge.
 - **The virtual robot**: the robot's own control tick, compiled natively, behind a pseudo-terminal that behaves like the board's USB port. It runs the calibrator and the end-to-end tests without hardware.
 
@@ -49,6 +50,7 @@ flowchart LR
 - **Legs pane**: forward kinematics of the reported pose, each joint's pulse, rings at the servo limits, and a top view of all six legs.
 - **Four-view window**: the whole robot from the top, front, left and isometrically, from the same pose.
 - **Charts**: ten minutes of supply, current, link counters and robot internals (motion share, backstop, tick time), with CSV export.
+- **Handheld driving**: the gamepad's controls on a TrimUI Smart Pro over WiFi, with an e-stop and fault clear on Select combinations and a drive screen with the link's signal, frame rates, lost and late frames.
 - **Keyboard driving**: walk, steer, step aside and change gait, speed, height and stride from the calibrator.
 
 ## Screenshots
@@ -161,6 +163,20 @@ Flash both boards together when the link protocol changes. A mismatched pair fai
 | Both stick buttons held 1 s | Clear faults |
 | `L2` held + `A` / `B` | Gesture: say hi / wiggle (from Stand) |
 
+## Handheld controller
+
+`mise run handheld-package` builds `build/handheld/Spooder.pak.zip` for the TrimUI Smart Pro (arm64, under rootless Podman). Unzip it into `Tools/tg5040/` on the SD card, join the bridge's `spooder-drive-XXXX` network in NextUI's WiFi settings (the password is on the bridge's link page), and start **Spooder** from Tools. The controls are the gamepad's, by the TrimUI's labels, with `Start` for `Home`, and:
+
+| Input | Effect |
+|---|---|
+| `Select` + `Start` | Toggle the emergency stop |
+| `Select` + `Y` held 1 s | Clear faults |
+| `L2` beyond half travel + a face button | Gesture |
+| `Menu` | Leave: Sleep first, confirmed by telemetry (Sleep or output off) or after 3 s |
+| `Power` short / held 2 s | Suspend / power off, after the same Sleep request and wait |
+
+The pak starts in Sleep: `Y` stands the robot, `Start` walks it. There is no Calibrate; calibration stays on the bridge's portal. Without the board, `build/virtual-robot/virtual-robot --wifi-bridge` runs a virtual bridge, and `mise run handheld-build` gives a desktop build to drive it with `--addr 127.0.0.1:52040`. Installing, joining and the on-device checks are in the [hardware check](.claude/skills/spooder-hardware-check/SKILL.md).
+
 ## Verification
 
 ```sh
@@ -168,7 +184,9 @@ mise run test            # host-side Unity tests of core/, and the bridge build 
 mise run build           # robot firmware (also with --serial: USB keys instead of the link)
 mise run build-bridge    # bridge firmware, with its image-size check
 mise run desktop-test    # gofmt, go vet, go test
-mise run e2e             # the calibrator's link and session against the virtual robot
+mise run e2e             # the calibrator's link and session, and the handheld's run loop, against the virtual robot
+mise run handheld-test   # the handheld's Go checks (SDL2 development packages)
+mise run handheld-package  # the handheld's device build and Spooder.pak.zip
 ```
 
 Hardware behaviour (timing, wiring, power) can only be confirmed on the boards. The staged bring-up is in [`.claude/skills/spooder-hardware-check`](.claude/skills/spooder-hardware-check/SKILL.md).
@@ -180,19 +198,19 @@ Hardware behaviour (timing, wiring, power) can only be confirmed on the boards. 
 | `core/` | Hardware-free C++ shared by both firmwares, the virtual robot and the host tests: movement, protection, protocol, the control tick, gamepad mapping, status, setup mode, WiFi drive |
 | `firmware/servo2040/` | The robot: pico-sdk CMake project |
 | `firmware/bridge/` | The bridge: ESP-IDF PlatformIO project, including the portal page |
-| `desktop/` | The desktop calibrator, the console monitor and the WiFi drive probe, a separate Go module |
+| `desktop/` | The desktop calibrator, the console monitor and the WiFi drive probe, a separate Go module; `desktop/handheld/`, the handheld's pak, a nested one |
 | `tools/virtual-robot/` | The virtual robot |
 | `test/` | Unity host tests; `test/golden/` holds the fixtures other implementations test against |
 | `openspec/` | Specifications and changes: the source of truth for intended behaviour |
 
 ## Status
 
-The firmwares, the calibrator and the virtual robot are built and tested on the host. Bring-up on the rebuilt robot is in progress. I²C body sensing (VL6180X range, LSM6DSO IMU) is specified but suspended.
+The firmwares, the calibrator, the handheld's pak and the virtual robot are built and tested on the host; the pak is not yet checked on the TrimUI. Bring-up on the rebuilt robot is in progress. I²C body sensing (VL6180X range, LSM6DSO IMU) is specified but suspended.
 
 ## Credits
 
 - [Aecert's Hexapod V1](https://github.com/Ryan-Mirch/Aecerts_Hexapod_V1): the mechanical design and the original movement code.
-- [Bluepad32](https://github.com/ricardoquesada/bluepad32), [LovyanGFX](https://github.com/lovyan03/LovyanGFX), [pimoroni-pico](https://github.com/pimoroni/pimoroni-pico), the [pico-sdk](https://github.com/raspberrypi/pico-sdk) and [Gio](https://gioui.org).
+- [Bluepad32](https://github.com/ricardoquesada/bluepad32), [LovyanGFX](https://github.com/lovyan03/LovyanGFX), [pimoroni-pico](https://github.com/pimoroni/pimoroni-pico), the [pico-sdk](https://github.com/raspberrypi/pico-sdk), [Gio](https://gioui.org), [gabagool](https://github.com/BrandonKowalski/gabagool) and [go-sdl2](https://github.com/veandco/go-sdl2).
 - The calibrator's fonts are Archivo and JetBrains Mono (OFL). `desktop/internal/appearance` and `desktop/internal/winreg` come from bopen (MIT, see `desktop/LICENSE.bopen`).
 
 ## Licence
