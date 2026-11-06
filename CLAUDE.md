@@ -6,6 +6,8 @@ Spooder is firmware for a hexapod robot, derived from [Aecert's Hexapod V1](http
 
 A computer can speak the same link protocol on the robot's USB port, alongside the debug text, to calibrate, monitor, control and drive (from the keyboard) the robot without the bridge. Joint calibration can be changed live (in RAM) and exported as the compiled defaults. The desktop calibrator (`desktop/`, Go with a Gio UI) is that computer-side front-end.
 
+Bench simulation (`core/robot/bench_sim`, spec `bench-simulation`) drives the real robot board end to end on USB alone, with no servo supply: a press of the USER button in the first 3 s after start-up enters it, servo output stays forced off until restart and protection, telemetry and the pose run on a modelled supply and servos (`core/robot/bench_model`, shared with the virtual robot). Telemetry flags it (`TELEMETRY_SIMULATED`), and the calibrator and the bridge screen show `SIM`.
+
 I²C sensors are planned (`add-body-sensing`, suspended). See `openspec/changes/`.
 
 Each area has its own `CLAUDE.md` with its layout and rules: `core/`, `firmware/servo2040/`, `firmware/bridge/`, `desktop/`, `tools/`, `test/`.

@@ -55,6 +55,8 @@ Look for these first; each has happened here:
 - non-ASCII debug text on the USB port, which carries binary frames too;
 - state carried across a session boundary (a link gap, a restarted sender, a handover to another sender): a counter baseline missed, replaying a request, or frames buffered during one session delivered in the next;
 - a spec scenario or task with no measurable acceptance (no limit, conditions or units that can fail), or a requirement no task verifies;
+- a new mode or exception that contradicts a requirement of a main spec in `openspec/specs/` without a delta for that spec in the change (bench simulation first missed `power-protection`, `controller-link` and `pose-telemetry`): check every main spec whose requirements the change makes untrue;
+- a test that drives a scenario but asserts only that nothing failed, not the outputs the spec names (the frames, readings or recovery it requires);
 - a printed part's size taken as given (a board's height, a module's thickness) without a source in the repository or a place in "Measure before printing".
 
 ## Security
