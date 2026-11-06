@@ -49,22 +49,22 @@ Alternatives considered: entering from a link frame (rejected: a mode that remov
 
 ### D3. No pulse by construction: `bench_sim::BenchBoard`
 
-`BenchBoard` (in `bench_sim.h`) implements `robot_tick::Hardware` with `final` servo methods, and declares the real servo port as protected pure virtual hooks: `realSetInhibited`, `realStop`, `realApply`, `realOn`, `realPulses`. The firmware's `Board` derives from `BenchBoard` and implements only the hooks (forwarding to `servo_output`) and the non-servo methods. `BenchBoard::enterSimulation()` calls `realStop()` and `realSetInhibited(true)` once and sets a flag that is never cleared; from then on:
+`BenchBoard` (in `bench_sim.h`) implements `robot_tick::Hardware` with `final` servo methods, and declares the real servo port as protected pure virtual hooks: `realSetInhibited`, `realStop`, `realApply`, `realOn`, `realPulses` and `realForceOff`. The firmware's `Board` derives from `BenchBoard` and implements only the hooks (forwarding to `servo_output`) and the non-servo methods. `BenchBoard::enterSimulation()` first sets a flag that is never cleared, then calls `realForceOff()` once, so the sticky barrier below is in place before `enterSimulation()` returns, ahead of any further tick or stop; from then on:
 
 - `setInhibited(x)` calls `realSetInhibited(true)` and sets the model's `inhibited = x`;
 - `stopServos()` calls `realStop()` and the model's `stop()`;
 - `applyServos(...)` calls only the model's `apply(...)`; there is no path to `realApply`;
 - `servosOn()` and `servoPulses()` return the model's.
 
-Before entry each method forwards to its hook, unchanged. The host test derives a fake from `BenchBoard` whose `realApply` fails the test if called after entry and whose `realSetInhibited(false)` fails likewise, and drives `robot_tick::tick` through Stand, Walk, Calibrate, an e-stop and a fault clear.
+Before entry each method forwards to its hook, unchanged, and `realForceOff` is never called. The host test derives a fake from `BenchBoard` that records `realForceOff` (called exactly once, inside `enterSimulation()`), whose `realApply` fails the test if called after entry and whose `realSetInhibited(false)` fails likewise, and drives `robot_tick::tick` through Stand, Walk, Calibrate, an e-stop and a fault clear.
 
-As a second, independent barrier in the firmware, `servo_output` gains `forceOff()`: it stops and disables every output and sets a sticky flag that makes `apply()` return at once and `setInhibited(false)` a no-op until restart. `realStop()` in simulation calls it. This one is not host-testable (it is pico-sdk code); it is checked by review and on the bench (task 7.1).
+As a second, independent barrier in the firmware, `servo_output` gains `forceOff()`: it stops and disables every output and sets a sticky flag that makes `apply()` return at once and `setInhibited(false)` a no-op until restart. The `realForceOff()` hook calls it; `realStop()` stays the ordinary stop. This one is not host-testable (it is pico-sdk code); it is checked by review and on the bench with a logic analyser or oscilloscope (task 7.1).
 
 Alternative considered: a `simulated` check inside `Board` only; rejected because it puts the invariant in untested firmware code, which the brief rules out.
 
 ### D4. What the tick sees: `robot_tick::Inputs::bench`
 
-`robot_tick::Inputs` gains `bench`: `simulated`, `supplyFault` and the LED indication (D5), all zero by default, so the virtual robot and the existing tests are unchanged. In simulation the firmware sets `in.power = model.read(servos)` instead of `power_monitor::read()`; the measured reading still goes to `bench_sim::step`. The tick uses `bench` to:
+`robot_tick::Inputs` gains `bench`: `simulated`, `supplyFault` and the LED indication (D5), all zero by default, so the virtual robot and the existing tests are unchanged. In simulation the firmware sets `in.power = model.read(servos)` instead of `power_monitor::read()`; the measured reading still goes to `bench_sim::step`. The tick's working-time measurement (`previousTickUs`, reported in diagnostics) starts before `bench_sim::step` and the model's reading, so it covers all the new per-tick work. The tick uses `bench` to:
 
 - set `TELEMETRY_SIMULATED` in every telemetry frame (D6);
 - pass `supplyFault` to protection as a present condition (below);
@@ -82,9 +82,9 @@ All on LED 5, so the main LEDs keep their normal start-up indication (amber puls
 | Window open | white, blinking at 250 ms, in every state (overrides LED 5's normal content, for at most 3 s) |
 | Refused, supply present | red alternating with amber, 250 ms, for 3 s |
 | Refused, no USB host | red alternating with blue, 250 ms, for 3 s |
-| Simulating | violet (160, 0, 255) for half of each 1 s period, LED 5's normal content for the other half, in every state including faults |
+| Simulating | violet (160, 0, 255) for half of each 1 s period, LED 5's normal content for the other half, in every state including faults, except the simulation supply fault (below) |
 
-The simulation supply fault gets its own fault colour, cyan alternating with red on all six (cyan is not a fault colour today), and is placed first in the fault priority list, ahead of the emergency stop: a real supply on a robot whose operator thinks nothing can move is the most important thing to show. `led_pattern::State` gains a `bench` field (an enum: none, available, refused-supply, refused-USB, simulating).
+The simulation supply fault gets its own fault colour, cyan alternating with red on all six (cyan is not a fault colour today), and is placed first in the fault priority list, ahead of the emergency stop: a real supply on a robot whose operator thinks nothing can move is the most important thing to show. While it is latched it also replaces the simulation overlay on LED 5, so all six LEDs show cyan and red; the fault itself only exists in simulation, so nothing is lost. `led_pattern::State` gains a `bench` field (an enum: none, available, refused-supply, refused-USB, simulating).
 
 ### D6. Reporting and compatibility
 
@@ -106,7 +106,7 @@ Simulation is in both robot builds (links and `--serial`): the board boundary an
 
 - [The servo model and real output could disagree about the mode] → One flag in `BenchBoard`, set once; `servo_output::forceOff` sticky below it; host test with a fake that fails on any real apply after entry.
 - [A fault in the voltage sense reads 0 V with a supply connected] → Simulation could then be entered on a powered robot. The forced-off output still holds; the supply fault would not latch. Accepted: entry also needs a deliberate button edge in the first 3 s and a USB host, and `forceOff` does not depend on the sense.
-- [TinyUSB may report a host unplug as unmount on some hosts, or a charger may enumerate] → Only the entry gate depends on it; the bench check (task 7.4) confirms the RP2040's behaviour; a mistaken "attached" only allows entry, never pulses.
+- [TinyUSB may report a host disconnect as unmount or as suspend, or a charger may enumerate] → Only the entry gate depends on it, and simulation ignores USB after entry whichever is reported; the bench check (task 7.4) records the RP2040's behaviour; a mistaken "attached" only allows entry, never pulses. The board is powered from USB in simulation, so a physical unplug powers it off and the next start is live: the bench check disconnects the host logically (deauthorising the device, suspending it) instead.
 - [The window blink on LED 5 hides the source indication for 3 s at start-up] → The source is rarely settled in the first 3 s; accepted.
 - [`outputsOn` reports on while nothing moves] → The SIM indication on both viewers on main; the handheld pak follow-up must add its own before it ships.
 - [Boards that boot with the button held enter BOOTSEL] → The documented gesture is press after the LEDs show the window.
@@ -124,6 +124,9 @@ Flash the robot; the bridge and desktop can follow in any order (older ones show
 - The simulation supply fault is a new protection fault bit (6), inhibiting, first in the LED priority.
 - Simulation is available in the `--serial` build too.
 - In simulation `outputsOn` and the pose output flag report the modelled output.
+- The main `power-protection`, `controller-link` and `pose-telemetry` requirements gain a simulation exception (this change's deltas), so they do not contradict `bench-simulation`.
+- The bench has a logic analyser or oscilloscope for the no-pulse check (task 7.1); a multimeter's DC average cannot show an isolated pulse. With fewer channels than 18 outputs, the pins are captured in groups over repeated runs.
+- The tick's working time in diagnostics includes `bench_sim::step` and the model's reading, so the existing diagnostics frame measures the whole of the new per-tick work; the acceptance limit is a longest working time below 20 ms.
 
 ## Follow-ups
 

@@ -21,6 +21,9 @@ Driving Spooder end to end today needs the servo supply connected, so every benc
 
 - `status-display`: the bridge screen shows simulation and names the simulation supply fault.
 - `desktop-calibrator`: the app shows simulation and names the simulation supply fault.
+- `power-protection`: in simulation, protection evaluates the modelled supply, and the real output stays off whatever it reads.
+- `controller-link`: in simulation, telemetry reports the modelled output and readings with the simulation flag.
+- `pose-telemetry`: in simulation, the pose frame reports the model's pulses and output.
 
 ## Impact
 
