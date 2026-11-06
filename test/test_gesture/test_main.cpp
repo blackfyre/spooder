@@ -130,9 +130,28 @@ void test_every_pose_is_reachable_and_within_servo_range()
     }
 }
 
-// Whether the body centre (the body frame's origin) is inside the polygon of
-// the feet on the ground, with @p marginMm, whenever a foot is off it. A
-// foot more than 10 mm above the lowest counts as lifted.
+// Whether the body rests on its underside (centre_of_gravity::undersideGrounded),
+// the feet given in their leg frames.
+static bool groundedOnFrame(const Vector3 *feet)
+{
+  Vector3 body[kinematics::LEG_COUNT];
+  for (int i = 0; i < kinematics::LEG_COUNT; i++)
+    body[i] = centre_of_gravity::toBody(i, feet[i]);
+  return centre_of_gravity::undersideGrounded(body);
+}
+
+// How far @p p lies inside the frame's support polygon: where the underside
+// touches the ground, under the coxa pivots.
+static float frameMargin(Vector2 p)
+{
+  // Anticlockwise around the body, as in supported().
+  const int ORDER[] = {5, 0, 1, 2, 3, 4};
+  Vector2 poly[kinematics::LEG_COUNT];
+  for (int i = 0; i < kinematics::LEG_COUNT; i++)
+    poly[i] = Vector2(body_geometry::PIVOTS[ORDER[i]].x, body_geometry::PIVOTS[ORDER[i]].y);
+  return insideMargin(poly, kinematics::LEG_COUNT, p);
+}
+
 static Vector3 worldFoot(int leg, Vector3 foot, const Pose &pose);
 
 static Vector3 worldPoint(Vector3 v, const Pose &pose)
@@ -156,8 +175,14 @@ static Pose playerPose(const Player &p)
           p.pose.pitchDeg + (end.pitchDeg - p.pose.pitchDeg) * t, p.pose.rollDeg + (end.rollDeg - p.pose.rollDeg) * t};
 }
 
+// Whether the body centre (the body frame's origin) is inside the support
+// polygon, with @p marginMm, whenever a foot is off the ground: the frame's
+// when the underside rests on the ground, else the feet's in the world frame
+// at @p pose. A foot more than 10 mm above the lowest counts as lifted.
 static bool supported(const Vector3 *feet, float marginMm, const Pose &pose)
 {
+  if (groundedOnFrame(feet))
+    return frameMargin(Vector2()) >= marginMm;
   float lowest = 1e9f;
   Vector3 world[LEG_COUNT];
   for (int i = 0; i < LEG_COUNT; i++)
@@ -177,7 +202,8 @@ static bool supported(const Vector3 *feet, float marginMm, const Pose &pose)
 }
 
 // The smallest support margin of the estimated centre of gravity, with and
-// without the battery.
+// without the battery: in the frame's polygon (body frame) when the underside
+// rests on the ground, else the feet's in the world frame at @p pose.
 static float gravityMargin(const Vector3 *feet, const Pose &pose)
 {
   kinematics::JointAngles legs[kinematics::LEG_COUNT];
@@ -187,15 +213,38 @@ static float gravityMargin(const Vector3 *feet, const Pose &pose)
     TEST_ASSERT_TRUE(kinematics::solveLeg(feet[i], Vector3(0, 0, 0), legs[i]));
     body[i] = worldFoot(i, feet[i], pose);
   }
+  bool onFrame = groundedOnFrame(feet);
   float worst = 1e9f;
   for (int battery = 0; battery < 2; battery++)
   {
+    Vector3 centre = centre_of_gravity::estimate(legs, battery).centre;
     float margin;
-    Vector3 centre = worldPoint(centre_of_gravity::estimate(legs, battery).centre, pose);
-    TEST_ASSERT_TRUE(centre_of_gravity::supportMargin(body, centre, margin));
+    if (onFrame)
+      margin = frameMargin(Vector2(centre.x, centre.y));
+    else
+      TEST_ASSERT_TRUE(centre_of_gravity::supportMargin(body, worldPoint(centre, pose), margin));
     worst = fminf(worst, margin);
   }
   return worst;
+}
+
+// A body resting on its underside is supported by the frame, whatever its
+// feet do: here the left feet hang just above the ground and the right ones
+// are folded, so the feet alone would leave the centre outside their polygon.
+void test_a_body_on_its_underside_is_supported_by_the_frame()
+{
+  const float U = body_geometry::UNDERSIDE_Z;
+  Vector3 feet[kinematics::LEG_COUNT];
+  for (int i = 0; i < kinematics::LEG_COUNT; i++)
+    feet[i] = Vector3(120, 0, i < 3 ? U + 5 : U + 60);
+  TEST_ASSERT_TRUE(groundedOnFrame(feet));
+  TEST_ASSERT_TRUE(supported(feet, 20, Pose{}));
+  TEST_ASSERT_TRUE(gravityMargin(feet, Pose{}) >= 20);
+  // The same feet with the body 10 mm lower: the left feet carry it alone.
+  for (int i = 0; i < kinematics::LEG_COUNT; i++)
+    feet[i].z -= 10;
+  TEST_ASSERT_FALSE(groundedOnFrame(feet));
+  TEST_ASSERT_FALSE(supported(feet, 20, Pose{}));
 }
 
 void test_lifted_legs_keep_the_body_over_its_support()
@@ -689,6 +738,7 @@ int main()
   RUN_TEST(test_only_scripted_gestures_are_available);
   RUN_TEST(test_shifting_the_body_moves_planted_feet_the_other_way);
   RUN_TEST(test_every_pose_is_reachable_and_within_servo_range);
+  RUN_TEST(test_a_body_on_its_underside_is_supported_by_the_frame);
   RUN_TEST(test_lifted_legs_keep_the_body_over_its_support);
   RUN_TEST(test_gesture_keeps_the_speed_limit_and_ends_standing);
   RUN_TEST(test_time_carries_over_keyframe_boundaries);

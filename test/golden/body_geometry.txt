@@ -8,6 +8,9 @@
 # The coxa pivot is in the body frame (x right, y forward, z up, millimetres,
 # origin at the frame's centre); the mount angle is the leg frame's x axis,
 # in degrees anticlockwise from +x.
+# Then one line for the body's underside, its lowest point (body frame z,
+# millimetres, below the pivots' z = 0):
+#   underside <z>
 # Lines starting with # are comments.
 0 -60.41 89.56 0.00 124.0000
 1 -97.50 0.00 0.00 180.0000
@@ -15,3 +18,4 @@
 3 60.41 -89.56 0.00 -56.0000
 4 97.50 0.00 0.00 0.0000
 5 60.41 89.56 0.00 56.0000
+underside -24.20
