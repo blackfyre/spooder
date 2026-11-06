@@ -373,7 +373,8 @@ static uint32_t tickMs;
 static uint8_t usbSeq;
 static protocol::Command cmd;
 static std::vector<uint8_t> extra;
-static BenchEvent pendingEvent; // reported on the next tick, as bench_sim does
+static BenchEvent pendingEvent;       // reported on the next tick, as bench_sim does
+static protection::Reading lastPower; // the reading the last tick was given
 
 static void resetRobot()
 {
@@ -403,6 +404,7 @@ static void robotTick(protection::Reading power, bool simulated)
   in.bytes[(int)robot_tick::Link::Usb] = bytes.data();
   in.byteCount[(int)robot_tick::Link::Usb] = (int)bytes.size();
   in.power = simulated ? bench_model::Supply().read(hookBoard.model()) : power;
+  lastPower = in.power;
   in.bench.simulated = simulated;
   in.bench.event = pendingEvent;
   pendingEvent = BenchEvent::None;
@@ -514,8 +516,49 @@ void test_no_real_output_in_simulation_through_every_mode()
 
   requestMode(RequestedMode::Walk);
   cmd.translateY = 100;
-  simTicks(100);
+  simTicks(20); // into the walk
   TEST_ASSERT_EQUAL((int)body::Mode::Walk, (int)robot.body.mode);
+  // Walking: every telemetry frame has the flag, output on and the model's
+  // supply reading for its tick; every pose frame has output on and the
+  // model's pulse on every joint, and the pulses move.
+  int telemetryFrames = 0, poseFrames = 0;
+  bool pulsesChanged = false;
+  uint16_t firstPulses[protocol::CALIBRATION_JOINTS] = {};
+  for (int tick = 0; tick < 80; tick++)
+  {
+    hookBoard.usbFrames.clear();
+    simTicks(1);
+    TEST_ASSERT_EQUAL((int)body::Mode::Walk, (int)robot.body.mode);
+    for (const protocol::Frame &f : hookBoard.usbFrames)
+    {
+      if (f.type == protocol::FrameType::Telemetry)
+      {
+        telemetryFrames++;
+        TEST_ASSERT_TRUE(f.telemetry.flags & protocol::TELEMETRY_SIMULATED);
+        TEST_ASSERT_TRUE(f.telemetry.outputsOn);
+        TEST_ASSERT_EQUAL((int)body::Mode::Walk, (int)f.telemetry.bodyMode);
+        TEST_ASSERT_INT_WITHIN(1, (int)(lastPower.voltageV * 1000.0f), f.telemetry.voltageMv);
+        TEST_ASSERT_INT_WITHIN(1, (int)(lastPower.currentA * 1000.0f), f.telemetry.currentMa);
+        TEST_ASSERT_TRUE(f.telemetry.currentMa > 0);
+      }
+      else if (f.type == protocol::FrameType::Pose)
+      {
+        TEST_ASSERT_TRUE(f.pose.flags & protocol::POSE_OUTPUTS_ON);
+        for (int i = 0; i < protocol::CALIBRATION_JOINTS; i++)
+        {
+          TEST_ASSERT_EQUAL(hookBoard.model().desiredUs[i], f.pose.joints[i].pulseUs);
+          if (poseFrames == 0)
+            firstPulses[i] = f.pose.joints[i].pulseUs;
+          else if (f.pose.joints[i].pulseUs != firstPulses[i])
+            pulsesChanged = true;
+        }
+        poseFrames++;
+      }
+    }
+  }
+  TEST_ASSERT_TRUE(telemetryFrames > 0);
+  TEST_ASSERT_TRUE(poseFrames > 1);
+  TEST_ASSERT_TRUE(pulsesChanged);
   cmd.translateY = 0;
 
   requestMode(RequestedMode::Calibrate);
@@ -538,8 +581,23 @@ void test_no_real_output_in_simulation_through_every_mode()
   simTicks(5);
   TEST_ASSERT_EQUAL(0, robot.protection.faults);
   simTicks(30);
+  TEST_ASSERT_FALSE(robot.supervisor.bodyRunning); // no new request yet
   requestMode(RequestedMode::Stand);
-  simTicks(100);
+  // Recovery runs the boot sequence: Initialise, then Stand.
+  bool sawInitialise = false, sawStandAfter = false;
+  for (int i = 0; i < 100; i++)
+  {
+    simTicks(1);
+    if (robot.supervisor.bodyRunning && robot.body.mode == body::Mode::Initialise)
+      sawInitialise = true;
+    else if (sawInitialise && robot.body.mode == body::Mode::Stand)
+      sawStandAfter = true;
+    else if (robot.supervisor.bodyRunning)
+      TEST_ASSERT_TRUE(sawInitialise); // nothing but Initialise first
+  }
+  TEST_ASSERT_TRUE(sawInitialise);
+  TEST_ASSERT_TRUE(sawStandAfter);
+  TEST_ASSERT_EQUAL((int)body::Mode::Stand, (int)robot.body.mode);
   TEST_ASSERT_TRUE(robot.supervisor.bodyRunning);
   TEST_ASSERT_TRUE(hookBoard.servosOn());
 
