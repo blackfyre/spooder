@@ -149,14 +149,14 @@ static void goldenPath(char *out, int size)
   snprintf(out, size, "%.*stest/golden/gestures.txt", prefix, file);
 }
 
-// Say hi, wiggle and provisional ball have scripts; dance and attack do not. A
+// Say hi, wiggle, attack and provisional ball have scripts; dance does not. A
 // script landing for one of them changes this test with the golden file.
 void test_scripted_ids()
 {
   TEST_ASSERT_TRUE(available(1));
   TEST_ASSERT_TRUE(available(2));
   TEST_ASSERT_FALSE(available(3));
-  TEST_ASSERT_FALSE(available(4));
+  TEST_ASSERT_TRUE(available(4));
   TEST_ASSERT_TRUE(available(5));
 }
 
