@@ -36,8 +36,9 @@ constexpr int MAX_LIFTED_LEGS = LEG_COUNT;
 
 struct Lift
 {
-  int8_t leg = -1; // -1 when unused
-  Vector3 foot;    // target in the leg frame
+  int8_t leg = -1;                 // -1 when unused
+  Vector3 foot;                    // target in the leg frame
+  bool relativeToStanding = false; // foot is an offset from standing (height-independent taps)
 };
 
 // The body over its planted feet, in the body frame (x right, y forward,
@@ -125,7 +126,7 @@ struct Player
   uint32_t durationMs = 0;       // of the segment, rate limit included
   Vector3 from[LEG_COUNT];       // feet at the segment's start
   Vector3 to[LEG_COUNT];         // and end
-  bool straight[LEG_COUNT] = {}; // explicit foot target at either segment end
+  bool straight[LEG_COUNT] = {}; // a target in the segment's keyframe, or not starting where the pose plants it
   Pose pose;                     // the body pose reached by the last keyframe
   bool stopRequested = false;
   bool done = true;

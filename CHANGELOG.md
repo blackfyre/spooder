@@ -7,6 +7,7 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 ### Added
 
 - **Front-pair attack.** The body braces over four planted feet, raises the front legs and strikes twice under the selected servo profile's joint speed budget, with an animated handheld preview. Host tests check travel and world-frame support at both height extremes.
+- **Dance gesture.** An eight-beat routine at 120 BPM rolls, nods, twists and bounces over planted feet, then taps a front foot and straightens; the handheld preview follows the same script.
 
 - **Gesture body poses.** The player keeps planted feet fixed through eased yaw, pitch and roll, with path-based foot speed limits and per-keyframe speed overrides.
 - **Ball hold and unfold.** A provisional ball script lowers and folds all six legs, holds in Perform, then unfolds before another mode or gesture request. Sleep and safety interruptions still pre-empt at once; final ground clearance remains part of the ball choreography.

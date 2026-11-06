@@ -974,7 +974,7 @@ void test_transitions_and_gestures_stay_within_the_budget()
   TEST_ASSERT_TRUE(s.mode == Mode::Calibrate);
   c.mode = RequestedMode::Stand;
   TEST_ASSERT_TRUE(fastestJoint(c, 3000) <= limit); // Calibrate -> Stand
-  for (gesture::Gesture g : {gesture::Gesture::SayHi, gesture::Gesture::Wiggle})
+  for (gesture::Gesture g : {gesture::Gesture::SayHi, gesture::Gesture::Wiggle, gesture::Gesture::Dance})
   {
     static uint32_t seq = 1;
     MovementCommand play = gestureCommand(RequestedMode::Stand, g, seq++);
@@ -1023,6 +1023,39 @@ void test_attack_strikes_stay_within_the_selected_joint_budget()
     TEST_ASSERT_TRUE(started);
     TEST_ASSERT_TRUE(s.mode == Mode::Stand);
     TEST_ASSERT_EQUAL_UINT32(2, strikes);
+  }
+}
+
+void test_dance_stays_on_the_beat_under_the_selected_joint_budget()
+{
+  for (float height : {0.0f, 100.0f})
+  {
+    bootToStand();
+    MovementCommand c = command(RequestedMode::Stand);
+    c.height = height;
+    run(c, 10000);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, height, s.height);
+    TEST_ASSERT_EQUAL_FLOAT(servo_profile::SELECTED.budgetDegPerS(), s.jointBudgetDegPerS);
+    c.gesture = (uint8_t)gesture::Gesture::Dance;
+    c.gestureSeq = 1;
+    gesture::Script dance = gesture::script(gesture::Gesture::Dance);
+    uint32_t start = now, scripted = 0;
+    run(c, 20);
+    TEST_ASSERT_TRUE(s.mode == Mode::Perform);
+    for (int frame = 0; frame < dance.count; frame++)
+    {
+      scripted += dance.frames[frame].durationMs;
+      for (int n = 0; n < 100 && s.mode == Mode::Perform && s.perform.index == frame; n++)
+      {
+        TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1, s.motionScale);
+        TEST_ASSERT_TRUE(fastestJoint(c, 20) <= s.jointBudgetDegPerS * BUDGET_TOLERANCE);
+      }
+      TEST_ASSERT_UINT32_WITHIN(20, scripted, now - start);
+      if (frame < 7 || frame == dance.count - 1)
+        TEST_ASSERT_UINT32_WITHIN(20, 500 * ((scripted + 250) / 500), now - start);
+    }
+    TEST_ASSERT_EQUAL_UINT32(4000, scripted);
+    TEST_ASSERT_TRUE(s.mode == Mode::Stand);
   }
 }
 
@@ -1202,8 +1235,9 @@ void test_gesture_request_during_a_stand_transition_is_dropped()
 
 void test_unavailable_gesture_is_ignored()
 {
+  // Every gesture has a script now: an id past the last one has none.
   bootToStand();
-  run(gestureCommand(RequestedMode::Stand, gesture::Gesture::Dance, 1), 100);
+  run(gestureCommand(RequestedMode::Stand, (gesture::Gesture)gesture::GESTURE_ID_COUNT, 1), 100);
   TEST_ASSERT_TRUE(s.mode == Mode::Stand);
 }
 
@@ -1405,6 +1439,7 @@ int main()
   RUN_TEST(test_paths_are_kept_under_the_budget);
   RUN_TEST(test_transitions_and_gestures_stay_within_the_budget);
   RUN_TEST(test_attack_strikes_stay_within_the_selected_joint_budget);
+  RUN_TEST(test_dance_stays_on_the_beat_under_the_selected_joint_budget);
   RUN_TEST(test_every_pose_stays_within_servo_travel);
   RUN_TEST(test_sleep_folds_with_the_rest_pose_out_of_travel);
   RUN_TEST(test_a_tick_without_a_whole_piece_moves_nothing);

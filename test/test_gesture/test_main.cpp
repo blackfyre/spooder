@@ -13,7 +13,7 @@ using namespace gesture;
 void setUp() {}
 void tearDown() {}
 
-static const gesture::Gesture AVAILABLE[] = {Gesture::SayHi, Gesture::Wiggle, Gesture::Attack};
+static const gesture::Gesture AVAILABLE[] = {Gesture::SayHi, Gesture::Wiggle, Gesture::Dance, Gesture::Attack};
 // Feet at body height 0 and 100 (body::groundForHeight).
 static const float GROUNDS[] = {-60, -230};
 
@@ -80,8 +80,7 @@ void test_only_scripted_gestures_are_available()
   TEST_ASSERT_FALSE(available(0));
   TEST_ASSERT_TRUE(available((uint8_t)Gesture::SayHi));
   TEST_ASSERT_TRUE(available((uint8_t)Gesture::Wiggle));
-  // Dance does not have a script yet.
-  TEST_ASSERT_FALSE(available((uint8_t)Gesture::Dance));
+  TEST_ASSERT_TRUE(available((uint8_t)Gesture::Dance));
   TEST_ASSERT_TRUE(available((uint8_t)Gesture::Attack));
   TEST_ASSERT_TRUE(available((uint8_t)Gesture::Ball));
   TEST_ASSERT_FALSE(available(GESTURE_ID_COUNT));
@@ -134,38 +133,66 @@ void test_every_pose_is_reachable_and_within_servo_range()
 // Whether the body centre (the body frame's origin) is inside the polygon of
 // the feet on the ground, with @p marginMm, whenever a foot is off it. A
 // foot more than 10 mm above the lowest counts as lifted.
-static bool supported(const Vector3 *feet, float marginMm)
+static Vector3 worldFoot(int leg, Vector3 foot, const Pose &pose);
+
+static Vector3 worldPoint(Vector3 v, const Pose &pose)
+{
+  float r = pose.rollDeg * (float)M_PI / 180;
+  float p = pose.pitchDeg * (float)M_PI / 180;
+  float y = pose.yawDeg * (float)M_PI / 180;
+  v = Vector3(cosf(r) * v.x + sinf(r) * v.z, v.y, -sinf(r) * v.x + cosf(r) * v.z);
+  v = Vector3(v.x, cosf(p) * v.y - sinf(p) * v.z, sinf(p) * v.y + cosf(p) * v.z);
+  v = Vector3(cosf(y) * v.x - sinf(y) * v.y, sinf(y) * v.x + cosf(y) * v.y, v.z);
+  return v + pose.translation;
+}
+
+static Pose playerPose(const Player &p)
+{
+  if (p.done)
+    return {};
+  Pose end = p.stage == Stage::Keyframes ? p.sequence.frames[p.index].pose : p.stage == Stage::Plant ? p.pose : Pose{};
+  float t = ease((float)p.elapsedMs / p.durationMs);
+  return {interpolate(p.pose.translation, end.translation, t), p.pose.yawDeg + (end.yawDeg - p.pose.yawDeg) * t,
+          p.pose.pitchDeg + (end.pitchDeg - p.pose.pitchDeg) * t, p.pose.rollDeg + (end.rollDeg - p.pose.rollDeg) * t};
+}
+
+static bool supported(const Vector3 *feet, float marginMm, const Pose &pose)
 {
   float lowest = 1e9f;
-  for (int i = 0; i < kinematics::LEG_COUNT; i++)
-    lowest = fminf(lowest, feet[i].z);
-  // Anticlockwise around the body: front right, front left, middle left,
-  // rear left, rear right, middle right.
+  Vector3 world[LEG_COUNT];
+  for (int i = 0; i < LEG_COUNT; i++)
+  {
+    world[i] = worldFoot(i, feet[i], pose);
+    lowest = fminf(lowest, world[i].z);
+  }
+  // Anticlockwise: front right, front left, middle left, rear left,
+  // rear right, middle right. Height above the floor is in the world frame.
   const int ORDER[] = {5, 0, 1, 2, 3, 4};
-  Vector2 poly[kinematics::LEG_COUNT];
+  Vector2 poly[LEG_COUNT];
   int n = 0;
   for (int leg : ORDER)
-    if (feet[leg].z <= lowest + 10)
-      poly[n++] = toBody(leg, feet[leg]);
-  return n == kinematics::LEG_COUNT || insideMargin(poly, n, Vector2()) >= marginMm;
+    if (world[leg].z <= lowest + 10)
+      poly[n++] = Vector2(world[leg].x, world[leg].y);
+  return n == LEG_COUNT || insideMargin(poly, n, Vector2(pose.translation.x, pose.translation.y)) >= marginMm;
 }
 
 // The smallest support margin of the estimated centre of gravity, with and
 // without the battery.
-static float gravityMargin(const Vector3 *feet)
+static float gravityMargin(const Vector3 *feet, const Pose &pose)
 {
   kinematics::JointAngles legs[kinematics::LEG_COUNT];
   Vector3 body[kinematics::LEG_COUNT];
   for (int i = 0; i < kinematics::LEG_COUNT; i++)
   {
     TEST_ASSERT_TRUE(kinematics::solveLeg(feet[i], Vector3(0, 0, 0), legs[i]));
-    body[i] = centre_of_gravity::toBody(i, feet[i]);
+    body[i] = worldFoot(i, feet[i], pose);
   }
   float worst = 1e9f;
   for (int battery = 0; battery < 2; battery++)
   {
     float margin;
-    TEST_ASSERT_TRUE(centre_of_gravity::supportMargin(body, centre_of_gravity::estimate(legs, battery).centre, margin));
+    Vector3 centre = worldPoint(centre_of_gravity::estimate(legs, battery).centre, pose);
+    TEST_ASSERT_TRUE(centre_of_gravity::supportMargin(body, centre, margin));
     worst = fminf(worst, margin);
   }
   return worst;
@@ -178,7 +205,7 @@ void test_lifted_legs_keep_the_body_over_its_support()
   // but the masses estimated until the robot is weighed, so this guards the
   // scripts' intent, not the physical margin.
   const float MARGIN_MM = 20;
-  const uint32_t STOPS[] = {0, 1200, 1900, 2600};
+  const uint32_t STOPS[] = {0, 1200, 1900, 2600, 3575, 3725};
   for (Gesture g : AVAILABLE)
     for (float ground : GROUNDS)
       for (uint32_t stopAt : STOPS)
@@ -196,8 +223,9 @@ void test_lifted_legs_keep_the_body_over_its_support()
           if (stopAt && t >= stopAt)
             p.stopRequested = true;
           advance(p, 5, standing, feet);
-          TEST_ASSERT_TRUE_MESSAGE(supported(feet, MARGIN_MM), "body outside its support");
-          TEST_ASSERT_TRUE_MESSAGE(gravityMargin(feet) >= MARGIN_MM, "centre of gravity outside its support");
+          Pose pose = playerPose(p);
+          TEST_ASSERT_TRUE_MESSAGE(supported(feet, MARGIN_MM, pose), "body outside its support");
+          TEST_ASSERT_TRUE_MESSAGE(gravityMargin(feet, pose) >= MARGIN_MM, "centre of gravity outside its support");
         }
       }
 }
@@ -354,7 +382,7 @@ void test_unavailable_gesture_is_done_at_once()
   for (int i = 0; i < kinematics::LEG_COUNT; i++)
     feet[i] = standingAt(-100);
   Player p;
-  start(p, Gesture::Dance, feet, standingAt(-100));
+  start(p, (Gesture)GESTURE_ID_COUNT, feet, standingAt(-100)); // past the last gesture
   TEST_ASSERT_TRUE(p.done);
 }
 
@@ -363,13 +391,7 @@ static Vector3 worldFoot(int leg, Vector3 foot, const Pose &pose)
 {
   Vector2 xy = toBody(leg, foot);
   Vector3 v(xy.x, xy.y, body_geometry::PIVOTS[leg].z + foot.z);
-  float r = pose.rollDeg * (float)M_PI / 180;
-  float p = pose.pitchDeg * (float)M_PI / 180;
-  float y = pose.yawDeg * (float)M_PI / 180;
-  v = Vector3(cosf(r) * v.x + sinf(r) * v.z, v.y, -sinf(r) * v.x + cosf(r) * v.z);
-  v = Vector3(v.x, cosf(p) * v.y - sinf(p) * v.z, sinf(p) * v.y + cosf(p) * v.z);
-  v = Vector3(cosf(y) * v.x - sinf(y) * v.y, sinf(y) * v.x + cosf(y) * v.y, v.z);
-  return v + pose.translation;
+  return worldPoint(v, pose);
 }
 
 // Check support in the world frame: pitching makes planted leg-frame z
@@ -465,6 +487,59 @@ void test_pose_keeps_planted_feet_fixed_through_rotation_and_stop()
       for (int leg = 0; leg < LEG_COUNT; leg++)
         TEST_ASSERT_FLOAT_WITHIN(0.1f, 0, worldFoot(leg, feet[leg], pose).distanceTo(worldFoot(leg, standing, {})));
     }
+  }
+}
+
+void test_dance_keeps_the_beat_and_only_taps_on_the_last_beat()
+{
+  Script dance = script(Gesture::Dance);
+  for (float ground : GROUNDS)
+  {
+    Vector3 standing = standingAt(ground), feet[LEG_COUNT];
+    for (auto &foot : feet)
+      foot = standing;
+    Player p;
+    start(p, Gesture::Dance, feet, standing);
+    uint32_t elapsed = 0, scripted = 0;
+    bool tapped = false, planted = false;
+    for (int frame = 0; frame < dance.count; frame++)
+    {
+      TEST_ASSERT_EQUAL_INT(frame, p.index);
+      TEST_ASSERT_EQUAL_UINT32(dance.frames[frame].durationMs, p.durationMs);
+      scripted += dance.frames[frame].durationMs;
+      while (!p.done && p.index == frame)
+      {
+        advance(p, 5, standing, feet);
+        elapsed += 5;
+        Pose end = dance.frames[frame].pose;
+        float t = ease((float)(elapsed - (scripted - dance.frames[frame].durationMs)) / dance.frames[frame].durationMs);
+        Pose from = frame ? dance.frames[frame - 1].pose : Pose{};
+        Pose pose = {interpolate(from.translation, end.translation, t), from.yawDeg + (end.yawDeg - from.yawDeg) * t,
+                     from.pitchDeg + (end.pitchDeg - from.pitchDeg) * t,
+                     from.rollDeg + (end.rollDeg - from.rollDeg) * t};
+        for (int leg = 0; leg < LEG_COUNT; leg++)
+        {
+          Vector3 world = worldFoot(leg, feet[leg], pose);
+          Vector3 original = worldFoot(leg, standing, {});
+          if (elapsed <= 3500 || leg != 0 || elapsed >= 3800)
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 0, world.distanceTo(original));
+          if (leg == 0 && world.z > original.z + 10)
+            tapped = true;
+          if (tapped && world.distanceTo(original) < 0.01f && leg == 0)
+            planted = true;
+          if (elapsed > 3800)
+            TEST_ASSERT_TRUE(planted);
+        }
+      }
+      TEST_ASSERT_EQUAL_UINT32(scripted, elapsed);
+      // The seven planted beats and the complete final tap/straighten beat.
+      if (frame < 7 || frame == dance.count - 1)
+        TEST_ASSERT_EQUAL_UINT32(0, elapsed % 500);
+    }
+    TEST_ASSERT_TRUE(tapped);
+    TEST_ASSERT_TRUE(planted);
+    TEST_ASSERT_TRUE(p.done);
+    TEST_ASSERT_EQUAL_UINT32(4000, elapsed);
   }
 }
 
@@ -579,6 +654,7 @@ int main()
 {
   UNITY_BEGIN();
   RUN_TEST(test_attack_keeps_four_feet_planted_and_supports_body_and_gravity);
+  RUN_TEST(test_dance_keeps_the_beat_and_only_taps_on_the_last_beat);
   RUN_TEST(test_pose_keeps_planted_feet_fixed_through_rotation_and_stop);
   RUN_TEST(test_explicit_foot_targets_follow_straight_segments);
   RUN_TEST(test_zero_rotation_matches_translation_for_every_leg);

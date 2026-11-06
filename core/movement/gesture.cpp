@@ -52,6 +52,17 @@ static const Keyframe ATTACK[] = {
     {450, {}, {}},
 };
 
+// Eight beats at 120 BPM. Small moves preserve the beat under the foot and
+// joint speed limits at both height extremes. Only the final beat lifts a
+// foot: lift, plant, then straighten within the final beat.
+static const Keyframe DANCE[] = {
+    {500, {Vector3(0, 0, -4), 0, 0, -3}, {}}, {500, {Vector3(0, 0, -4), 0, 0, 3}, {}},
+    {500, {Vector3(0, 0, -4), 0, 3, 0}, {}},  {500, {Vector3(0, 0, -4), 4, 0, 0}, {}},
+    {500, {Vector3(0, 0, -12)}, {}},          {500, {Vector3(0, 0, -4)}, {}},
+    {500, {Vector3(0, 0, -4)}, {}},           {150, {Vector3(0, 0, -4)}, {{0, Vector3(0, 0, 16), true}}},
+    {150, {Vector3(0, 0, -4)}, {}},           {200, {}, {}},
+};
+
 // Provisional lowering only: task 2.5 replaces this with the underside-derived
 // ground clearance. All rotations stay zero while task 2.2 runs separately.
 constexpr float BALL_PROVISIONAL_LOWERING_MM = 10;
@@ -79,6 +90,8 @@ Script script(Gesture g)
     return {WIGGLE, (int)(sizeof(WIGGLE) / sizeof(WIGGLE[0]))};
   case Gesture::Attack:
     return {ATTACK, (int)(sizeof(ATTACK) / sizeof(ATTACK[0]))};
+  case Gesture::Dance:
+    return {DANCE, (int)(sizeof(DANCE) / sizeof(DANCE[0]))};
   case Gesture::Ball:
     return {BALL, 2, true, BALL_UNFOLD, 2};
   default:
@@ -120,7 +133,7 @@ Vector3 keyframeFoot(const Keyframe &k, int leg, Vector3 standing)
 {
   for (int j = 0; j < MAX_LIFTED_LEGS; j++)
     if (k.lifts[j].leg == leg)
-      return k.lifts[j].foot;
+      return k.lifts[j].relativeToStanding ? standing + k.lifts[j].foot : k.lifts[j].foot;
   return plantedFoot(leg, standing, k.pose);
 }
 
