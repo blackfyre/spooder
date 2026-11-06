@@ -254,7 +254,7 @@ type cell struct {
 	label, value string
 	colour       sdl.Color
 	mono         bool // a number: JetBrains Mono
-	keys         []string
+	keys         []key
 }
 
 // texCache keeps rendered text between frames; draw drops what a frame did
@@ -426,8 +426,9 @@ func (l layout) cellW(width int32, cols int) int32 {
 	return (width - int32(cols-1)*l.gap(cellGap)) / int32(cols)
 }
 
-// cells draws rows of cols label-over-value cells across width from x, y.
-func (s *screen) cells(cs []cell, cols int, x, y, width int32) {
+// cells draws rows of cols label-over-value cells across width from x, y;
+// a hint key beside a label presses while held has its control (hintPressed).
+func (s *screen) cells(cs []cell, cols int, x, y, width int32, held padmap.Buttons) {
 	l := s.l
 	colW := l.cellW(width, cols)
 	for i, c := range cs {
@@ -435,7 +436,7 @@ func (s *screen) cells(cs []cell, cols int, x, y, width int32) {
 		cy := y + int32(i/cols)*(l.cellH()+l.gap(cellGap))
 		kx := cx + s.tracked(s.f.micro, c.label, cx, cy, colMuted, trackMicro) + l.gap(10)
 		for _, k := range c.keys {
-			kx += s.hintKey(kx, cy, k) + l.gap(4)
+			kx += s.hintKey(kx, cy, k.label, hintPressed(k.b, held)) + l.gap(4)
 		}
 		vy := cy + l.microH + l.gap(labelGap)
 		if c.mono {
@@ -513,15 +514,43 @@ func (s *screen) hintKeyWidth(label string) int32 {
 	return max(l.microH, 2*l.gap(6)+trackedWidth(s.f.hint, label, trackLabel))
 }
 
-// hintKey draws a small flat key, as high as a label, at x, y and returns
-// its width.
-func (s *screen) hintKey(x, y int32, label string) int32 {
+// hintEdge is a hint key's edge, below its face at rest.
+const hintEdge = 2
+
+// hintKey draws a small key, as high as a label, at x, y and returns its
+// width. At rest it stands on a thin edge; pressed, it sits down on it with
+// its label in the orange text tone, as a footer keycap does.
+func (s *screen) hintKey(x, y int32, label string, pressed bool) int32 {
 	l := s.l
 	w := s.hintKeyWidth(label)
+	fg := colText
+	if pressed {
+		y += l.gap(hintEdge)
+		fg = colAccentTxt
+	} else {
+		s.fill(x, y+l.gap(hintEdge), w, l.microH, l.gap(4), colKeyEdge)
+	}
 	s.fill(x, y, w, l.microH, l.gap(4), colKey)
 	tw := trackedWidth(s.f.hint, label, trackLabel)
-	s.tracked(s.f.hint, label, x+(w-tw)/2, y+(l.microH-int32(s.f.hint.Height()))/2, colText, trackLabel)
+	s.tracked(s.f.hint, label, x+(w-tw)/2, y+(l.microH-int32(s.f.hint.Height()))/2, fg, trackLabel)
 	return w
+}
+
+// hintPressed is whether a requested value's hint key for control b shows
+// as pressed with held held (design D2 of handheld-observations): while b is
+// held and its press reaches that value, so not Start, X or Y while Select
+// is held (the e-stop, the page and the fault clear), nor A, B, X or Y while
+// L2 is held (the gesture layer).
+func hintPressed(b, held padmap.Buttons) bool {
+	switch {
+	case b == 0 || held&b == 0:
+		return false
+	case held&padmap.HandSelect != 0 && b&(padmap.HandStart|padmap.HandX|padmap.HandY) != 0:
+		return false
+	case held&padmap.HandL2 != 0 && b&(padmap.HandA|padmap.HandB|padmap.HandX|padmap.HandY) != 0:
+		return false
+	}
+	return true
 }
 
 func (s *screen) draw(sc app.Screen) {
@@ -534,7 +563,7 @@ func (s *screen) draw(sc app.Screen) {
 		s.driveView(sc)
 	} else {
 		s.robot(sc.Robot, sc.Notice)
-		s.requested(sc.Requested)
+		s.requested(sc.Requested, sc.Held)
 		s.link(sc.Link)
 	}
 	if sc.State == app.Leaving || sc.State == app.Acting {
@@ -676,7 +705,7 @@ func (s *screen) robot(rb app.Robot, notice string) {
 	}
 	y += wellH + l.gap(22)
 
-	s.cells(robotCells(rb, val), robotCols, ix, y, iw)
+	s.cells(robotCells(rb, val), robotCols, ix, y, iw, 0)
 	y += l.cellH() + l.gap(cellGap)
 
 	// Faults: chips that wrap; the emergency stop in orange, others in the
@@ -726,16 +755,17 @@ func (s *screen) faultChips(rb app.Robot, x, y, width, bottom int32, val sdl.Col
 	}
 }
 
-func (s *screen) requested(rq app.Requested) {
+// requested: what the pak requests, each value's keys pressed while held.
+func (s *screen) requested(rq app.Requested, held padmap.Buttons) {
 	l := s.l
 	y := s.panel(l.right, l.requestedY, l.colW, l.requested, "02", "REQUESTED", colMuted)
-	s.cells(requestedCells(rq), requestedCols, l.right+l.gap(panelPad), y, l.colW-2*l.gap(panelPad))
+	s.cells(requestedCells(rq), requestedCols, l.right+l.gap(panelPad), y, l.colW-2*l.gap(panelPad), held)
 }
 
 func (s *screen) link(lv app.LinkView) {
 	l := s.l
 	y := s.panel(l.right, l.linkY, l.colW, l.link, "03", "LINK", colMuted)
-	s.cells(linkCells(lv), linkCols, l.right+l.gap(panelPad), y, l.colW-2*l.gap(panelPad))
+	s.cells(linkCells(lv), linkCols, l.right+l.gap(panelPad), y, l.colW-2*l.gap(panelPad), 0)
 }
 
 // footer: the controls as keycaps, each pressed while its control is held;
@@ -824,12 +854,12 @@ func sourceName(s string) string {
 // mapping, internal/padmap): Y sleeps and wakes, Start walks and stands.
 func requestedCells(rq app.Requested) []cell {
 	return []cell{
-		{"MODE", rq.Mode, colText, false, []string{"Y", "START"}},
-		{"GAIT", rq.Gait, colText, false, []string{"L1", "R1"}},
-		{"STRIDE", rq.Stride, colText, false, []string{"X"}},
-		{"HEIGHT", fmt.Sprint(rq.Height), colText, true, []string{"↑", "↓"}},
-		{"SPEED", fmt.Sprint(rq.Speed), colText, true, []string{"←", "→"}},
-		{"STICKS", rq.StickMode, colText, false, []string{"B"}},
+		{"MODE", rq.Mode, colText, false, []key{{"Y", padmap.HandY}, {"START", padmap.HandStart}}},
+		{"GAIT", rq.Gait, colText, false, []key{{"L1", padmap.HandL1}, {"R1", padmap.HandR1}}},
+		{"STRIDE", rq.Stride, colText, false, []key{{"X", padmap.HandX}}},
+		{"HEIGHT", fmt.Sprint(rq.Height), colText, true, []key{{"↑", padmap.HandUp}, {"↓", padmap.HandDown}}},
+		{"SPEED", fmt.Sprint(rq.Speed), colText, true, []key{{"←", padmap.HandLeft}, {"→", padmap.HandRight}}},
+		{"STICKS", rq.StickMode, colText, false, []key{{"B", padmap.HandB}}},
 	}
 }
 

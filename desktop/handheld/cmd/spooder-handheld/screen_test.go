@@ -2,6 +2,7 @@ package main
 
 import (
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/app"
+	"github.com/blackfyre/spooder/desktop/handheld/internal/padmap"
 	"github.com/blackfyre/spooder/desktop/internal/legview"
 )
 
@@ -56,7 +58,7 @@ func TestLayoutFitsTheDevice(t *testing.T) {
 			if len(cl.keys) > 0 {
 				w += l.gap(10)
 				for _, k := range cl.keys {
-					w += s.hintKeyWidth(k) + l.gap(4)
+					w += s.hintKeyWidth(k.label) + l.gap(4)
 				}
 			}
 			if w > cellW {
@@ -120,7 +122,13 @@ func TestLayoutFitsTheDevice(t *testing.T) {
 		t.Errorf("driving view well %d×%d, cells %d wide", wellW, wellH, sideW)
 	}
 	vcW := l.cellW(sideW, viewCols)
-	for _, cl := range driveViewCells(app.Robot{Have: true, Body: "Calibrate", Gait: "Tripod", OutputsOn: true, Simulated: true, VoltageMv: 65535}, colText) {
+	vcs := driveViewCells(app.Robot{Have: true, Body: "Calibrate", Gait: "Tripod", Gesture: "say hi", OutputsOn: true, Simulated: true, VoltageMv: 65535}, colText)
+	// The cells' rows and a row of fault chips fit the panel.
+	if bottom, need := l.bodyBottom-l.gap(panelPad), l.bodyY+l.gap(panelPad)+l.microH+l.gap(kickerGap)+
+		int32((len(vcs)+viewCols-1)/viewCols)*(l.cellH()+l.gap(cellGap))+l.microH+l.gap(labelGap)+l.gap(2)+l.gap(chipHeight); need > bottom {
+		t.Errorf("the driving view's cells and faults end at %d, the panel at %d", need, bottom)
+	}
+	for _, cl := range vcs {
 		vf := f.value
 		if cl.mono {
 			vf = f.mono
@@ -200,6 +208,74 @@ func TestChaseCamera(t *testing.T) {
 				if _, d := chase.project(legview.Point3{X: x, Y: y, Z: z}); d <= 0 {
 					t.Errorf("corner (%.0f, %.0f, %.0f) behind the camera", x, y, z)
 				}
+			}
+		}
+	}
+}
+
+// The driving view names the gesture the robot plays beside its body mode
+// (design D1 of handheld-observations): from fresh telemetry, None when
+// none plays, a dash without telemetry.
+func TestDriveViewNamesGesture(t *testing.T) {
+	value := func(cs []cell, label string) (string, bool) {
+		for _, c := range cs {
+			if c.label == label {
+				return c.value, true
+			}
+		}
+		return "", false
+	}
+	for _, c := range []struct {
+		rb   app.Robot
+		want string
+	}{
+		{app.Robot{Have: true, Body: "Perform", Gesture: "say hi", GestureID: 1}, "say hi"},
+		{app.Robot{Have: true, Body: "Stand"}, "None"},
+		{app.Robot{}, "—"},
+	} {
+		cs := driveViewCells(c.rb, colText)
+		got, ok := value(cs, "GESTURE")
+		if !ok || got != c.want {
+			t.Errorf("driving view with %+v: gesture %q (shown %v), want %q", c.rb, got, ok, c.want)
+		}
+		if i := slices.IndexFunc(cs, func(c cell) bool { return c.label == "GESTURE" }); i != 1 {
+			t.Errorf("the gesture is cell %d, want 1, beside the body mode", i)
+		}
+	}
+}
+
+// A requested value's hint key presses while its control is held, as the
+// footer's keycaps do, except while Select or L2 turns the control to
+// another function (design D2 of handheld-observations).
+func TestHintKeysPressWhileHeld(t *testing.T) {
+	for _, c := range []struct {
+		b, held padmap.Buttons
+		want    bool
+	}{
+		{padmap.HandUp, padmap.HandUp, true},
+		{padmap.HandUp, padmap.HandDown, false},
+		{padmap.HandUp, 0, false},
+		{padmap.HandL1, padmap.HandL1 | padmap.HandR1, true},
+		{padmap.HandY, padmap.HandY, true},
+		{padmap.HandY, padmap.HandSelect | padmap.HandY, false},
+		{padmap.HandStart, padmap.HandSelect | padmap.HandStart, false},
+		{padmap.HandX, padmap.HandSelect | padmap.HandX, false},
+		{padmap.HandB, padmap.HandSelect | padmap.HandB, true},
+		{padmap.HandUp, padmap.HandSelect | padmap.HandUp, true},
+		{padmap.HandB, padmap.HandL2 | padmap.HandB, false},
+		{padmap.HandX, padmap.HandL2 | padmap.HandX, false},
+		{padmap.HandStart, padmap.HandL2 | padmap.HandStart, true},
+		{0, padmap.HandA, false},
+	} {
+		if got := hintPressed(c.b, c.held); got != c.want {
+			t.Errorf("hintPressed(%b, held %b) = %v, want %v", c.b, c.held, got, c.want)
+		}
+	}
+	// Every requested value's keys name a control, so each can press.
+	for _, cl := range requestedCells(app.Requested{}) {
+		for _, k := range cl.keys {
+			if k.b == 0 {
+				t.Errorf("%s key %q has no control", cl.label, k.label)
 			}
 		}
 	}

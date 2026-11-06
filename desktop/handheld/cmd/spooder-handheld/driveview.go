@@ -22,7 +22,7 @@ import (
 // ringed, the front marker and the leg numbers, as the calibrator's views
 // draw them (internal/ui/views.go). The camera is fixed to the body: with no
 // odometry, the grid does not move as the robot walks. Beside it the robot's
-// body mode, gait, output and supply, and its faults.
+// body mode, the gesture it plays, gait, output and supply, and its faults.
 const (
 	viewPad  = 18 // the drawing's margin inside its well
 	viewCols = 2  // the cells beside the view
@@ -232,18 +232,23 @@ func (s *screen) driveView(sc app.Screen) {
 		val = colMuted
 	}
 	cs := driveViewCells(rb, val)
-	s.cells(cs, viewCols, cx, y, cw)
+	s.cells(cs, viewCols, cx, y, cw, 0)
 	fy := y + int32((len(cs)+viewCols-1)/viewCols)*(l.cellH()+l.gap(cellGap))
 	s.tracked(s.f.micro, "FAULTS", cx, fy, colMuted, trackMicro)
 	fy += l.microH + l.gap(labelGap) + l.gap(2)
 	s.faultChips(rb, cx, fy, cw, l.bodyBottom-l.gap(panelPad), val)
 }
 
-// driveViewCells is the robot's state beside the driving view.
+// driveViewCells is the robot's state beside the driving view: its body
+// mode and the gesture it plays (design D1 of handheld-observations), gait,
+// output and supply.
 func driveViewCells(rb app.Robot, val sdl.Color) []cell {
-	body, gait, out, supply := "No telemetry", "—", "—", "—"
+	body, gesture, gait, out, supply := "No telemetry", "—", "—", "—", "—"
 	if rb.Have {
-		body, gait, out = rb.Body, rb.Gait, "Off"
+		body, gesture, gait, out = rb.Body, "None", rb.Gait, "Off"
+		if rb.Gesture != "" {
+			gesture = rb.Gesture
+		}
 		if rb.OutputsOn {
 			out = "On"
 			if rb.Simulated {
@@ -254,6 +259,7 @@ func driveViewCells(rb app.Robot, val sdl.Color) []cell {
 	}
 	return []cell{
 		{"BODY", body, val, false, nil},
+		{"GESTURE", gesture, val, false, nil},
 		{"GAIT", gait, val, false, nil},
 		{"OUTPUT", out, val, false, nil},
 		{"SUPPLY", supply, val, true, nil},

@@ -2,11 +2,11 @@
 
 ## 1. Driving view gesture
 
-- [ ] 1.1 Add the GESTURE cell to the driving view (D1). Verify with `go test ./cmd/spooder-handheld` in `desktop/handheld` that `driveViewCells` names the gesture from fresh telemetry, `None` without one and `—` without telemetry, and that the test fails with the cell removed; and that the layout test still fits the driving view's cells and faults.
+- [x] 1.1 Add the GESTURE cell to the driving view (D1). Verify with `go test ./cmd/spooder-handheld` in `desktop/handheld` that `driveViewCells` names the gesture from fresh telemetry, `None` without one and `—` without telemetry, and that the test fails with the cell removed; and that the layout test still fits the driving view's cells and faults.
 
 ## 2. Pressed hint keys
 
-- [ ] 2.1 Give the REQUESTED panel's hint keys their controls and draw them pressed while held (D2). Verify with `go test ./cmd/spooder-handheld` that `hintPressed` presses a held key, not an unheld one, not Start, X or Y with Select held, not A, B, X or Y with L2 held, and the D-pad with Select held; and that every requested cell's keys name a control.
+- [x] 2.1 Give the REQUESTED panel's hint keys their controls and draw them pressed while held (D2). Verify with `go test ./cmd/spooder-handheld` that `hintPressed` presses a held key, not an unheld one, not Start, X or Y with Select held, not A, B, X or Y with L2 held, and the D-pad with Select held; and that every requested cell's keys name a control.
 
 ## 3. Supply bands
 

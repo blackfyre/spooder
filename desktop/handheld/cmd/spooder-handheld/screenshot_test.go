@@ -52,6 +52,7 @@ var screenshotCases = []struct {
 		Requested: app.Requested{Mode: "Walk", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 40 * time.Millisecond, SignalKnown: true, SignalDBm: -33, Sent: 18250},
 		State:     app.Driving,
+		Held:      padmap.HandUp,
 	}, 0},
 	{"fault", app.Screen{
 		Robot:     app.Robot{Have: true, Body: "Sleep", Gait: "Tripod", Faults: []string{"emergency stop", "undervoltage"}, VoltageMv: 50, Source: "none"},
