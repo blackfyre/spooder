@@ -28,12 +28,13 @@ static void reset()
 }
 
 // Feeds the same reading every 20 ms for @p durationMs.
-static void feed(float currentA, float voltageV, uint32_t durationMs, bool clear = false, bool estop = false)
+static void feed(float currentA, float voltageV, uint32_t durationMs, bool clear = false, bool estop = false,
+                 bool simulationSupply = false)
 {
   for (uint32_t t = 0; t < durationMs; t += 20)
   {
     now += 20;
-    last = step(s, Reading{currentA, voltageV}, now, clear, estop);
+    last = step(s, Reading{currentA, voltageV}, now, clear, estop, simulationSupply);
   }
 }
 
@@ -346,6 +347,95 @@ void test_clear_after_release_restores_output_after_settling()
   TEST_ASSERT_TRUE(last.allowOutput);
 }
 
+// --- simulation supply ------------------------------------------------------
+
+void test_simulation_supply_latches_at_once_and_inhibits()
+{
+  TEST_ASSERT_TRUE((INHIBITING_FAULTS & SIMULATION_SUPPLY) != 0);
+  powerUp();
+  feed(0.2f, 6.0f, 20, false, false, true);
+  TEST_ASSERT_FALSE(last.allowOutput);
+  TEST_ASSERT_TRUE(last.forceSleep);
+  TEST_ASSERT_EQUAL_UINT16(SIMULATION_SUPPLY, last.faults);
+  TEST_ASSERT_EQUAL_UINT16(SIMULATION_SUPPLY, last.newlyLatched);
+}
+
+void test_simulation_supply_latches_before_the_supply_settles()
+{
+  reset();
+  feed(0.2f, 6.0f, 20, false, false, true);
+  TEST_ASSERT_EQUAL_UINT16(SIMULATION_SUPPLY, last.faults);
+}
+
+void test_clear_keeps_simulation_supply_while_present()
+{
+  powerUp();
+  feed(0.2f, 6.0f, 40, false, false, true);
+  feed(0.2f, 6.0f, 1000, true, false, true); // clears while the condition is held
+  TEST_ASSERT_EQUAL_UINT16(SIMULATION_SUPPLY, last.faults);
+  TEST_ASSERT_EQUAL_UINT16(NONE, last.newlyLatched);
+  TEST_ASSERT_FALSE(last.allowOutput);
+}
+
+void test_simulation_supply_clears_after_the_condition_goes_and_a_clear()
+{
+  powerUp();
+  feed(0.2f, 6.0f, 40, false, false, true);
+  feed(0.2f, 6.0f, 1000); // condition gone, no clear
+  TEST_ASSERT_EQUAL_UINT16(SIMULATION_SUPPLY, last.faults);
+  TEST_ASSERT_FALSE(last.allowOutput);
+  feed(0.2f, 6.0f, 20, true);
+  TEST_ASSERT_EQUAL_UINT16(NONE, last.faults);
+  TEST_ASSERT_FALSE(last.allowOutput); // the gate needs a fresh settle
+  feed(0.2f, 6.0f, SUPPLY_SETTLE_MS + 20);
+  TEST_ASSERT_TRUE(last.allowOutput);
+}
+
+// Without the parameter, the other faults behave exactly as with it false,
+// and the simulation supply fault never latches.
+void test_other_faults_unchanged_without_the_parameter()
+{
+  static State withDefault;
+  static State withFalse;
+  init(withDefault, LIMITS);
+  init(withFalse, LIMITS);
+  struct Sample
+  {
+    float currentA;
+    float voltageV;
+    uint32_t ms;
+    bool clear;
+    bool estop;
+  };
+  const Sample samples[] = {
+      {0, 0, 1000, false, false},     {0.2f, 6.0f, 600, false, false},  {14.0f, 6.0f, 20, false, false},
+      {0.2f, 6.0f, 20, true, false},  {0.2f, 6.0f, 600, false, false},  {0.2f, 4.5f, 20, false, false},
+      {0.2f, 6.0f, 20, true, false},  {0.2f, 7.2f, 20, false, false},   {0.2f, 6.0f, 20, false, true},
+      {0.2f, 6.0f, 600, true, false}, {7.0f, 6.0f, 3000, false, false}, {0.2f, 5.0f, 400, false, false},
+  };
+  uint32_t t = 0;
+  uint16_t seen = 0;
+  for (const Sample &sample : samples)
+    for (uint32_t elapsed = 0; elapsed < sample.ms; elapsed += 20)
+    {
+      t += 20;
+      Reading r = {sample.currentA, sample.voltageV};
+      Result a = step(withDefault, r, t, sample.clear, sample.estop);
+      Result b = step(withFalse, r, t, sample.clear, sample.estop, false);
+      TEST_ASSERT_EQUAL(b.allowOutput, a.allowOutput);
+      TEST_ASSERT_EQUAL(b.forceSleep, a.forceSleep);
+      TEST_ASSERT_EQUAL(b.supplyValid, a.supplyValid);
+      TEST_ASSERT_EQUAL_UINT16(b.faults, a.faults);
+      TEST_ASSERT_EQUAL_UINT16(b.newlyLatched, a.newlyLatched);
+      TEST_ASSERT_EQUAL_FLOAT(b.averageCurrentA, a.averageCurrentA);
+      TEST_ASSERT_EQUAL_UINT16(0, a.faults & SIMULATION_SUPPLY);
+      seen |= a.faults;
+    }
+  // The sequence exercises every other fault.
+  TEST_ASSERT_EQUAL_UINT16(OVERCURRENT | SUSTAINED_CURRENT | UNDERVOLTAGE | BROWNOUT | OVERVOLTAGE | EMERGENCY_STOP,
+                           seen);
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -375,5 +465,10 @@ int main()
   RUN_TEST(test_emergency_stop_release_without_clear_keeps_output_off);
   RUN_TEST(test_clear_while_emergency_stop_held_keeps_fault);
   RUN_TEST(test_clear_after_release_restores_output_after_settling);
+  RUN_TEST(test_simulation_supply_latches_at_once_and_inhibits);
+  RUN_TEST(test_simulation_supply_latches_before_the_supply_settles);
+  RUN_TEST(test_clear_keeps_simulation_supply_while_present);
+  RUN_TEST(test_simulation_supply_clears_after_the_condition_goes_and_a_clear);
+  RUN_TEST(test_other_faults_unchanged_without_the_parameter);
   return UNITY_END();
 }

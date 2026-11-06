@@ -567,6 +567,45 @@ void test_raw_bytes_of_every_golden_frame()
   }
 }
 
+// The bench simulation vector (simulation flag, fault bit 6): the decoder
+// does not interpret the flags or fault bits, so a receiver that does not
+// know them reads every other field as before.
+void test_bench_simulation_vector_decodes_every_other_field()
+{
+  static golden_frames::Set golden;
+  TEST_ASSERT_TRUE_MESSAGE(golden_frames::load(__FILE__, golden), "cannot read test/golden/protocol_v3.txt");
+  const golden_frames::Frame *g = nullptr;
+  for (int i = 0; i < golden.count; i++)
+    if (strcmp(golden.frames[i].name, "telemetry_bench_simulation") == 0)
+      g = &golden.frames[i];
+  TEST_ASSERT_NOT_NULL_MESSAGE(g, "no telemetry_bench_simulation vector");
+  dec = Decoder();
+  Frame f;
+  TEST_ASSERT_EQUAL_INT(1, feedAndCount(g->bytes, g->length, f));
+  TEST_ASSERT_EQUAL_UINT32(0, dec.discardedFrames());
+  TEST_ASSERT_EQUAL(FrameType::Telemetry, f.type);
+  TEST_ASSERT_EQUAL_UINT8(40, f.seq);
+  const Telemetry &t = f.telemetry;
+  TEST_ASSERT_EQUAL_UINT8(2, t.bodyMode);
+  TEST_ASSERT_EQUAL_UINT8(1, t.gait);
+  TEST_ASSERT_TRUE(t.outputsOn);
+  TEST_ASSERT_EQUAL_UINT16(6000, t.voltageMv);
+  TEST_ASSERT_EQUAL_UINT16(2160, t.currentMa);
+  TEST_ASSERT_EQUAL_UINT16(812, t.validFrames);
+  TEST_ASSERT_EQUAL_UINT16(3, t.discardedFrames);
+  TEST_ASSERT_EQUAL_UINT8(0, t.sensorsAvailable);
+  TEST_ASSERT_EQUAL_UINT16(0, t.tofMm);
+  TEST_ASSERT_EQUAL_UINT8(0, t.tofStatus);
+  TEST_ASSERT_EQUAL_INT16(0, t.pitchCentideg);
+  TEST_ASSERT_EQUAL_INT16(0, t.rollCentideg);
+  TEST_ASSERT_EQUAL_UINT8(0, t.gesture);
+  TEST_ASSERT_EQUAL_UINT16(1207, t.bridgeValidFrames);
+  TEST_ASSERT_EQUAL_UINT16(1, t.bridgeDiscardedFrames);
+  // The bits themselves, copied unchanged.
+  TEST_ASSERT_EQUAL_UINT8(TELEMETRY_SIMULATED, t.flags);
+  TEST_ASSERT_EQUAL_UINT16(0x0040, t.faults);
+}
+
 void test_raw_bytes_follow_each_returned_frame()
 {
   // Two frames in one burst: after each next(), the bytes are that frame's.
@@ -620,6 +659,7 @@ int main()
   RUN_TEST(test_telemetry_and_report_in_one_burst);
   RUN_TEST(test_back_to_back_frames);
   RUN_TEST(test_raw_bytes_of_every_golden_frame);
+  RUN_TEST(test_bench_simulation_vector_decodes_every_other_field);
   RUN_TEST(test_raw_bytes_follow_each_returned_frame);
   return UNITY_END();
 }

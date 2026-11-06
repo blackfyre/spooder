@@ -17,11 +17,12 @@ enum Fault : uint16_t
   BROWNOUT = 1u << 3,          // below the brown-out voltage: output inhibited
   OVERVOLTAGE = 1u << 4,       // above the maximum voltage: output inhibited
   EMERGENCY_STOP = 1u << 5,    // emergency stop signalled: output inhibited
+  SIMULATION_SUPPLY = 1u << 6, // a real servo supply measured in bench simulation: output inhibited
 };
 
 // Faults that switch servo output off immediately; the others put the body to
 // sleep, which folds the legs before switching output off.
-constexpr uint16_t INHIBITING_FAULTS = OVERCURRENT | BROWNOUT | OVERVOLTAGE | EMERGENCY_STOP;
+constexpr uint16_t INHIBITING_FAULTS = OVERCURRENT | BROWNOUT | OVERVOLTAGE | EMERGENCY_STOP | SIMULATION_SUPPLY;
 
 // Supply must be continuously valid this long before output is allowed.
 constexpr uint32_t SUPPLY_SETTLE_MS = 500;
@@ -102,8 +103,12 @@ void init(State &s, const Limits &limits);
  *        in this reading; faults whose condition persists stay latched.
  * @param emergencyStop the operator's emergency stop is signalled; it latches
  *        EMERGENCY_STOP, which clears only once the stop is released.
+ * @param simulationSupply bench simulation has measured a real servo supply;
+ *        it latches SIMULATION_SUPPLY at once, which clears only once the
+ *        condition is gone (bench_sim holds it until restart).
  */
-Result step(State &s, const Reading &reading, uint32_t nowMs, bool clearRequested, bool emergencyStop);
+Result step(State &s, const Reading &reading, uint32_t nowMs, bool clearRequested, bool emergencyStop,
+            bool simulationSupply = false);
 
 } // namespace protection
 

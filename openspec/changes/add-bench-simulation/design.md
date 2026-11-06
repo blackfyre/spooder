@@ -126,6 +126,8 @@ Flash the robot; the bridge and desktop can follow in any order (older ones show
 - In simulation `outputsOn` and the pose output flag report the modelled output.
 - The main `power-protection`, `controller-link` and `pose-telemetry` requirements gain a simulation exception (this change's deltas), so they do not contradict `bench-simulation`.
 - The bench has a logic analyser or oscilloscope for the no-pulse check (task 7.1); a multimeter's DC average cannot show an isolated pulse. With fewer channels than 18 outputs, the pins are captured in groups over repeated runs.
+- The move of the model into `core/robot/bench_model` (D1) keeps its behaviour; `core/`'s lint asks for two textual edits: `Servos::apply`'s declared parameter is named `released`, as in its definition, and the powered-servo count is converted to `float` explicitly (it is at most 18).
+- The golden vector `telemetry_bench_simulation` is a walk in simulation with the supply fault latched: seq 40, Walk, gait 1, output on, 6.00 V, 2.16 A, link counts 812/3 and bridge counts 1207/1, flags 32 and faults 64 only. Existing desktop console fixtures (`console_test.go`'s expected lines, `testdata/transcript.txt`) gain its line as an older receiver formats it (`faults fault bit 6`, no SIM) until task 4.2 names both.
 - The tick's working time in diagnostics includes `bench_sim::step` and the model's reading, so the existing diagnostics frame measures the whole of the new per-tick work; the acceptance limit is a longest working time below 20 ms.
 
 ## Follow-ups

@@ -45,6 +45,7 @@ add_executable(virtual-robot
   ${SPOODER_CORE}/protection/protection.cpp
   ${SPOODER_CORE}/protection/resume_gate.cpp
   ${SPOODER_CORE}/protection/supervisor.cpp
+  ${SPOODER_CORE}/robot/bench_model.cpp
   ${SPOODER_CORE}/robot/robot_tick.cpp
   ${SPOODER_CORE}/identity/build_identity.cpp
   ${SPOODER_CORE}/status/led_pattern.cpp

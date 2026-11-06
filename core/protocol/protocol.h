@@ -97,6 +97,8 @@ constexpr uint8_t TELEMETRY_BRIDGE_IN_CONTROL = 1u << 2;
 // a valid bridge frame within the link-gap time, and a gamepad on it.
 constexpr uint8_t TELEMETRY_BRIDGE_LINK_UP = 1u << 3;
 constexpr uint8_t TELEMETRY_BRIDGE_GAMEPAD = 1u << 4;
+// Bench simulation: no servo moves; output and supply readings are modelled.
+constexpr uint8_t TELEMETRY_SIMULATED = 1u << 5;
 
 // Robot to every link, every 100 ms.
 struct Telemetry

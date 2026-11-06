@@ -65,7 +65,7 @@ static void accumulate(State &s, float currentA, uint32_t dtMs)
 }
 
 // Whether the condition behind each fault is present in this reading.
-static uint16_t presentConditions(const State &s, const Reading &r, bool emergencyStop)
+static uint16_t presentConditions(const State &s, const Reading &r, bool emergencyStop, bool simulationSupply)
 {
   const Limits &l = s.limits;
   uint16_t present = 0;
@@ -81,10 +81,12 @@ static uint16_t presentConditions(const State &s, const Reading &r, bool emergen
     present |= OVERVOLTAGE;
   if (emergencyStop)
     present |= EMERGENCY_STOP;
+  if (simulationSupply)
+    present |= SIMULATION_SUPPLY;
   return present;
 }
 
-Result step(State &s, const Reading &r, uint32_t nowMs, bool clearRequested, bool emergencyStop)
+Result step(State &s, const Reading &r, uint32_t nowMs, bool clearRequested, bool emergencyStop, bool simulationSupply)
 {
   const Limits &l = s.limits;
   uint32_t dtMs = s.started ? nowMs - s.lastMs : 0;
@@ -94,7 +96,7 @@ Result step(State &s, const Reading &r, uint32_t nowMs, bool clearRequested, boo
   accumulate(s, r.currentA, dtMs);
 
   bool supplyValid = r.voltageV >= l.minV && r.voltageV <= l.maxV;
-  uint16_t present = presentConditions(s, r, emergencyStop);
+  uint16_t present = presentConditions(s, r, emergencyStop, simulationSupply);
 
   // Clearing first, so a clear and a still-present condition re-latch below.
   if (clearRequested)
@@ -102,7 +104,7 @@ Result step(State &s, const Reading &r, uint32_t nowMs, bool clearRequested, boo
 
   // Trips. Voltage-low faults only apply once the supply has been accepted:
   // before that, a low or absent supply just keeps output off.
-  uint16_t latch = present & (OVERVOLTAGE | SUSTAINED_CURRENT | EMERGENCY_STOP);
+  uint16_t latch = present & (OVERVOLTAGE | SUSTAINED_CURRENT | EMERGENCY_STOP | SIMULATION_SUPPLY);
 
   // Overcurrent: at once above the ceiling; above the trip current only once
   // every reading has been above it for the persistence time, so a start-up

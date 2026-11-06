@@ -278,6 +278,22 @@ static void buildGolden(Text &t)
   f.telemetry.bridgeDiscardedFrames = 2;
   addFrame(t, "telemetry_usb_bridge_link_up", f);
 
+  // Bench simulation, walking, with the simulation supply fault latched: the
+  // simulation flag and fault bit 6, the modelled output on and readings.
+  f = frame(FrameType::Telemetry, 40);
+  f.telemetry.bodyMode = 2; // Walk
+  f.telemetry.gait = 1;
+  f.telemetry.outputsOn = true;
+  f.telemetry.faults = 0x0040;
+  f.telemetry.voltageMv = 6000;
+  f.telemetry.currentMa = 2160;
+  f.telemetry.validFrames = 812;
+  f.telemetry.discardedFrames = 3;
+  f.telemetry.flags = TELEMETRY_SIMULATED;
+  f.telemetry.bridgeValidFrames = 1207;
+  f.telemetry.bridgeDiscardedFrames = 1;
+  addFrame(t, "telemetry_bench_simulation", f);
+
   f = frame(FrameType::CalibrationSet, 1);
   f.calibrationSet = {1, 0, 9000, 500, 2500, 0};
   addFrame(t, "calibration_set_default_joint0", f);

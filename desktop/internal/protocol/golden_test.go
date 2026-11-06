@@ -129,3 +129,41 @@ func TestGoldenVectorsBackToBack(t *testing.T) {
 		t.Fatalf("decoded %d frames, want %d", len(frames), len(want))
 	}
 }
+
+// The bench simulation vector (simulation flag, fault bit 6): the decoder
+// does not interpret the flags or fault bits, so a receiver that does not
+// know them reads every other field as before.
+func TestGoldenBenchSimulation(t *testing.T) {
+	var found *vector
+	vectors := readVectors(t)
+	for i := range vectors {
+		if vectors[i].name == "telemetry_bench_simulation" {
+			found = &vectors[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("no telemetry_bench_simulation vector")
+	}
+	var d Decoder
+	frames := decodeAll(&d, found.frame)
+	if len(frames) != 1 || d.Discarded() != 0 {
+		t.Fatalf("decoded %d frames, %d discarded", len(frames), d.Discarded())
+	}
+	f := frames[0]
+	if f.Type != TypeTelemetry || f.Seq != 40 {
+		t.Fatalf("type %s seq %d, want telemetry seq 40", f.Type.Name(), f.Seq)
+	}
+	got := f.Telemetry
+	// Every field other than the flags and faults, then those as copied.
+	want := Telemetry{
+		BodyMode: 2, Gait: 1, OutputsOn: true, VoltageMv: 6000, CurrentMa: 2160,
+		ValidFrames: 812, DiscardedFrames: 3, BridgeValidFrames: 1207, BridgeDiscardedFrames: 1,
+		Flags: got.Flags, Faults: got.Faults,
+	}
+	if got != want {
+		t.Errorf("telemetry %+v, want %+v", got, want)
+	}
+	if got.Flags != TelemetrySimulated || got.Faults != 1<<6 {
+		t.Errorf("flags %#x faults %#x, want %#x and 0x40", got.Flags, got.Faults, TelemetrySimulated)
+	}
+}

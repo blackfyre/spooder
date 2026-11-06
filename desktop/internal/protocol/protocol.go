@@ -104,6 +104,9 @@ const (
 	// the link-gap time, and a gamepad on it.
 	TelemetryBridgeLinkUp  uint8 = 1 << 3
 	TelemetryBridgeGamepad uint8 = 1 << 4
+	// Bench simulation: no servo moves; output and supply readings are
+	// modelled.
+	TelemetrySimulated uint8 = 1 << 5
 )
 
 // Telemetry is sent by the robot to every link, every 100 ms.
