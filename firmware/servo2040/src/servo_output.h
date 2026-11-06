@@ -36,6 +36,13 @@ void apply(const body::BodyState &body, const joint_calibration::Table &calibrat
  */
 void stop();
 
+/**
+ * @brief Bench simulation's barrier: switches every output off at once and,
+ * until restart, keeps it off: apply() returns at once and
+ * setInhibited(false) does nothing. Bounded by one pulse length.
+ */
+void forceOff();
+
 bool outputsOn();
 
 /**

@@ -1,10 +1,15 @@
 #include <cstdio>
+#include "hardware/gpio.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
+#include "servo2040.hpp"
+#include "tusb.h"
 
 #include "config.h"
 #include "identity/build_identity.h"
 #include "power_monitor.h"
+#include "robot/bench_model.h"
+#include "robot/bench_sim.h"
 #include "robot/robot_tick.h"
 #include "servo_output.h"
 #include "status_leds.h"
@@ -20,19 +25,17 @@
 // drives the hardware from it, and keeps the 20 ms period.
 
 static robot_tick::RobotState robot;
+// Bench simulation's entry decision: in RAM, zeroed at every start-up.
+static bench_sim::Entry benchEntry;
+// The modelled supply in simulation: a steady 6 V at load 1.
+static const bench_model::Supply benchSupply;
 
-// The tick's view of the board.
-class Board final : public robot_tick::Hardware
+// The tick's view of the board. The servo calls are BenchBoard's (final):
+// they reach servo_output through the hooks below until enterSimulation(),
+// and the modelled servos from then on.
+class Board final : public bench_sim::BenchBoard
 {
 public:
-  void setInhibited(bool inhibited) override { servo_output::setInhibited(inhibited); }
-  void stopServos() override { servo_output::stop(); }
-  void applyServos(const body::BodyState &body, const joint_calibration::Table &applied, int legsOn) override
-  {
-    servo_output::apply(body, applied, legsOn);
-  }
-  bool servosOn() override { return servo_output::outputsOn(); }
-  const uint16_t *servoPulses() override { return servo_output::pulses(); }
   void showLeds(const led_pattern::State &state) override { status_leds::show(state); }
   bool sendFrame(robot_tick::Link link, const uint8_t *frame, int length) override
   {
@@ -46,6 +49,17 @@ public:
 #endif
   }
   void log(const char *line) override { printf("%s", line); }
+
+protected:
+  void realSetInhibited(bool inhibited) override { servo_output::setInhibited(inhibited); }
+  void realStop() override { servo_output::stop(); }
+  void realApply(const body::BodyState &body, const joint_calibration::Table &applied, int legsOn) override
+  {
+    servo_output::apply(body, applied, legsOn);
+  }
+  bool realOn() override { return servo_output::outputsOn(); }
+  const uint16_t *realPulses() override { return servo_output::pulses(); }
+  void realForceOff() override { servo_output::forceOff(); }
 };
 
 static Board board;
@@ -55,9 +69,19 @@ static uint32_t nowMs()
   return to_ms_since_boot(get_absolute_time());
 }
 
+// The USER button (GPIO23, active low). It is also the BOOT switch: held
+// through reset it enters BOOTSEL, so the firmware only sees later presses.
+static void setupUserButton()
+{
+  gpio_init(servo::servo2040::USER_SW);
+  gpio_set_dir(servo::servo2040::USER_SW, GPIO_IN);
+  gpio_pull_up(servo::servo2040::USER_SW);
+}
+
 int main()
 {
   stdio_init_all();
+  setupUserButton();
   status_leds::setup();
   power_monitor::setup();
 #ifdef SPOODER_SERIAL_COMMANDS
@@ -112,10 +136,29 @@ int main()
     in.byteCount[(int)robot_tick::Link::Usb] = usb_link::read(usbBytes, usb_link::MAX_BYTES_PER_POLL);
     in.bytes[(int)robot_tick::Link::Usb] = usbBytes;
 #endif
-    in.power = power_monitor::read();
+    protection::Reading measured = power_monitor::read();
     in.previousTickUs = previousTickUs;
 
+    // The working time covers the bench simulation step and the model's
+    // reading, as well as the tick.
     uint32_t tickStart = time_us_32();
+    bench_sim::Sample sample = {};
+    sample.nowMs = now;
+    sample.buttonPressed = !gpio_get(servo::servo2040::USER_SW);
+    sample.measuredSupplyV = measured.voltageV;
+    sample.realOutputOn = servo_output::outputsOn();
+    // Enumerated by a host and not suspended: a charger or a bare cable is
+    // not a host (VBUS sense is forced present on this board).
+    sample.usbHost = tud_mounted() && !tud_suspended();
+    sample.brownoutV = config::POWER_LIMITS.brownoutV;
+    bench_sim::Result bench = bench_sim::step(benchEntry, sample);
+    if (bench.phase == bench_sim::Phase::Simulating)
+      board.enterSimulation(); // once: later calls do nothing
+    in.bench = bench.bench;
+    // In simulation the tick sees the modelled supply; the measured one only
+    // feeds bench_sim (the supply fault).
+    in.power = board.simulated() ? benchSupply.read(board.model()) : measured;
+
     robot_tick::tick(robot, in, now, board);
     previousTickUs = time_us_32() - tickStart;
 

@@ -40,6 +40,8 @@ static bool on = false;
 static bool inhibited = true;
 // Pins are forced low through the GPIO output override while output is off.
 static bool pinsForcedLow = false;
+// Set by forceOff(), never cleared: no output until restart.
+static bool forcedOff = false;
 static absolute_time_t switchedOffAt;
 
 bool setup()
@@ -58,6 +60,8 @@ bool setup()
 
 void setInhibited(bool value)
 {
+  if (forcedOff)
+    return; // stays inhibited until restart
   inhibited = value;
 }
 
@@ -111,6 +115,8 @@ static void switchOff()
 
 void apply(const body::BodyState &body, const joint_calibration::Table &calibration, int legsOn)
 {
+  if (forcedOff)
+    return;
   bool changed[OUTPUT_COUNT] = {};
   for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
   {
@@ -170,6 +176,15 @@ void stop()
 {
   if (on)
     switchOff();
+}
+
+void forceOff()
+{
+  forcedOff = true;
+  inhibited = true;
+  // Whether or not output is on: the pins stay forced low (only apply()
+  // releases them, and it no longer runs) and the cluster disabled.
+  switchOff();
 }
 
 bool outputsOn()
