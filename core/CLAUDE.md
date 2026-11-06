@@ -6,7 +6,7 @@ A change here reaches the robot, the bridge and the virtual robot: run `mise run
 
 - `movement/` (reference: the `spooder-leg-kinematics` skill):
   - `body`: the non-blocking state machine (Initialise, Stand, Walk, Sleep, Calibrate, Perform) on a fixed 5 ms internal grid.
-  - `gesture`: the gestures Perform plays (say hi and wiggle so far): keyframe scripts of body shifts and lifted feet, and the player (eased, rate-limited segments; a stopped gesture finishes its keyframe, puts its feet down, then straightens).
+  - `gesture`: the gestures Perform plays (say hi and wiggle so far): keyframe scripts of body shifts and lifted feet, and the player (eased, rate-limited segments; a stopped gesture finishes its keyframe, puts its feet down, then straightens). The scripts' joint angles are pinned by `test/golden/gestures.txt`, which the handheld's gesture table is generated from (`test/CLAUDE.md`).
   - `gait`, `kinematics` (IK, target validation, `servoOutputIndex`) and `vectors`.
   - `joint_calibration`: the per-joint calibration table (offset, 0° and 180° pulses, direction), its clamps, the 60°/s rate-limited `step` and `toPulse`.
   - `calibration_defaults.cpp`: the compiled defaults, in a fixed format that a front-end's export replaces whole. Its values are free to change; host tests check that it parses, stays within the guards and round-trips through the exporters.
