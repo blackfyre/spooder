@@ -41,10 +41,11 @@ struct Lift
 };
 
 // The body over its planted feet, in the body frame (x right, y forward,
-// z up, millimetres): a translation, then a rotation about the body's centre
+// z up, millimetres): a translation and a rotation about the body's centre
 // by yaw (about z, + anticlockwise seen from above), pitch (about x, + nose
-// up) and roll (about y, + right side down). Rotation is task 2.2: until then
-// the player applies the translation only, and no script rotates.
+// up) and roll (about y, + right side down). The body-to-world transform is
+// translation + Rz(yaw) Rx(pitch) Ry(roll) * point: roll first, then pitch,
+// then yaw about fixed axes. Planted feet use its inverse.
 struct Pose
 {
   Vector3 translation;
@@ -110,18 +111,20 @@ enum class Stage : uint8_t
   Straighten // stopped: the body back over its standing feet
 };
 
-// The player: one eased move (a segment) at a time, from `from` to `to`.
+// The player: one eased pose segment at a time, with foot endpoints for
+// legs that have explicit targets.
 struct Player
 {
   Gesture gesture = Gesture::None;
   Script sequence = {nullptr, 0}; // what it plays: script(gesture), or a test's own
   Stage stage = Stage::Keyframes;
-  int index = 0;           // keyframe in progress
-  uint32_t elapsedMs = 0;  // within the segment
-  uint32_t durationMs = 0; // of the segment, rate limit included
-  Vector3 from[LEG_COUNT]; // feet at the segment's start
-  Vector3 to[LEG_COUNT];   // and end
-  Pose pose;               // the body pose reached by the last keyframe
+  int index = 0;                 // keyframe in progress
+  uint32_t elapsedMs = 0;        // within the segment
+  uint32_t durationMs = 0;       // of the segment, rate limit included
+  Vector3 from[LEG_COUNT];       // feet at the segment's start
+  Vector3 to[LEG_COUNT];         // and end
+  bool straight[LEG_COUNT] = {}; // explicit foot target at either segment end
+  Pose pose;                     // the body pose reached by the last keyframe
   bool stopRequested = false;
   bool done = true;
 };
@@ -147,9 +150,9 @@ void advance(Player &p, uint32_t dtMs, Vector3 standing, Vector3 *out);
 
 /**
  * @brief The shortest duration in which an eased move of @p distanceMm keeps
- * to MAX_FOOT_SPEED_MM_S.
+ * to @p speedMmS.
  */
-uint32_t minimumDurationMs(float distanceMm);
+uint32_t minimumDurationMs(float distanceMm, float speedMmS = MAX_FOOT_SPEED_MM_S);
 
 /**
  * @brief Smoothstep easing, 0..1 to 0..1.

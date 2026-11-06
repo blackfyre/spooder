@@ -298,9 +298,127 @@ void test_unavailable_gesture_is_done_at_once()
   TEST_ASSERT_TRUE(p.done);
 }
 
+// Independently put a leg target back into the body-centre world frame.
+static Vector3 worldFoot(int leg, Vector3 foot, const Pose &pose)
+{
+  Vector2 xy = toBody(leg, foot);
+  Vector3 v(xy.x, xy.y, body_geometry::PIVOTS[leg].z + foot.z);
+  float r = pose.rollDeg * (float)M_PI / 180;
+  float p = pose.pitchDeg * (float)M_PI / 180;
+  float y = pose.yawDeg * (float)M_PI / 180;
+  v = Vector3(cosf(r) * v.x + sinf(r) * v.z, v.y, -sinf(r) * v.x + cosf(r) * v.z);
+  v = Vector3(v.x, cosf(p) * v.y - sinf(p) * v.z, sinf(p) * v.y + cosf(p) * v.z);
+  v = Vector3(cosf(y) * v.x - sinf(y) * v.y, sinf(y) * v.x + cosf(y) * v.y, v.z);
+  return v + pose.translation;
+}
+
+void test_pose_keeps_planted_feet_fixed_through_rotation_and_stop()
+{
+  const Keyframe frames[] = {{1000, {Vector3(12, -9, 5), 25, 15, -18}, {}}, {1000, {}, {}}};
+  for (int stop = 0; stop < 2; stop++)
+  {
+    Vector3 standing = standingAt(-100), feet[LEG_COUNT];
+    for (Vector3 &foot : feet)
+      foot = standing;
+    Player player;
+    start(player, Gesture::Dance, {frames, 2}, feet, standing);
+    player.stopRequested = stop;
+    while (!player.done)
+    {
+      advance(player, 5, standing, feet);
+      Pose pose;
+      if (!player.done)
+      {
+        float t = ease((float)player.elapsedMs / player.durationMs);
+        Pose end = player.stage == Stage::Keyframes ? frames[player.index].pose
+                   : player.stage == Stage::Plant   ? player.pose
+                                                    : Pose{};
+        pose = {interpolate(player.pose.translation, end.translation, t),
+                player.pose.yawDeg + (end.yawDeg - player.pose.yawDeg) * t,
+                player.pose.pitchDeg + (end.pitchDeg - player.pose.pitchDeg) * t,
+                player.pose.rollDeg + (end.rollDeg - player.pose.rollDeg) * t};
+      }
+      for (int leg = 0; leg < LEG_COUNT; leg++)
+        TEST_ASSERT_FLOAT_WITHIN(0.1f, 0, worldFoot(leg, feet[leg], pose).distanceTo(worldFoot(leg, standing, {})));
+    }
+  }
+}
+
+void test_explicit_foot_targets_follow_straight_segments()
+{
+  const Keyframe frames[] = {{1000, {Vector3(), 25, 10, -12}, {{0, Vector3(180, 20, -20)}}}, {1000, {}, {}}};
+  Vector3 standing = standingAt(-100), feet[LEG_COUNT];
+  for (Vector3 &foot : feet)
+    foot = standing;
+  Player player;
+  start(player, Gesture::Dance, {frames, 2}, feet, standing);
+  while (!player.done)
+  {
+    advance(player, 5, standing, feet);
+    if (!player.done)
+    {
+      float t = ease((float)player.elapsedMs / player.durationMs);
+      TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0, feet[0].distanceTo(interpolate(player.from[0], player.to[0], t)));
+    }
+  }
+}
+
+void test_zero_rotation_matches_translation_for_every_leg()
+{
+  Vector3 standing(190, 17, -130), shift(23, -31, 11);
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+  {
+    Vector2 x = legX(leg), y = legY(leg);
+    Vector3 expected(standing.x - shift.x * x.x - shift.y * x.y, standing.y - shift.x * y.x - shift.y * y.y,
+                     standing.z - shift.z);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0, expected.distanceTo(plantedFoot(leg, standing, {shift})));
+  }
+}
+
+void test_rotation_rate_limit_uses_the_path_and_keyframe_speed()
+{
+  Keyframe frame = {1, {Vector3(), 100, 0, 0}, {}};
+  Vector3 standing = standingAt(-100), feet[LEG_COUNT];
+  for (Vector3 &foot : feet)
+    foot = standing;
+  Player player;
+  start(player, Gesture::Dance, {&frame, 1}, feet, standing);
+  uint32_t duration = player.durationMs;
+  float chord = 0;
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+    chord = fmaxf(chord, standing.distanceTo(player.to[leg]));
+  TEST_ASSERT_TRUE(duration > minimumDurationMs(chord));
+  float longest = 0;
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+  {
+    Vector3 world = worldFoot(leg, standing, {});
+    longest = fmaxf(longest, sqrtf(world.x * world.x + world.y * world.y) * 100 * (float)M_PI / 180);
+  }
+  TEST_ASSERT_FLOAT_WITHIN(0.003f * duration, minimumDurationMs(longest), duration);
+  while (!player.done)
+  {
+    Vector3 before[LEG_COUNT];
+    for (int leg = 0; leg < LEG_COUNT; leg++)
+      before[leg] = feet[leg];
+    advance(player, 5, standing, feet);
+    for (int leg = 0; leg < LEG_COUNT; leg++)
+      TEST_ASSERT_TRUE(feet[leg].distanceTo(before[leg]) / 0.005f <= MAX_FOOT_SPEED_MM_S * 1.003f);
+  }
+  frame.maxFootSpeedMmS = 600;
+  for (Vector3 &foot : feet)
+    foot = standing;
+  start(player, Gesture::Dance, {&frame, 1}, feet, standing);
+  TEST_ASSERT_TRUE(player.durationMs < duration);
+  TEST_ASSERT_UINT32_WITHIN(1, duration / 2, player.durationMs);
+}
+
 int main()
 {
   UNITY_BEGIN();
+  RUN_TEST(test_pose_keeps_planted_feet_fixed_through_rotation_and_stop);
+  RUN_TEST(test_explicit_foot_targets_follow_straight_segments);
+  RUN_TEST(test_zero_rotation_matches_translation_for_every_leg);
+  RUN_TEST(test_rotation_rate_limit_uses_the_path_and_keyframe_speed);
   RUN_TEST(test_only_scripted_gestures_are_available);
   RUN_TEST(test_shifting_the_body_moves_planted_feet_the_other_way);
   RUN_TEST(test_every_pose_is_reachable_and_within_servo_range);

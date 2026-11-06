@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include "gait.h"
+#include "body_geometry.h"
 
 namespace gesture
 {
@@ -61,15 +62,25 @@ bool available(uint8_t id)
 
 Vector3 plantedFoot(int leg, Vector3 standing, const Pose &pose)
 {
-  // The body moves by the translation over feet that stay put, so each foot
-  // moves by -translation relative to the body: projected onto the leg
-  // frame's axes. The rotation is task 2.2.
-  Vector3 shift = pose.translation;
   float a = gait::mountAngleDeg(leg) * (float)M_PI / 180.0f;
-  float ex = cosf(a), ey = sinf(a);  // leg x in the body frame
-  float yx = sinf(a), yy = -cosf(a); // leg y: x turned clockwise
-  float dx = -shift.x, dy = -shift.y;
-  return Vector3(standing.x + dx * ex + dy * ey, standing.y + dx * yx + dy * yy, standing.z - shift.z);
+  float ex = cosf(a), ey = sinf(a);
+  float yx = ey, yy = -ex; // leg y: x turned clockwise
+  Vector3 shift = pose.translation;
+  if (pose.yawDeg == 0 && pose.pitchDeg == 0 && pose.rollDeg == 0)
+    return Vector3(standing.x - shift.x * ex - shift.y * ey, standing.y - shift.x * yx - shift.y * yy,
+                   standing.z - shift.z);
+  const Vector3 &pivot = body_geometry::PIVOTS[leg];
+  Vector3 v(pivot.x + standing.x * ex + standing.y * yx - shift.x,
+            pivot.y + standing.x * ey + standing.y * yy - shift.y, pivot.z + standing.z - shift.z);
+  // Undo Rz(yaw) Rx(pitch) Ry(roll), in reverse order.
+  float yaw = pose.yawDeg * (float)M_PI / 180.0f;
+  float pitch = pose.pitchDeg * (float)M_PI / 180.0f;
+  float roll = pose.rollDeg * (float)M_PI / 180.0f;
+  v = Vector3(cosf(yaw) * v.x + sinf(yaw) * v.y, -sinf(yaw) * v.x + cosf(yaw) * v.y, v.z);
+  v = Vector3(v.x, cosf(pitch) * v.y + sinf(pitch) * v.z, -sinf(pitch) * v.y + cosf(pitch) * v.z);
+  v = Vector3(cosf(roll) * v.x - sinf(roll) * v.z, v.y, sinf(roll) * v.x + cosf(roll) * v.z);
+  v = v - pivot;
+  return Vector3(v.x * ex + v.y * ey, v.x * yx + v.y * yy, v.z);
 }
 
 Vector3 keyframeFoot(const Keyframe &k, int leg, Vector3 standing)
@@ -91,10 +102,34 @@ float ease(float t)
 
 // --- Player ----------------------------------------------------------------
 
-uint32_t minimumDurationMs(float distanceMm)
+uint32_t minimumDurationMs(float distanceMm, float speedMmS)
 {
   // Smoothstep's peak speed is 1.5 times the average.
-  return (uint32_t)ceilf(1.5f * distanceMm / MAX_FOOT_SPEED_MM_S * 1000.0f);
+  return (uint32_t)ceilf(1.5f * distanceMm / speedMmS * 1000.0f);
+}
+
+static Pose segmentPose(const Player &p, float t)
+{
+  Pose end;
+  if (p.stage == Stage::Keyframes)
+    end = p.sequence.frames[p.index].pose;
+  else if (p.stage == Stage::Plant)
+    end = p.pose;
+  return {interpolate(p.pose.translation, end.translation, t), p.pose.yawDeg + (end.yawDeg - p.pose.yawDeg) * t,
+          p.pose.pitchDeg + (end.pitchDeg - p.pose.pitchDeg) * t, p.pose.rollDeg + (end.rollDeg - p.pose.rollDeg) * t};
+}
+
+static bool hasTarget(const Keyframe &k, int leg)
+{
+  for (const Lift &lift : k.lifts)
+    if (lift.leg == leg)
+      return true;
+  return false;
+}
+
+static Vector3 segmentFoot(const Player &p, int leg, Vector3 standing, const Pose &pose, float t)
+{
+  return p.straight[leg] ? interpolate(p.from[leg], p.to[leg], t) : plantedFoot(leg, standing, pose);
 }
 
 // Sets the segment's targets and duration for the current stage.
@@ -103,6 +138,10 @@ static void beginSegment(Player &p, Vector3 standing)
   uint32_t base = RETURN_MS;
   for (int i = 0; i < LEG_COUNT; i++)
   {
+    p.straight[i] = p.stage != Stage::Straighten &&
+                    ((p.index > 0 && hasTarget(p.sequence.frames[p.index - 1], i)) ||
+                     (p.stage == Stage::Keyframes && hasTarget(p.sequence.frames[p.index], i)) ||
+                     (p.index == 0 && p.from[i].distanceTo(standing) > 0.001f));
     switch (p.stage)
     {
     case Stage::Keyframes:
@@ -117,13 +156,29 @@ static void beginSegment(Player &p, Vector3 standing)
     }
   }
   float longest = 0;
+  float lengths[LEG_COUNT] = {};
+  Vector3 previous[LEG_COUNT];
   for (int i = 0; i < LEG_COUNT; i++)
-    longest = fmaxf(longest, p.from[i].distanceTo(p.to[i]));
+    previous[i] = p.from[i];
+  // Eight pieces measure the arc rather than its endpoint chord.
+  for (int sample = 1; sample <= 8; sample++)
+  {
+    float t = (float)sample / 8;
+    Pose pose = segmentPose(p, t);
+    for (int i = 0; i < LEG_COUNT; i++)
+    {
+      Vector3 foot = segmentFoot(p, i, standing, pose, t);
+      lengths[i] += previous[i].distanceTo(foot);
+      previous[i] = foot;
+      longest = fmaxf(longest, lengths[i]);
+    }
+  }
   if (p.stage == Stage::Keyframes)
     base = p.sequence.frames[p.index].durationMs;
   else if (longest < 0.5f)
     base = 0; // a return step with nothing to move: skip it
-  uint32_t minimum = minimumDurationMs(longest);
+  float speed = p.stage == Stage::Keyframes ? p.sequence.frames[p.index].maxFootSpeedMmS : 0;
+  uint32_t minimum = minimumDurationMs(longest, speed != 0 ? speed : MAX_FOOT_SPEED_MM_S);
   p.durationMs = base > minimum ? base : minimum;
   if (p.durationMs == 0)
     p.durationMs = 1;
@@ -184,8 +239,9 @@ void advance(Player &p, uint32_t dtMs, Vector3 standing, Vector3 *out)
     {
       p.elapsedMs += remaining;
       float t = ease((float)p.elapsedMs / (float)p.durationMs);
+      Pose pose = segmentPose(p, t);
       for (int i = 0; i < LEG_COUNT; i++)
-        out[i] = interpolate(p.from[i], p.to[i], t);
+        out[i] = segmentFoot(p, i, standing, pose, t);
       return;
     }
     // The segment completes within this step; the rest carries over.
