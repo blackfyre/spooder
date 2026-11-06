@@ -29,7 +29,7 @@ See proposal.md for the motivation. What exists:
 `test/test_gesture_golden` (Unity, native env) builds the text and compares it with `test/golden/gestures.txt`, or writes it under `SPOODER_WRITE_GOLDEN=1`, as `test_leg_pose_golden` does; `SPOODER_GESTURES_GOLDEN` names another copy to compare with (for the "a changed value fails" check, as `SPOODER_GAMEPAD_GOLDEN` does). For each id 1 to 5 (`GESTURE_ID_COUNT` − 1) in order:
 
 - `gesture <id> <name> scripted` or `gesture <id> <name> none`, with `scripted` exactly when `gesture::available(id)`;
-- for a scripted id, `pose <id> <t_ms>` followed by 18 angles in degrees with two decimals (leg 0 to 5, coxa femur tibia each): the player started from every foot at the standing point at height 0, sampled at t = 0 and after each 50 ms `advance` until `done`, the last sample included; each foot solved by `kinematics::solveLegInRange` with the default calibration's offsets for its leg, as the body does.
+- for a scripted id, `pose <id> <t_ms>` followed by 18 angles in degrees with two decimals (leg 0 to 5, coxa femur tibia each): the player started from every foot at the standing point at height 0, sampled at t = 0 and after each 50 ms `advance` until `done`, the last sample included, or until a cap of 10 s (`MAX_PREVIEW_MS`): a scripted gesture not done by then fails the test, so a gesture that holds its last pose (ball, in `add-gestures`) cannot make the generator loop and needs its preview end decided when its script lands; each foot solved by `kinematics::solveLegInRange` with the default calibration's offsets for its leg, as the body does.
 
 A target `solveLegInRange` refuses fails the test (the scripts are checked reachable already by `test_gesture`). Comment lines start with `#`, as in the other golden files. The text is compared whole, so any change of a script, its timing, the IK or the default offsets shows as a diff to review.
 
@@ -61,6 +61,10 @@ The overlay owns its tile list: button, gesture id, keycap label and place. Plac
 
 A scrim dims the page; the overlay is a panel in the drive screen's palette with the title `GESTURES`, the five tiles and, when needed, the `STAND FIRST` chip in the warning colour with its label. Each tile shows its pictogram, the gesture's name in capitals and its keycap. A lit tile (request or playing) uses the single orange accent with the label `PLAYING` while playing; an unscripted tile is muted with a `NOT YET` chip. Colours are never the only signal: every state has its label.
 
+### D8. Draw time
+
+Input is read on the same thread as the draw (`drive` in `main.go`: poll every 5 ms, draw every 50 ms), so a slow draw delays the controls the 20 ms sender tick sends. With `SPOODER_DRAW_TIMING=1` in the environment, `drive` prints to stderr, once a second, the longest `scr.draw` of that second and the longest interval between successive `SetControls` calls (the complete sampling gap: poll delay plus draw); without it, nothing changes. The budget, with the overlay open, is a sampling gap of at most 25 ms (the 5 ms poll plus a 20 ms draw), so a control change waits at most 25 ms to be read and then until the next sender tick; the on-device task checks it.
+
 ## Assumptions
 
 - The brief asks to add to the drive screen requirement of `handheld-controller`, which only exists in the unarchived `add-handheld-controller`. The delta modifies that requirement, so `add-handheld-controller` must be archived before this change (`openspec validate` reports that archive would otherwise refuse the delta).
@@ -72,10 +76,10 @@ A scrim dims the page; the overlay is a panel in the drive screen's palette with
 
 ## Risks / Trade-offs
 
-- [Five perspective robots per frame on the device] → tiles draw without grid detail beyond a few lines; the on-device task checks the redraw rate (at least 10 per second) with the overlay open.
+- [Five perspective robots per frame on the device, drawn on the thread that reads the controls] → tiles draw without grid detail beyond a few lines; the on-device task checks the redraw rate (at least 10 per second) and the longest sampling gap (at most 25 ms, D8) with the overlay open.
 - [Floating-point output differing between host compilers] → two decimals in the fixture; the fixture is only compared on the host test env, as `leg_pose.txt` is.
 - [A new script in `add-gestures` part two] → it changes `gestures.txt`, which fails `mise run test` until regenerated and then `handheld-test` until `go generate` is run: the intended reminder.
 
 ## Follow-ups
 
-- When dance, attack and ball gain scripts (`add-gestures` part two), regenerate `gestures.txt` and the Go table; the tiles follow with no code change.
+- When dance, attack and ball gain scripts (`add-gestures` part two), regenerate `gestures.txt` and the Go table; the tiles follow with no code change, except that ball, which holds its pose until another request, needs a preview end (D1's cap fails until one is chosen).
