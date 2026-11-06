@@ -107,6 +107,7 @@ func (a *App) Screen(now time.Time) Screen {
 	if a.state == Leaving || a.state == Acting {
 		sc.Leave = a.leave.action
 	}
+	signalKnown, signalDBm := a.signalKnown, a.signalDBm
 	a.mu.Unlock()
 
 	sc.Requested = Requested{
@@ -158,6 +159,6 @@ func (a *App) Screen(now time.Time) Screen {
 		HaveFrame:         st.HaveFrame,
 		SinceLast:         st.SinceLast(now),
 	}
-	sc.Link.SignalKnown, sc.Link.SignalDBm = a.signalKnown, a.signalDBm
+	sc.Link.SignalKnown, sc.Link.SignalDBm = signalKnown, signalDBm
 	return sc
 }
