@@ -135,6 +135,7 @@ Flash the robot; the bridge and desktop can follow in any order (older ones show
 - The window and refusal overlays replace LED 5 in every state, as the window does; all LED 5 overlays take the brightness of the state they are drawn in (fault brightness during a fault).
 - With the simulation supply fault first in the fault list, the firmware's servo-output failure indication, which showed every fault bit (0xFFFF) and so the emergency stop's steady red, now names the emergency stop alone, to keep that steady red.
 - `bench_sim::step` reports each entry or refusal once, as `robot_tick::BenchEvent` on the tick of the press; robot_tick logs it then (`bench simulation: entered`, `bench simulation refused: servo supply present`, `bench simulation refused: no USB host`), and names the new fault `simulation supply` in `fault latched:` lines.
+- LED numbering (task group 5): this design, the tasks and `core/status/led_pattern` count the LEDs from 0, so "LED 5" is the sixth LED, the command-source LED (`led_pattern::INPUT_LED`). The user-facing docs (the `spooder-hardware-check` skill, the readme, the changelog) count from 1, as they already did for the command source, and so call it LED 6; the skill states the mapping.
 
 ## Follow-ups
 

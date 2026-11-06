@@ -3,9 +3,11 @@
 The robot's pico-sdk CMake project (`mise run build` → `build/servo2040/spooder.uf2`; `mise run upload`). Structure rules: the `spooder-firmware-shape` skill; flashing and bring-up: `spooder-hardware-check`.
 
 - `src/main.cpp`: the core 0 loop, every 20 ms: read both links' bytes (or the serial keys) and the power reading, run `robot_tick::tick` (`core/robot`), which drives the adapters below. It passes the build identity (`build_identity::ID`, from the generated `build_identity_id.cpp` the `spooder_build_identity` target writes in the build directory) to `robot_tick::init`, and `stdio_usb_connected()` as `Inputs::usbConnected`, so the banner reaches a console opened after boot.
+- Bench simulation (`core/robot/bench_sim`, spec `bench-simulation`): each tick, before `robot_tick::tick`, `main.cpp` samples the USER button (GPIO23, `servo2040::USER_SW`, active low with the internal pull-up), the measured supply, `servo_output::outputsOn()` and `tud_mounted() && !tud_suspended()` (a host has enumerated the board and not suspended it; a charger is not a host, since VBUS sense is forced present) into `bench_sim::step`, with a static `bench_sim::Entry` in RAM. On entry it calls `board.enterSimulation()` and from then on feeds the tick `bench_model::Supply::read` of the modelled servos instead of `power_monitor::read()`; the measured reading still goes to `bench_sim::step` for the simulation supply fault. The working time in diagnostics starts before `bench_sim::step`. Nothing records simulation across a restart (no watchdog scratch, no flash).
+- **The board boundary:** `Board` derives from `bench_sim::BenchBoard`, whose servo methods are `final`, and implements only the protected hooks (`realSetInhibited`, `realStop`, `realApply`, `realOn`, `realPulses`, `realForceOff`) over `servo_output`, plus the non-servo methods. `servo_output::apply` is called only from `realApply`, and `servo_output::forceOff` only from `realForceOff`; after `enterSimulation()` `BenchBoard` never calls `realApply` or `realSetInhibited(false)`.
 - `src/link`: UART1 on GPIO20/21 (J6), interrupt-driven RX ring and a 256-byte TX queue of whole frames.
 - `src/usb_link`: bytes over USB stdio, sharing the port with `printf`; frames are written whole or dropped. It carries the 10 Hz pose and diagnostics frames, as `src/link` (UART1) does.
-- `src/servo_output`: `ServoCluster` on PIO 0, GPIO0–17.
+- `src/servo_output`: `ServoCluster` on PIO 0, GPIO0–17. `forceOff()` (bench simulation's second barrier) stops and disables every output and is sticky: `apply()` returns at once and `setInhibited(false)` does nothing until restart.
 - `src/power_monitor`: current and voltage via the analog mux.
 - `src/status_leds`: WS2812 on PIO 1, drawing `core/status/led_pattern`.
 - `src/serial_commands`: the USB bring-up input (`SPOODER_SERIAL_COMMANDS`). On a tick where `robot_tick::bannerDue` is true, `main.cpp` polls it with `readKeys` false, so no key echo precedes the build banner.
@@ -21,6 +23,8 @@ The robot's pico-sdk CMake project (`mise run build` → `build/servo2040/spoode
 
 ## Rules
 
+- Servo output goes through `BenchBoard`'s methods only: never call `servo_output::apply`, `setInhibited` or `forceOff` from anywhere but `Board`'s hooks, or a pulse could bypass bench simulation.
+- The USER button (GPIO23) is also the BOOT switch: held through reset it enters BOOTSEL and the firmware never runs, so bench simulation is entered by a press after start-up, never a hold at reset. RESET is the RUN pin and cannot be read.
 - Never enable stdio over UART. The SDK's default UART pins, GPIO0/1, are servo outputs 1 and 2. The link uses UART1 on GPIO20/21.
 - Debug text on the USB port must stay printable ASCII (plus tab, CR, LF): the same port carries binary link frames.
 - `ServoCluster::enable()` on a servo with no pulse set sends it to mid-travel, and `pulse()` enables a disabled servo. `servo_output` relies on both facts. It also turns off each channel's calibration limits (500–2500 µs by default), keeping the cluster's 400–2600 µs hard limits, so calibrated pulses pass unchanged. Read it before changing output handling.

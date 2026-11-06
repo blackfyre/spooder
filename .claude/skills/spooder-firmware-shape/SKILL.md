@@ -11,7 +11,7 @@ Adapted from architecture guidance on modules, explicit state machines, named co
 
 | Layer | Where | Rules |
 |---|---|---|
-| Hardware-free core | `core/` (`movement/`, `protection/`, `protocol/`, `gamepad_mapping/`, `status/`, `setup/`, `identity/`) | Only `<math.h>`, `<stdint.h>` and other `core/` headers (`status/status_screen`, `setup/calibration_export` and `setup/access_point` also use `<stdio.h>` for `snprintf`). No SDKs, no globals with hidden state; pass state structs explicitly. Every behaviour change needs host tests (`test/`, `mise run test`). Built into the robot as `spooder_core` with `-Wall -Wextra -Werror`; the bridge compiles the parts it uses into its `main` component. |
+| Hardware-free core | `core/` (`movement/`, `protection/`, `robot/`, `protocol/`, `gamepad_mapping/`, `status/`, `setup/`, `identity/`) | Only `<math.h>`, `<stdint.h>` and other `core/` headers (`status/status_screen`, `setup/calibration_export` and `setup/access_point` also use `<stdio.h>` for `snprintf`). No SDKs, no globals with hidden state; pass state structs explicitly. Every behaviour change needs host tests (`test/`, `mise run test`). Built into the robot as `spooder_core` with `-Wall -Wextra -Werror`; the bridge compiles the parts it uses into its `main` component. |
 | Hardware adapters | `firmware/servo2040/src/`, `firmware/bridge/main/` | Thin: read hardware into core inputs, or apply core outputs to hardware. No decisions that could live in `core/`. Each adapter exposes `setup()`/`start()` plus a small API in its header; file-local state is `static`. |
 
 New logic goes into `core/` unless it truly needs hardware. A controller mapping, a filter or a protocol parser is core logic.
@@ -23,17 +23,20 @@ New logic goes into `core/` unless it truly needs hardware. A controller mapping
 ```
 input   = readInput(now)                      // decode both links' bytes, then link_receiver::arbitrate;
                                               // or the serial keys. Bounded, never blocks
-reading = power_monitor::read()
-prot    = protection::step(state, reading, now, input.clearFaults, input.emergencyStop)
-servo_output::setInhibited(!prot.allowOutput)
+measured = power_monitor::read()
+in.bench = bench_sim::step(entry, {now, USER button, measured.voltageV, real output on, USB host}).bench
+                                              // main.cpp, before the tick; on entry: board.enterSimulation()
+reading = simulated ? bench_model::Supply::read(model servos) : measured
+prot    = protection::step(state, reading, now, input.clearFaults, input.emergencyStop, in.bench.supplyFault)
+hw.setInhibited(!prot.allowOutput)            // Hardware: BenchBoard's, routed to servo_output or the model
 requested = command fresh (≤ 1 s) ? input.mode : Sleep
 run     = protection::supervise(supervisor, prot, requested, input.requestSeq)
-if run.stopBody:  servo_output::stop()                 // output-cutting fault: body stops
+if run.stopBody:  hw.stopServos()                      // output-cutting fault: body stops
 if run.startBody: body::init(bodyState)                // boot, and restart after such a fault
 link::processCalibration / usb_link::processCalibration(requested table, calibrating, prot.allowOutput)
 joint_calibration::step(applied, requested, dt)        // 60°/s towards the requested table
 if run.runBody:   body::setOffsets(applied offsets); body::step(bodyState, cmd with run.mode, now);
-                  servo_output::apply(bodyState, applied)
+                  hw.applyServos(bodyState, applied, legsOn)
 status_leds::show(...)
 every fifth tick: telemetry on both links      // non-blocking, whole frames or nothing
 two ticks later:  pose on both links          // link_receiver::makePose, 10 Hz
@@ -51,6 +54,7 @@ reports due (after a set, 1 Hz in Calibrate, ≤ 5 Hz): calibration report on ea
 - **Protection rewrites requests and gates output, but never changes body mode itself.** Movement owns all transitions (`locomotion` spec).
 - **The body starts only when output is allowed,** so Initialise runs with the servos live.
 - **Nothing in the loop may block.** Debug output is USB stdio with `PICO_STDIO_USB_STDOUT_TIMEOUT_US=1000`, so a host that isn't reading drops output instead of stalling the loop. Don't add `sleep_ms` or blocking I/O.
+- **The board boundary and bench simulation.** The tick reaches the servos only through `robot_tick::Hardware`. On the robot, `Board` derives from `bench_sim::BenchBoard` (`core/robot/bench_sim`), whose servo methods (`setInhibited`, `stopServos`, `applyServos`, `servosOn`, `servoPulses`) are `final` and call the real port through protected hooks that `Board` forwards to `servo_output`. `enterSimulation()` sets a flag that is never cleared, then calls the `realForceOff` hook once (`servo_output::forceOff`, sticky until restart: `apply()` returns at once, `setInhibited(false)` does nothing); from then on every servo call goes to a `bench_model::Servos`, `setInhibited` and `stopServos` still keep the real port inhibited and stopped, and nothing reaches `realApply`. So the no-pulse rule is held twice: in core, host-tested with a fake board (`test_bench_sim`), and in `servo_output`, checked on the bench. Never add a path to `servo_output::apply` outside `realApply`. Entry is a per-tick decision in core (the 3 s window, the USER button edge on GPIO23, the supply below 1 V since boot, output off, a USB host at the press), held in a static `bench_sim::Entry` in RAM only; the virtual robot leaves `Inputs::bench` zero.
 - **One core today.** The `add-body-sensing` change introduces core 1 for sensor I/O. Data then crosses cores only through a single-writer seqlock snapshot that is never shared mutably. Construct `ServoCluster` and everything else that allocates on core 0, *before* launching core 1 (pimoroni's `pwm_alloc` warning).
 
 ## Hardware resources
@@ -59,6 +63,7 @@ reports due (after a set, 1 Hz in Calibrate, ≤ 5 Hz): calibration report on ea
 |---|---|
 | PIO 0 SM 0 + 1 DMA channel + `DMA_IRQ_0` (shared handler) | `ServoCluster` (`servo_output`) |
 | PIO 1 SM 0 + DMA + a repeating timer | WS2812 LEDs (`status_leds`, 10 fps) |
+| GPIO23 (`USER_SW`, the BOOT/USER switch, active low, internal pull-up) | bench simulation's entry button, read each tick in `main.cpp`; held through reset it is BOOTSEL |
 | ADC via the 74LV4051 mux (GPIO22/24/25 address, GPIO29 `SHARED_ADC`) | `power_monitor` (current at address 7, voltage at 6); sensor headers at 0–5 |
 | USB | stdio console, plus link frames (`usb_link`) in default builds; `CFG_TUD_CDC_TX_BUFSIZE=256` so a whole report fits |
 | UART1 on GPIO20/21 + `UART1_IRQ` | the bridge link (`link`): RX ring and a 256-byte whole-frame TX queue under the interrupt |
@@ -186,7 +191,7 @@ Every byte that arrives from outside the board is untrusted: link and USB frames
 ## Failures
 
 - **Hardware set-up failure** (for example, `servo_output::setup()` can't claim PIO or DMA): report, show it on the LEDs, and never move.
-- **Out-of-range supply:** handled only by `core/protection`, and never bypassed. Code that could switch servo output on must go through `servo_output`, which honours the inhibit.
+- **Out-of-range supply:** handled only by `core/protection`, and never bypassed. Code that could switch servo output on must go through `BenchBoard` and its hooks to `servo_output`, which honours the inhibit and, after `forceOff()`, refuses everything until restart.
 - **Invalid IK targets** are rejected before they're recorded, and reported once (`newlyRejected`).
 - **Reporting:** debug output on USB stdio, plus the status LEDs. No `printf` in hot paths beyond the once-per-second report and once-per-event messages.
 

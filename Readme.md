@@ -42,6 +42,7 @@ flowchart LR
   - Changes are guarded (Calibrate only, offset within ±30° of the default, pulses 400–2600 µs) and rate-limited to 60°/s.
   - They are held in RAM, confirmed by the robot's reports, and exported as the compiled defaults.
   - Coxa offsets are shown from the servo centre.
+- **Bench simulation**: the real robot board driven end to end on USB alone, with no servo supply. Press the USER button while LED 6 blinks white in the first 3 s after start-up; the robot then runs gait, kinematics, telemetry and protection on a modelled supply and servos while its servo output stays forced off until restart. Telemetry flags it, and the calibrator and the bridge screen show `SIM`.
 - **Source arbitration**: the bridge or USB, whichever reports a connected controller. If both do, the robot sleeps.
 - **Rumble feedback**: the gamepad rumbles when a fault latches, the bridge's e-stop switches, the robot link drops or returns, or a gesture is refused.
 - **Gestures**: say hi and wiggle, from Stand: scripted, rate-limited moves that any other request, the e-stop or a fault interrupts. Dance, attack and ball follow once the body geometry is measured.
@@ -127,6 +128,8 @@ mise run build-bridge                  # bridge: build...
 mise run upload-bridge                 # ...and flash (BRIDGE_PORT, default /dev/ttyUSB0)
 mise run monitor                       # the robot's USB console; --frames decodes the link
 ```
+
+To drive the real board without its servo supply, use bench simulation: start it on USB from a computer with the servo supply removed (and drained for about 6 s), and press USER once while LED 6 blinks white. A refusal shows on LED 6 for 3 s (red and amber: a supply was measured; red and blue: no USB host). Restart to leave. The `spooder-hardware-check` skill has the details.
 
 Flash both boards together when the link protocol changes. A mismatched pair fails safe: each side discards the other's frames, and the robot sleeps.
 

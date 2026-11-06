@@ -22,7 +22,7 @@
 
 ## 5. Documentation
 
-- [ ] 5.1 Update `firmware/servo2040/CLAUDE.md` (the USER button, the board boundary and `forceOff`), `core/CLAUDE.md` (`robot/bench_sim`, `robot/bench_model`), the `spooder-firmware-shape` skill (the board boundary in simulation), the `spooder-hardware-check` skill (entering simulation, the LED patterns, the refusal reasons and the 5.5 s supply drain, the supply fault), `Readme.md` and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec deltas, and that `grep` finds GPIO23 in `firmware/servo2040/CLAUDE.md` and the hardware-check skill, and `TELEMETRY_SIMULATED` in the changelog.
+- [x] 5.1 Update `firmware/servo2040/CLAUDE.md` (the USER button, the board boundary and `forceOff`), `core/CLAUDE.md` (`robot/bench_sim`, `robot/bench_model`), the `spooder-firmware-shape` skill (the board boundary in simulation), the `spooder-hardware-check` skill (entering simulation, the LED patterns, the refusal reasons and the 5.5 s supply drain, the supply fault), `Readme.md` and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec deltas, and that `grep` finds GPIO23 in `firmware/servo2040/CLAUDE.md` and the hardware-check skill, and `TELEMETRY_SIMULATED` in the changelog.
 
 ## 6. Gates
 

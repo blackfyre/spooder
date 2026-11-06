@@ -1,6 +1,6 @@
 ---
 name: spooder-hardware-check
-description: Workflow for wiring, powering, flashing and bringing up the Spooder firmwares on the Pimoroni Servo 2040 and the TTGO T-Display gamepad bridge — power and ground rules, J6 header and link wiring, the staged bring-up order (USB only, bench supply, one servo, all servos, then the bridge), what the serial console, LEDs and bridge screen show, the gamepad controls, how to exercise and verify power protection and the emergency stop, the bridge's drive mode switch (GPIO32) and WiFi drive with the spooder-wifi-probe checks, the bridge's setup mode with the portal calibration workflow, and bench calibration with the desktop calibrator on USB (dialout, Linux packages, workflow). Use when a change must be confirmed on the robot or bridge, when flashing or boot fails, or when the user asks to flash, test on hardware or read a console.
+description: Workflow for wiring, powering, flashing and bringing up the Spooder firmwares on the Pimoroni Servo 2040 and the TTGO T-Display gamepad bridge — power and ground rules, J6 header and link wiring, the staged bring-up order (USB only, bench supply, one servo, all servos, then the bridge), what the serial console, LEDs and bridge screen show, bench simulation on USB only (the USER button on GPIO23, its LED patterns, refusal reasons and the simulation supply fault), the gamepad controls, how to exercise and verify power protection and the emergency stop, the bridge's drive mode switch (GPIO32) and WiFi drive with the spooder-wifi-probe checks, the bridge's setup mode with the portal calibration workflow, and bench calibration with the desktop calibrator on USB (dialout, Linux packages, workflow). Use when a change must be confirmed on the robot or bridge, when flashing or boot fails, or when the user asks to flash, test on hardware or read a console.
 ---
 
 # Spooder hardware check
@@ -22,7 +22,7 @@ description: Workflow for wiring, powering, flashing and bringing up the Spooder
 - **Pull-ups:** the board has none on GPIO19–21 or 26–28. I²C sensors need breakouts with pull-ups, or 4.7 kΩ resistors to 3V3.
 - **Bench supplies:** use a current-limited bench supply for first power-up and protection tests. Set the limit below the firmware's trip current.
 
-J6 (unpopulated 17-pin header), pin → signal: 1 GND, 2 USER_SW, 3 GND, 4 RESET, 5 GND, 6 SWDIO, 7 SWCLK, 8 GPIO28, 9 GPIO27, 10 GPIO26, 11 GND, 12 GPIO19, 13 GPIO21, 14 GPIO20, 15 3V3, 16 GND, 17 5V. Allocation: see `spooder-firmware-shape`.
+J6 (unpopulated 17-pin header), pin → signal: 1 GND, 2 USER_SW (GPIO23, the BOOT/USER button), 3 GND, 4 RESET, 5 GND, 6 SWDIO, 7 SWCLK, 8 GPIO28, 9 GPIO27, 10 GPIO26, 11 GND, 12 GPIO19, 13 GPIO21, 14 GPIO20, 15 3V3, 16 GND, 17 5V. Allocation: see `spooder-firmware-shape`.
 
 **Bridge link wiring** (three wires, 3.3 V on both sides):
 
@@ -136,10 +136,11 @@ mise run monitor-bridge                       # Bluepad32 console; type `help`
 
 **Serial (USB):**
 - `spooder robot: build <id>` on the first tick and each time a USB host connects after none was (so a console opened after boot sees it), before any other line of that tick. `<id>` is `git describe --always --dirty --abbrev=12` of the checkout built from (`-dirty`: uncommitted changes to tracked files; `unknown`: no git), with any byte outside printable ASCII shown as `?` and cut at 40 characters (so a long annotated tag can hide the hash and `-dirty`); compare it with the checkout, under the same rules, to tell a stale or mismatched flash;
-- once per second: `supply <A> A (avg <A> A), <V> V; output on|off; mode <n>; faults 0x..`;
+- once per second: `supply <A> A (avg <A> A), <V> V; output on|off; body running|stopped, mode <n>; faults 0x..`, ending `; SIMULATION` in bench simulation (the readings are then the modelled ones);
 - `output allowed: starting movement` when the body starts (boot, or restart after a fault);
 - `movement stopped: waiting for the fault to clear and a new request` when a fault cuts output;
-- `fault latched: <name> (<A> A, <V> V)` once per fault;
+- `fault latched: <name> (<A> A, <V> V)` once per fault (`simulation supply` for the simulation supply fault);
+- `bench simulation: entered`, `bench simulation refused: servo supply present` or `bench simulation refused: no USB host`, once, on the tick of the USER press that decided;
 - `point impossible to reach: (...) leg n` once per rejection;
 - `servo profile <name>: joint speed budget <n> deg/s` on the first tick;
 - `output rate backstop: <n> ticks held back; most: leg <n> <joint>, <deg> deg behind` after a status line, only when the backstop held a joint back since the last one. Expected only at speed dial 100, rarely: at the default dial it points to a bug or a calibration change made in one jump;
@@ -152,7 +153,7 @@ In the default build, a connected USB host also receives binary link frames (tel
 | Pattern | Meaning |
 |---|---|
 | All six pulsing amber | Waiting for a valid supply (USB only, supply off, or settling) |
-| All six alternating a colour with red, brighter | Latched fault: white overcurrent, magenta brown-out, blue overvoltage, orange sustained current, yellow undervoltage |
+| All six alternating a colour with red, brighter | Latched fault: cyan simulation supply (first, ahead of the e-stop), white overcurrent, magenta brown-out, blue overvoltage, orange sustained current, yellow undervoltage |
 | LEDs 1–5 slowly breathing blue | Body stopped: supply valid, waiting for a new command (after a fault, or a Sleep request at start) |
 | Green, *n* of LEDs 1–5 lit | Running; *n* = mode + 1 (1 Initialise, 2 Stand, 4 Sleep, 5 Calibrate) |
 | Load bar on LEDs 1–5 in the gait's colour | Walking: lit segments = supply current against the trip limit (1.8 A each at a 9 A trip); segments past the sustained limit are red. Gait colours: Tri green, Wave sky blue, Ripple violet, Bi yellow, Quad mint, Hop pink |
@@ -161,6 +162,12 @@ In the default build, a connected USB host also receives binary link frames (tel
 | LED 6 cyan / blinking magenta / fast-blinking amber | Bridge link up with gamepad / without gamepad / link stale |
 | LED 6 blue | A USB host with a connected controller is in control |
 | LED 6 alternating magenta and cyan | Source conflict: the bridge and a USB host both claim control; the robot sleeps until one lets go |
+| LED 6 blinking white (250 ms), first 3 s after start-up | Bench simulation offered: press USER now to enter it (over whatever LED 6 would show) |
+| LED 6 alternating red and amber (250 ms), 3 s | Bench simulation refused: a servo supply was measured (1 V or more on some tick since start-up) |
+| LED 6 alternating red and blue (250 ms), 3 s | Bench simulation refused: no USB host (a charger, a host that has not enumerated the board, or one that suspended it) |
+| LED 6 violet half of each second, its normal content the other half | In bench simulation, in every state, until the simulation supply fault latches (then all six show cyan and red) |
+
+LED 6 here is the sixth LED, the command source; `core/status/led_pattern` counts from 0 and calls it LED 5 (`INPUT_LED`), as do the `add-bench-simulation` design and tasks.
 
 **Serial keys** (only in a `--serial` build; type them in `mise run monitor --keys`):
 
@@ -208,11 +215,34 @@ Stop at the first stage that misbehaves.
    - Measure the new frame's link lengths, and compare them with `kinematics::COXA/FEMUR/TIBIA_LENGTH`.
    - Recalibrate the joints per the `spooder-leg-kinematics` skill (live calibration in Calibrate, then export to `core/movement/calibration_defaults.cpp`), on the bench with the desktop calibrator (below).
 
+## Bench simulation (USB only)
+
+Bench simulation drives the real Servo 2040 end to end with no servo supply: gait, kinematics, pose frames, telemetry, protection, the e-stop and the fault clear behave as on a powered robot, while servo output is forced off and every servo call goes to a model (`core/robot/bench_sim`, spec `bench-simulation`). Both robot builds have it. It is for the desktop calibrator, the bridge and handhelds on the bench, never for a powered robot.
+
+1. **Remove the servo supply,** and wait until its sense has drained: the 220 µF capacitor behind the voltage sense takes about 5.5 s to fall from 6 V to 1 V. A supply removed just before a reset still reads above 1 V and refuses entry.
+2. **Connect the board's USB to a computer** (not a charger), and start it (RESET, or plug in). Do not hold USER while it starts: USER is the BOOT switch, and held through reset it enters BOOTSEL.
+3. **Press USER once while LED 6 blinks white** (the first 3 s; enumeration takes about 1 s, so press after the blink starts). The robot runs live from its first tick meanwhile; offering simulation delays nothing.
+   - Entered: `bench simulation: entered` on the console, LED 6 violet half of each second, the status line ending `; SIMULATION`. The modelled supply (a steady 6.0 V at load 1) settles for 500 ms like a real one; the body starts on the next new mode request after entry, not on one held from before.
+   - Refused, LED 6 red and amber for 3 s, `bench simulation refused: servo supply present`: the supply read 1 V or more on some tick since start-up (connected, still draining, or USB 5 V on the servo rail through an uncut USB/ext trace). Remove it, wait about 6 s, RESET and press again.
+   - Refused, LED 6 red and blue for 3 s, `bench simulation refused: no USB host`: no host has enumerated the board (a charger, a bare cable, a host still enumerating) or the host suspended it. When both gates fail, the supply reason is shown.
+   - Only the first press after start-up decides; a refusal closes the window, and so does servo output switching on. A button held from start-up counts only once released and pressed again. A press after 3 s does nothing.
+4. **In simulation,** telemetry sets `TELEMETRY_SIMULATED` (bit 5 of the flags byte) and reports the modelled output and readings: the desktop calibrator shows the `Bench simulation` banner and `on (sim)`, the bridge screen `SIM` in the status strip and `OUT SIM` on the drive page. USB loss or suspend does not end simulation (the USB gate is read only at the press).
+5. **Leave** by restarting (RESET, power, the watchdog or a 1200-baud touch). Nothing records simulation, so the next start is live and offers it again. Unplugging USB powers the board off.
+
+**Simulation supply fault.** If the real servo supply reads above the brown-out voltage during simulation, the simulation supply fault (protection bit 6) latches: all six LEDs alternate cyan and red, the body stops, the console prints `fault latched: simulation supply`, the calibrator names `supply in simulation` and the bridge `SIM SUPPLY`. A fault clear does not clear it; only a restart does, and the next start is live with the supply present. No servo moves either way: real output stays forced off until restart.
+
+**Checks** (tasks 7.1–7.4 of `openspec/changes/add-bench-simulation/tasks.md`):
+- **No pulse:** a logic analyser or oscilloscope on the servo signal pins, triggering on any rising edge and armed before the press, captures no edge from entry through Stand, Walk, a calibration change, an e-stop, a fault clear and a new request (with fewer than 18 channels, repeat per group of pins). A multimeter cannot show an isolated pulse.
+- **Timing:** the diagnostics' longest tick working time stays below 20 ms during the window, at entry and while walking in simulation (the calibrator's charts tab).
+- **Refusals:** the supply reason with the supply connected, then after removing it and an immediate RESET; entry after waiting about 6 s; the USB reason on a charger.
+- **Supply fault:** connect the 6 V supply while walking in simulation; expect the fault above, the body stopped and no servo moving.
+- **USB loss:** keeping the board on USB power, deauthorise the device (`echo 0 > /sys/bus/usb/devices/<port>/authorized`), authorise it again, then suspend and resume it; the robot stays in simulation throughout.
+
 ## Bridge bring-up
 
 Robot on the bench supply with **no servos** until step 4; default (link) robot build.
 
-The status screen has three pages: **drive** (the mode chip, voltage and current with bars, height and speed, stride and stick mode, `OUT ON`/`OUT OFF`; a white tick on the current bar holds the recent peak and on the voltage bar the recent low, for 3 s before easing back; a value turns amber for a second when it sets a new high or a deeper sag), **power** (the last 60 s of voltage and current as 10 Hz traces, with the lowest voltage and highest current) and **link** (frames per second each side accepts and rejects, the telemetry's age, the source the robot follows, the pad and its battery). A short press of the left button (GPIO0) shows the next page; the dots at the bottom mark the page. The header (mode, `PAD`, link state) and the status strip (`NO FAULTS`, or the e-stop, every latched fault, `LINK LOST`, `SOURCE CONFLICT`, `USB IN CONTROL`, filled orange or amber) are on every page.
+The status screen has three pages: **drive** (the mode chip, voltage and current with bars, height and speed, stride and stick mode, `OUT ON`/`OUT OFF`; a white tick on the current bar holds the recent peak and on the voltage bar the recent low, for 3 s before easing back; a value turns amber for a second when it sets a new high or a deeper sag), **power** (the last 60 s of voltage and current as 10 Hz traces, with the lowest voltage and highest current) and **link** (frames per second each side accepts and rejects, the telemetry's age, the source the robot follows, the pad and its battery). A short press of the left button (GPIO0) shows the next page; the dots at the bottom mark the page. The header (mode, `PAD`, link state) and the status strip (`NO FAULTS`, or the e-stop, every latched fault, `LINK LOST`, `SOURCE CONFLICT`, `USB IN CONTROL`, `SIM` in bench simulation, filled orange or amber) are on every page.
 
 1. **Bridge alone, on USB.** The header shows `NO PAD` and `LOST`, the strip `LINK LOST`. The console prints `spooder bridge: build <id>` (the same form and rules as the robot's banner), then the Bluepad32 banner. The start-up log on the screen, after the logo, begins with `Build <id>` (`Build ..` and the id's end when it is longer than 22 characters), then `Boot`.
 2. **Link on a bench cable.** Wire the three link wires.
