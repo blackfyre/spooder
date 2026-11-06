@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/padmap"
+	"github.com/blackfyre/spooder/desktop/handheld/internal/supplyband"
 	"github.com/blackfyre/spooder/desktop/internal/legview"
 	"github.com/blackfyre/spooder/desktop/internal/protocol"
 	"github.com/blackfyre/spooder/desktop/internal/session"
@@ -27,6 +28,10 @@ type Robot struct {
 	// Simulated is the robot's bench simulation flag: it models its servos
 	// and supply, and no servo moves.
 	Simulated bool
+	// SupplyLimits are the protection limits from the newest diagnostics
+	// frame, kept while diagnostics are stale (they change only with a
+	// robot build); zero, so not valid, until the first.
+	SupplyLimits supplyband.Limits
 }
 
 // Pose is the robot's legs from the shown pose frame, for the driving view.
@@ -136,6 +141,10 @@ func (a *App) Screen(now time.Time) Screen {
 		sc.Robot.VoltageMv, sc.Robot.CurrentMa = t.VoltageMv, t.CurrentMa
 		sc.Robot.Source = session.SourceFrom(t.Flags).String()
 		sc.Robot.Simulated = t.Flags&protocol.TelemetrySimulated != 0
+	}
+
+	if diag := st.Shown[protocol.TypeDiagnostics]; diag.Have {
+		sc.Robot.SupplyLimits = supplyband.FromDiagnostics(diag.Frame.Diagnostics)
 	}
 
 	pose := st.Shown[protocol.TypePose]

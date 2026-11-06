@@ -11,6 +11,7 @@ import (
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/app"
 	"github.com/blackfyre/spooder/desktop/handheld/internal/padmap"
+	"github.com/blackfyre/spooder/desktop/handheld/internal/supplyband"
 	"github.com/blackfyre/spooder/desktop/internal/legview"
 )
 
@@ -32,6 +33,9 @@ func walkingPose() app.Pose {
 	return app.Pose{Have: true, Pose: p, Legs: legview.Body3(p)}
 }
 
+// exampleLimits are power_limits.example.h's, as diagnostics report them.
+var exampleLimits = supplyband.Limits{BrownoutMv: 4800, MinMv: 5200, MaxMv: 6800, SustainedCurrentMa: 6000, TripCurrentMa: 9000}
+
 // surfaceWindow is a window drawn by a software renderer into a surface.
 type surfaceWindow struct{ w, h int32 }
 
@@ -48,14 +52,14 @@ var screenshotCases = []struct {
 	open time.Duration
 }{
 	{"driving", app.Screen{
-		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, Gesture: "", VoltageMv: 7840, CurrentMa: 3420, Source: "bridge"},
+		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, Gesture: "", VoltageMv: 6040, CurrentMa: 3420, Source: "bridge", SupplyLimits: exampleLimits},
 		Requested: app.Requested{Mode: "Walk", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 40 * time.Millisecond, SignalKnown: true, SignalDBm: -33, Sent: 18250},
 		State:     app.Driving,
 		Held:      padmap.HandUp,
 	}, 0},
 	{"fault", app.Screen{
-		Robot:     app.Robot{Have: true, Body: "Sleep", Gait: "Tripod", Faults: []string{"emergency stop", "undervoltage"}, VoltageMv: 50, Source: "none"},
+		Robot:     app.Robot{Have: true, Body: "Sleep", Gait: "Tripod", Faults: []string{"emergency stop", "undervoltage"}, VoltageMv: 50, Source: "none", SupplyLimits: exampleLimits},
 		Requested: app.Requested{Mode: "Sleep", Height: 0, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer", EStop: true},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, Lost: 3, HaveFrame: true, SinceLast: 60 * time.Millisecond, SignalKnown: true, SignalDBm: -71, Sent: 402},
 		State:     app.Driving,
@@ -63,21 +67,21 @@ var screenshotCases = []struct {
 		Clearing:  0.6,
 	}, 0},
 	{"stale", app.Screen{
-		Robot:     app.Robot{Have: true, Stale: true, Body: "Stand", Gait: "Ripple", OutputsOn: true, VoltageMv: 7600, CurrentMa: 1200, Source: "bridge"},
+		Robot:     app.Robot{Have: true, Stale: true, Body: "Stand", Gait: "Ripple", OutputsOn: true, VoltageMv: 5950, CurrentMa: 1200, Source: "bridge", SupplyLimits: exampleLimits},
 		Requested: app.Requested{Mode: "Stand", Height: 80, Speed: 44, Gait: "Ripple", Stride: "Fixed", StickMode: "Crab"},
 		Link:      app.LinkView{HaveFrame: true, SinceLast: 2300 * time.Millisecond, Sent: 9120, SendErrors: 4},
 		State:     app.Driving,
 		Notice:    "send: network is unreachable",
 	}, 0},
 	{"leaving", app.Screen{
-		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, VoltageMv: 7810, CurrentMa: 2900, Source: "bridge"},
+		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, VoltageMv: 6020, CurrentMa: 2900, Source: "bridge", SupplyLimits: exampleLimits},
 		Requested: app.Requested{Mode: "Sleep", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 20 * time.Millisecond, SignalKnown: true, SignalDBm: -40, Sent: 30111},
 		State:     app.Leaving,
 		Leave:     app.ActionExit,
 	}, 0},
 	{"driveview", app.Screen{
-		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, Faults: []string{"undervoltage"}, VoltageMv: 7840, CurrentMa: 3420, Source: "bridge"},
+		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, Faults: []string{"undervoltage"}, VoltageMv: 5150, CurrentMa: 6420, Source: "bridge", SupplyLimits: exampleLimits},
 		Pose:      walkingPose(),
 		Requested: app.Requested{Mode: "Walk", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 40 * time.Millisecond, SignalKnown: true, SignalDBm: -33, Sent: 18250},
@@ -91,7 +95,7 @@ var screenshotCases = []struct {
 		DriveView: true,
 	}, 0},
 	{"simulation", app.Screen{
-		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, VoltageMv: 6000, CurrentMa: 2160, Source: "bridge", Simulated: true},
+		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, VoltageMv: 6000, CurrentMa: 2160, Source: "bridge", Simulated: true, SupplyLimits: exampleLimits},
 		Pose:      walkingPose(),
 		Requested: app.Requested{Mode: "Walk", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 40 * time.Millisecond, SignalKnown: true, SignalDBm: -33, Sent: 18250},
@@ -102,14 +106,14 @@ var screenshotCases = []struct {
 		State:     app.Driving,
 	}, 0},
 	{"gestures", app.Screen{
-		Robot:     app.Robot{Have: true, Body: "Perform", Gait: "Tripod", OutputsOn: true, Gesture: "wiggle", GestureID: 2, VoltageMv: 7810, CurrentMa: 2300, Source: "bridge"},
+		Robot:     app.Robot{Have: true, Body: "Perform", Gait: "Tripod", OutputsOn: true, Gesture: "wiggle", GestureID: 2, VoltageMv: 6010, CurrentMa: 2300, Source: "bridge", SupplyLimits: exampleLimits},
 		Requested: app.Requested{Mode: "Stand", Height: 0, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer", Gesture: 2, GestureSeq: 3},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 30 * time.Millisecond, SignalKnown: true, SignalDBm: -48, Sent: 12040},
 		State:     app.Driving,
 		Held:      padmap.HandL2,
 	}, 650 * time.Millisecond},
 	{"gestures-stand-first", app.Screen{
-		Robot:     app.Robot{Have: true, Body: "Sleep", Gait: "Tripod", OutputsOn: true, VoltageMv: 7900, CurrentMa: 400, Source: "bridge"},
+		Robot:     app.Robot{Have: true, Body: "Sleep", Gait: "Tripod", OutputsOn: true, VoltageMv: 6080, CurrentMa: 400, Source: "bridge", SupplyLimits: exampleLimits},
 		Pose:      walkingPose(),
 		Requested: app.Requested{Mode: "Sleep", Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 30 * time.Millisecond, SignalKnown: true, SignalDBm: -48, Sent: 2040},

@@ -10,14 +10,14 @@
 
 ## 3. Supply bands
 
-- [ ] 3.1 Add `core/status/supply_band` (D3), `test/golden/supply_bands.txt` and `test/test_supply_band` (`SPOODER_SUPPLY_BANDS_GOLDEN` names another copy); list the source in `platformio.ini` and `firmware/bridge/main/CMakeLists.txt`. Verify `mise run test` passes, and fails with `SPOODER_SUPPLY_BANDS_GOLDEN` naming a scratch copy with one band changed.
-- [ ] 3.2 Add the Go copy, `desktop/handheld/internal/supplyband`, with its golden test. Verify `go test ./internal/supplyband` passes, and fails with `SPOODER_SUPPLY_BANDS_GOLDEN` naming the same changed copy.
-- [ ] 3.3 Carry the newest diagnostics' limits into the handheld's screen model and colour the robot panel's supply well and the driving view's supply cell (D3). Verify with `go test ./internal/app` that a diagnostics frame sets the limits and they stay while diagnostics are stale, and with `go test ./cmd/spooder-handheld` that the colours follow the bands, the normal colour without limits and muted while stale.
-- [ ] 3.4 Keep the diagnostics' limits on the bridge and colour the drive and power pages' supply values (D3), the drive page's held-extreme warning kept. Verify with `mise run test` (`test_status_screen`) the tones for each band, without limits and with a held-extreme warning in the ok band; `mise run build-bridge`; and render `docs/images/bridge-*.png` with `mise run bridge-screenshots`.
+- [x] 3.1 Add `core/status/supply_band` (D3), `test/golden/supply_bands.txt` and `test/test_supply_band` (`SPOODER_SUPPLY_BANDS_GOLDEN` names another copy); list the source in `platformio.ini` and `firmware/bridge/main/CMakeLists.txt`. Verify `mise run test` passes, and fails with `SPOODER_SUPPLY_BANDS_GOLDEN` naming a scratch copy with one band changed.
+- [x] 3.2 Add the Go copy, `desktop/handheld/internal/supplyband`, with its golden test. Verify `go test ./internal/supplyband` passes, and fails with `SPOODER_SUPPLY_BANDS_GOLDEN` naming the same changed copy.
+- [x] 3.3 Carry the newest diagnostics' limits into the handheld's screen model and colour the robot panel's supply well and the driving view's supply cell (D3). Verify with `go test ./internal/app` that a diagnostics frame sets the limits and they stay while diagnostics are stale, and with `go test ./cmd/spooder-handheld` that the colours follow the bands, the normal colour without limits and muted while stale.
+- [x] 3.4 Keep the diagnostics' limits on the bridge and colour the drive and power pages' supply values (D3), the drive page's held-extreme warning kept. Verify with `mise run test` (`test_status_screen`) the tones for each band, without limits and with a held-extreme warning in the ok band; `mise run build-bridge`; and render `docs/images/bridge-*.png` with `mise run bridge-screenshots`.
 
 ## 4. Documentation
 
-- [ ] 4.1 Render `docs/images/handheld-*.png` with `SPOODER_SCREENSHOTS`; update `docs/handheld.md`, `docs/screenshots.md` as needed, `desktop/CLAUDE.md` (`internal/supplyband`), `core/CLAUDE.md` (`status/supply_band`), `test/CLAUDE.md` (`supply_bands.txt`) and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec deltas.
+- [x] 4.1 Render `docs/images/handheld-*.png` with `SPOODER_SCREENSHOTS`; update `docs/handheld.md`, `docs/screenshots.md` as needed, `desktop/CLAUDE.md` (`internal/supplyband`), `core/CLAUDE.md` (`status/supply_band`), `test/CLAUDE.md` (`supply_bands.txt`) and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec deltas.
 
 ## 5. Gates
 

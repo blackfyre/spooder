@@ -11,6 +11,7 @@ import (
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/app"
 	"github.com/blackfyre/spooder/desktop/handheld/internal/padmap"
+	"github.com/blackfyre/spooder/desktop/handheld/internal/supplyband"
 	"github.com/blackfyre/spooder/desktop/internal/ui/fonts/files"
 )
 
@@ -698,10 +699,14 @@ func (s *screen) robot(rb app.Robot, notice string) {
 		amps = fmt.Sprintf("%.2f A", float64(rb.CurrentMa)/1000)
 	}
 	half := iw / 2
-	for i, v := range []struct{ label, value string }{{"SUPPLY", volts}, {"CURRENT", amps}} {
+	vc, ac := supplyColours(rb, val)
+	for i, v := range []struct {
+		label, value string
+		c            sdl.Color
+	}{{"SUPPLY", volts, vc}, {"CURRENT", amps, ac}} {
 		vx := ix + l.gap(20) + int32(i)*half
 		s.tracked(s.f.micro, v.label, vx, y+l.gap(18), colMuted, trackMicro)
-		s.text(s.f.big, v.value, vx, y+l.gap(18)+l.microH+l.gap(labelGap), half-l.gap(24), val)
+		s.text(s.f.big, v.value, vx, y+l.gap(18)+l.microH+l.gap(labelGap), half-l.gap(24), v.c)
 	}
 	y += wellH + l.gap(22)
 
@@ -722,6 +727,33 @@ func (s *screen) robot(rb app.Robot, notice string) {
 		nx := ix + s.tracked(s.f.micro, "NOTICE  ", ix, ny, colWarn, trackMicro)
 		s.text(s.f.micro, notice, nx, ny, ix+iw-nx, colWarn)
 	}
+}
+
+// bandColour is a supply value's colour for its band (design D3 of
+// handheld-observations): the orange at or past a fault level (the
+// Blackfyre palette's alarm colour: it has no red), the warning tone in the
+// warning band, ok when ok, and normal without a band.
+func bandColour(b supplyband.Band, normal sdl.Color) sdl.Color {
+	switch b {
+	case supplyband.Fault:
+		return colAccentTxt
+	case supplyband.Warning:
+		return colWarn
+	case supplyband.Ok:
+		return colOk
+	}
+	return normal
+}
+
+// supplyColours are the supply voltage's and current's colours: by band
+// against the robot's reported limits from fresh telemetry, val (the value
+// tone, muted while stale) otherwise.
+func supplyColours(rb app.Robot, val sdl.Color) (volts, amps sdl.Color) {
+	if !rb.Have || rb.Stale {
+		return val, val
+	}
+	return bandColour(supplyband.Voltage(rb.SupplyLimits, rb.VoltageMv), val),
+		bandColour(supplyband.Current(rb.SupplyLimits, rb.CurrentMa), val)
 }
 
 // faultChips draws the faults from x, y as chips that wrap within width,

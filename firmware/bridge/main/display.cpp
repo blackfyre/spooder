@@ -332,6 +332,7 @@ void update(uint32_t nowMs, bool gamepadConnected, uint8_t gamepadBattery, page_
   in.history = &history;
   in.currentPeak = currentPeak;
   in.voltageLow = voltageLow;
+  in.supplyLimits = linkStatus.supplyLimits;
   in.driveMode = drive.mode;
   in.handheld = drive.handheld;
   in.network = drive.network;

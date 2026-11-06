@@ -937,6 +937,76 @@ void test_pages_without_the_simulation_flag_are_unchanged()
   }
 }
 
+// The example power limits (power_limits.example.h), as diagnostics report
+// them.
+static const supply_band::Limits EXAMPLE_LIMITS = {4800, 5200, 6800, 6000, 9000};
+
+// The drive page's supply values take their band's tone once the robot has
+// reported its limits (design D3 of handheld-observations); without limits
+// they keep the tones they had.
+void test_supply_values_by_band()
+{
+  Inputs in = healthy(); // 6.02 V, 1.23 A
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_TRUE(view.drive.voltage.tone == Tone::Normal);
+  TEST_ASSERT_TRUE(view.drive.current.tone == Tone::Normal);
+
+  in.supplyLimits = EXAMPLE_LIMITS;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_TRUE(view.drive.voltage.tone == Tone::Good);
+  TEST_ASSERT_TRUE(view.drive.current.tone == Tone::Good);
+  TEST_ASSERT_EQUAL_STRING("6.02 V", view.drive.voltage.text);
+
+  in.telemetry.voltageMv = 5400;
+  in.telemetry.currentMa = 6500;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_TRUE(view.drive.voltage.tone == Tone::Warn);
+  TEST_ASSERT_TRUE(view.drive.current.tone == Tone::Warn);
+  TEST_ASSERT_EQUAL_STRING("5.40 V", view.drive.voltage.text);
+
+  in.telemetry.voltageMv = 5100;
+  in.telemetry.currentMa = 9000;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_TRUE(view.drive.voltage.tone == Tone::Bad);
+  TEST_ASSERT_TRUE(view.drive.current.tone == Tone::Bad);
+  TEST_ASSERT_EQUAL_STRING("9.00 A", view.drive.current.text);
+
+  // In the ok band, a held-extreme warning still turns the value amber.
+  in.telemetry.voltageMv = 6000;
+  in.telemetry.currentMa = 2000;
+  in.voltageLow = {true, 6100, 0, 0, true, 0};
+  in.currentPeak = {true, 1800, 0, 0, true, 0};
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_TRUE(view.drive.voltage.tone == Tone::Warn);
+  TEST_ASSERT_TRUE(view.drive.current.tone == Tone::Warn);
+}
+
+// The power page's newest values and the window's extremes by band.
+void test_power_values_by_band()
+{
+  Inputs in = healthy();
+  power_history::History h;
+  uint32_t t = 0;
+  for (; t < 1000; t += 100)
+    power_history::record(h, t, true, 6050, 400);
+  for (; t < 1300; t += 100)
+    power_history::record(h, t, true, 5100, 9500);
+  for (; t < 2000; t += 100)
+    power_history::record(h, t, true, 5500, 6500);
+  in.history = &h;
+  composePage(in, Page::Power, view);
+  TEST_ASSERT_TRUE(view.power.voltage.tone == Tone::Normal);
+  TEST_ASSERT_TRUE(view.power.minVoltage.tone == Tone::Normal);
+
+  in.supplyLimits = EXAMPLE_LIMITS;
+  composePage(in, Page::Power, view);
+  TEST_ASSERT_TRUE(view.power.voltage.tone == Tone::Warn);
+  TEST_ASSERT_TRUE(view.power.current.tone == Tone::Warn);
+  TEST_ASSERT_TRUE(view.power.minVoltage.tone == Tone::Bad);
+  TEST_ASSERT_TRUE(view.power.maxCurrent.tone == Tone::Bad);
+  TEST_ASSERT_EQUAL_STRING("MIN 5.10 V", view.power.minVoltage.text);
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -981,5 +1051,7 @@ int main()
   RUN_TEST(test_simulation_supply_fault_is_named_beside_sim);
   RUN_TEST(test_sim_beside_each_fault_and_source_state_fits);
   RUN_TEST(test_pages_without_the_simulation_flag_are_unchanged);
+  RUN_TEST(test_supply_values_by_band);
+  RUN_TEST(test_power_values_by_band);
   return UNITY_END();
 }

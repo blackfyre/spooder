@@ -11,6 +11,7 @@
 #include "status/page_button.h"
 #include "status/peak_hold.h"
 #include "status/power_history.h"
+#include "status/supply_band.h"
 #include "wifi_drive/drive_mode.h"
 #include "wifi_drive/handheld_controller.h"
 
@@ -112,6 +113,9 @@ struct Inputs
   const power_history::History *history; // may be null: no history yet
   peak_hold::Hold currentPeak;           // the held highest current, mA
   peak_hold::Hold voltageLow;            // the held lowest voltage, mV
+  // The robot's protection limits from its diagnostics, for the supply
+  // values' bands; zero (not valid: no bands) until reported.
+  supply_band::Limits supplyLimits;
   // The running drive mode (zero: Bluetooth drive, the gamepad fields above).
   drive_mode::Mode driveMode;
   // WiFi drive only: the handheld, and the network to join.

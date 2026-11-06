@@ -1,0 +1,86 @@
+# Supply bands (openspec change handheld-observations, design D3), written by
+# hand: the cases core/status/supply_band and the handheld's Go copy
+# (desktop/handheld/internal/supplyband) are both run over.
+#
+#   limits <brownout mV> <undervoltage mV> <overvoltage mV> <sustained mA> <trip mA>
+#   voltage <mV> <band>
+#   current <mA> <band>
+#
+# Bands: unknown (limits out of order), ok, warning, fault. Each reading is
+# judged against the limits line before it.
+
+# power_limits.example.h: a 6 V BEC for the MG996R servos. The warning margin
+# is undervoltage - brown-out = 400 mV on both sides.
+limits 4800 5200 6800 6000 9000
+voltage 0 fault
+voltage 4800 fault
+voltage 5199 fault
+voltage 5200 fault
+voltage 5201 warning
+voltage 5400 warning
+voltage 5599 warning
+voltage 5600 ok
+voltage 6000 ok
+voltage 6400 ok
+voltage 6401 warning
+voltage 6799 warning
+voltage 6800 fault
+voltage 7840 fault
+voltage 65535 fault
+current 0 ok
+current 2000 ok
+current 5999 ok
+current 6000 warning
+current 8999 warning
+current 9000 fault
+current 9500 fault
+current 65535 fault
+
+# A wider supply, other margins: 600 mV.
+limits 6000 6600 8600 4000 8000
+voltage 6600 fault
+voltage 6601 warning
+voltage 7199 warning
+voltage 7200 ok
+voltage 8000 ok
+voltage 8001 warning
+voltage 8599 warning
+voltage 8600 fault
+current 3999 ok
+current 4000 warning
+current 7999 warning
+current 8000 fault
+
+# Margins wider than half the band: every reading inside it warns.
+limits 1000 5000 6000 1 2
+voltage 5001 warning
+voltage 5500 warning
+voltage 5999 warning
+current 0 ok
+current 1 warning
+current 2 fault
+
+# The limits at the top of the range: the margin sums stay exact.
+limits 65000 65400 65535 65534 65535
+voltage 65400 fault
+voltage 65401 warning
+voltage 65535 fault
+current 65533 ok
+current 65534 warning
+current 65535 fault
+
+# Limits out of order, or none reported: no band.
+limits 0 0 0 0 0
+voltage 6000 unknown
+current 2000 unknown
+limits 5200 5200 6800 6000 9000
+voltage 6000 unknown
+current 2000 unknown
+limits 4800 5200 5200 6000 9000
+voltage 5200 unknown
+limits 4800 5200 6800 0 9000
+current 0 unknown
+limits 4800 5200 6800 9000 9000
+current 9000 unknown
+limits 4800 5200 6800 9500 9000
+current 9200 unknown

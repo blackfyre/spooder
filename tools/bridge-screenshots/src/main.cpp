@@ -41,6 +41,8 @@ static status_screen::Inputs healthy()
   // A stand a moment ago: the surge and the sag still held.
   in.currentPeak = {true, 4300, 0, 0};
   in.voltageLow = {true, 5540, 0, 0};
+  // The robot's limits from its diagnostics: power_limits.example.h's.
+  in.supplyLimits = {4800, 5200, 6800, 6000, 9000};
   return in;
 }
 

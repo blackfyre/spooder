@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/padmap"
+	"github.com/blackfyre/spooder/desktop/handheld/internal/supplyband"
 	"github.com/blackfyre/spooder/desktop/handheld/internal/udplink"
 	"github.com/blackfyre/spooder/desktop/handheld/internal/wlan"
 	"github.com/blackfyre/spooder/desktop/internal/protocol"
@@ -461,6 +462,26 @@ func TestScreenPose(t *testing.T) {
 	}
 	if sc = r.a.Screen(r.now.Add(StaleAfter)); !sc.Pose.Stale || !sc.Pose.Legs[0].Set {
 		t.Fatalf("pose %+v at 500 ms, want stale, still placed", sc.Pose)
+	}
+}
+
+// The robot's protection limits come from the newest diagnostics frame
+// and stay once diagnostics are stale (design D3 of handheld-observations).
+func TestScreenSupplyLimits(t *testing.T) {
+	r := newRig(t)
+	if sc := r.a.Screen(r.now); sc.Robot.SupplyLimits.Valid() {
+		t.Fatalf("limits %+v before any diagnostics, want none", sc.Robot.SupplyLimits)
+	}
+	d := protocol.Diagnostics{BrownoutMv: 4800, MinMv: 5200, MaxMv: 6800, SustainedCurrentMa: 6000, TripCurrentMa: 9000}
+	if _, ok := r.link.rx.Datagram(protocol.EncodeDiagnostics(d, 7), r.now); !ok {
+		t.Fatal("diagnostics refused")
+	}
+	want := supplyband.Limits{BrownoutMv: 4800, MinMv: 5200, MaxMv: 6800, SustainedCurrentMa: 6000, TripCurrentMa: 9000}
+	if got := r.a.Screen(r.now).Robot.SupplyLimits; got != want {
+		t.Errorf("limits %+v, want %+v", got, want)
+	}
+	if got := r.a.Screen(r.now.Add(10 * StaleAfter)).Robot.SupplyLimits; got != want {
+		t.Errorf("limits %+v with diagnostics stale, want %+v kept", got, want)
 	}
 }
 

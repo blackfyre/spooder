@@ -241,7 +241,7 @@ func (s *screen) driveView(sc app.Screen) {
 
 // driveViewCells is the robot's state beside the driving view: its body
 // mode and the gesture it plays (design D1 of handheld-observations), gait,
-// output and supply.
+// output and supply, the supply in its band's colour.
 func driveViewCells(rb app.Robot, val sdl.Color) []cell {
 	body, gesture, gait, out, supply := "No telemetry", "—", "—", "—", "—"
 	if rb.Have {
@@ -257,12 +257,13 @@ func driveViewCells(rb app.Robot, val sdl.Color) []cell {
 		}
 		supply = fmt.Sprintf("%.2f V", float64(rb.VoltageMv)/1000)
 	}
+	vc, _ := supplyColours(rb, val)
 	return []cell{
 		{"BODY", body, val, false, nil},
 		{"GESTURE", gesture, val, false, nil},
 		{"GAIT", gait, val, false, nil},
 		{"OUTPUT", out, val, false, nil},
-		{"SUPPLY", supply, val, true, nil},
+		{"SUPPLY", supply, vc, true, nil},
 	}
 }
 

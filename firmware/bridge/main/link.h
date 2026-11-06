@@ -20,6 +20,7 @@
 #include "gamepad_mapping/gamepad_mapping.h"
 #include "protocol/protocol.h"
 #include "setup/calibration_sync.h"
+#include "status/supply_band.h"
 #include "wifi_drive/handheld_controller.h"
 
 namespace robot_link
@@ -41,6 +42,10 @@ struct Status
   bool haveReport;
   uint32_t reportAtMs;
   protocol::CalibrationReport report;
+  // The protection limits from the newest diagnostics frame since start,
+  // kept while diagnostics stop (they change only with a robot build); all
+  // zero, so not valid, until the first.
+  supply_band::Limits supplyLimits;
 };
 
 /**

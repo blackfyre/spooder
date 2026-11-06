@@ -33,6 +33,7 @@ idf_component_register(
     "${SPOODER_CORE}/status/peak_hold.cpp"
     "${SPOODER_CORE}/status/power_history.cpp"
     "${SPOODER_CORE}/status/status_screen.cpp"
+    "${SPOODER_CORE}/status/supply_band.cpp"
     "${SPOODER_CORE}/wifi_drive/drive_mode.cpp"
     "${SPOODER_CORE}/wifi_drive/handheld_controller.cpp"
     "${SPOODER_CORE}/wifi_drive/relay_queue.cpp"

@@ -12,6 +12,7 @@ import (
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/app"
 	"github.com/blackfyre/spooder/desktop/handheld/internal/padmap"
+	"github.com/blackfyre/spooder/desktop/handheld/internal/supplyband"
 	"github.com/blackfyre/spooder/desktop/internal/legview"
 )
 
@@ -276,6 +277,38 @@ func TestHintKeysPressWhileHeld(t *testing.T) {
 		for _, k := range cl.keys {
 			if k.b == 0 {
 				t.Errorf("%s key %q has no control", cl.label, k.label)
+			}
+		}
+	}
+}
+
+// The supply voltage and current take their band's colour from the robot's
+// reported limits while telemetry is fresh (design D3 of
+// handheld-observations): the value tone without limits, muted while stale.
+func TestSupplyColoursByBand(t *testing.T) {
+	limits := supplyband.Limits{BrownoutMv: 4800, MinMv: 5200, MaxMv: 6800, SustainedCurrentMa: 6000, TripCurrentMa: 9000}
+	for _, c := range []struct {
+		name         string
+		rb           app.Robot
+		volts, amps  sdl.Color
+		driveSupplyC sdl.Color
+	}{
+		{"ok", app.Robot{Have: true, VoltageMv: 6000, CurrentMa: 2000, SupplyLimits: limits}, colOk, colOk, colOk},
+		{"warning", app.Robot{Have: true, VoltageMv: 5400, CurrentMa: 6500, SupplyLimits: limits}, colWarn, colWarn, colWarn},
+		{"fault", app.Robot{Have: true, VoltageMv: 5100, CurrentMa: 9500, SupplyLimits: limits}, colAccentTxt, colAccentTxt, colAccentTxt},
+		{"no limits", app.Robot{Have: true, VoltageMv: 6000, CurrentMa: 2000}, colText, colText, colText},
+		{"stale", app.Robot{Have: true, Stale: true, VoltageMv: 5100, CurrentMa: 9500, SupplyLimits: limits}, colMuted, colMuted, colMuted},
+	} {
+		val := colText
+		if c.rb.Stale {
+			val = colMuted
+		}
+		if v, a := supplyColours(c.rb, val); v != c.volts || a != c.amps {
+			t.Errorf("%s: colours %v, %v, want %v, %v", c.name, v, a, c.volts, c.amps)
+		}
+		for _, cl := range driveViewCells(c.rb, val) {
+			if cl.label == "SUPPLY" && cl.colour != c.driveSupplyC {
+				t.Errorf("%s: driving view supply %v, want %v", c.name, cl.colour, c.driveSupplyC)
 			}
 		}
 	}

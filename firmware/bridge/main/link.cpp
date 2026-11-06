@@ -32,6 +32,7 @@ static uint32_t discardedFrames;
 static bool haveReport;
 static uint32_t reportAtMs;
 static protocol::CalibrationReport report;
+static supply_band::Limits supplyLimits;
 // Setup mode only. portalMode and handheldMode are set before the task
 // starts and never change afterwards.
 static bool portalMode;
@@ -135,9 +136,16 @@ static void takeFrames(uint32_t now)
         calibration_sync::onReport(calibration, f.calibrationReport);
       portEXIT_CRITICAL(&lock);
     }
-    // Pose and diagnostics frames arrive too (the robot sends them on every
-    // link); the decoder counts them as accepted. In WiFi drive the relay
-    // above forwards them with every other frame; otherwise they are ignored.
+    else if (f.type == protocol::FrameType::Diagnostics)
+    {
+      // Only its protection limits, for the supply bands.
+      portENTER_CRITICAL(&lock);
+      supplyLimits = supply_band::fromDiagnostics(f.diagnostics);
+      portEXIT_CRITICAL(&lock);
+    }
+    // Pose frames arrive too (the robot sends them on every link); the
+    // decoder counts them as accepted. In WiFi drive the relay above
+    // forwards them with every other frame; otherwise they are ignored.
   }
 }
 
@@ -251,6 +259,7 @@ Status status()
   s.haveReport = haveReport;
   s.reportAtMs = reportAtMs;
   s.report = report;
+  s.supplyLimits = supplyLimits;
   portEXIT_CRITICAL(&lock);
   return s;
 }

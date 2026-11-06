@@ -116,6 +116,25 @@ static void milli(Text &t, Tone tone, const char *prefix, uint16_t value, const 
   text(t, tone, "%s%u.%02u %s", prefix, value / 1000, (value % 1000) / 10, unit);
 }
 
+// A supply value's tone for its band (design D3 of handheld-observations):
+// Bad at or past a fault level, Warn in the warning band, Good when ok
+// (Warn when @p otherwise warns: the held-extreme warning), and
+// @p otherwise without a band.
+static Tone bandTone(supply_band::Band band, Tone otherwise)
+{
+  switch (band)
+  {
+  case supply_band::Band::Fault:
+    return Tone::Bad;
+  case supply_band::Band::Warning:
+    return Tone::Warn;
+  case supply_band::Band::Ok:
+    return otherwise == Tone::Warn ? Tone::Warn : Tone::Good;
+  default:
+    return otherwise;
+  }
+}
+
 // Appends @p word to the strip, on the first line while it fits, then on the
 // second; a word that fits neither is cut on the last line. Words are two
 // spaces apart: every fault, the e-stop and the source state fit two lines.
@@ -278,9 +297,16 @@ static void composeDrive(const Inputs &in, DriveBody &d)
     text(d.output, Tone::Warn, "OUT SIM"); // the modelled output: no servo moves
   else
     text(d.output, Tone::Good, "OUT ON");
-  // Amber while setting a new low or high beyond the held one.
-  milli(d.voltage, in.voltageLow.present && in.voltageLow.warning ? Tone::Warn : Tone::Normal, "", t.voltageMv, "V");
-  milli(d.current, in.currentPeak.present && in.currentPeak.warning ? Tone::Warn : Tone::Normal, "", t.currentMa, "A");
+  // By band against the robot's limits, and amber in the ok band too while
+  // setting a new low or high beyond the held one.
+  milli(d.voltage,
+        bandTone(supply_band::voltage(in.supplyLimits, t.voltageMv),
+                 in.voltageLow.present && in.voltageLow.warning ? Tone::Warn : Tone::Normal),
+        "", t.voltageMv, "V");
+  milli(d.current,
+        bandTone(supply_band::current(in.supplyLimits, t.currentMa),
+                 in.currentPeak.present && in.currentPeak.warning ? Tone::Warn : Tone::Normal),
+        "", t.currentMa, "A");
   d.voltageBar = {true, fraction(t.voltageMv, BAR_MIN_MV, BAR_MAX_MV), in.voltageLow.present,
                   fraction(in.voltageLow.value, BAR_MIN_MV, BAR_MAX_MV)};
   d.currentBar = {true, fraction(t.currentMa, 0, BAR_MAX_MA), in.currentPeak.present,
@@ -321,14 +347,16 @@ static void composePower(const Inputs &in, PowerBody &p)
   power_history::Sample newest;
   if (in.telemetryFresh && power_history::newest(*in.history, newest))
   {
-    milli(p.voltage, Tone::Normal, "", newest.voltageMv, "V");
-    milli(p.current, Tone::Normal, "", newest.currentMa, "A");
+    milli(p.voltage, bandTone(supply_band::voltage(in.supplyLimits, newest.voltageMv), Tone::Normal), "",
+          newest.voltageMv, "V");
+    milli(p.current, bandTone(supply_band::current(in.supplyLimits, newest.currentMa), Tone::Normal), "",
+          newest.currentMa, "A");
   }
   uint16_t minMv, maxMv, maxMa;
   if (!power_history::extremes(*in.history, minMv, maxMv, maxMa))
     return;
-  milli(p.minVoltage, Tone::Normal, "MIN ", minMv, "V");
-  milli(p.maxCurrent, Tone::Normal, "MAX ", maxMa, "A");
+  milli(p.minVoltage, bandTone(supply_band::voltage(in.supplyLimits, minMv), Tone::Normal), "MIN ", minMv, "V");
+  milli(p.maxCurrent, bandTone(supply_band::current(in.supplyLimits, maxMa), Tone::Normal), "MAX ", maxMa, "A");
   int low = minMv, high = maxMv;
   if (high - low < TRACE_MIN_SPAN_MV)
   {

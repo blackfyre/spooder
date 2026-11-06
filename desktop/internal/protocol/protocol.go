@@ -29,7 +29,7 @@ const (
 	TypeCalibrationSet    FrameType = 3
 	TypeCalibrationReport FrameType = 4
 	TypePose              FrameType = 5 // robot to every link (the bridge ignores it)
-	TypeDiagnostics       FrameType = 6 // robot to every link (the bridge ignores it)
+	TypeDiagnostics       FrameType = 6 // robot to every link (the bridge keeps its limits)
 )
 
 const (

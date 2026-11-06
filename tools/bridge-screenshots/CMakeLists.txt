@@ -37,6 +37,7 @@ add_executable(bridge-screenshots
   ${SPOODER_CORE}/status/peak_hold.cpp
   ${SPOODER_CORE}/status/power_history.cpp
   ${SPOODER_CORE}/status/status_screen.cpp
+  ${SPOODER_CORE}/status/supply_band.cpp
 )
 target_include_directories(bridge-screenshots PRIVATE ${SPOODER_CORE} ${BRIDGE_MAIN})
 target_compile_options(bridge-screenshots PRIVATE -Wall)
