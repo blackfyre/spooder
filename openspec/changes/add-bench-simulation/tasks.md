@@ -26,7 +26,7 @@
 
 ## 6. Gates
 
-- [ ] 6.1 Run every gate from the worktree: `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build` and `mise run e2e`. Verify all pass.
+- [x] 6.1 Run every gate from the worktree: `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build` and `mise run e2e`. Verify all pass.
 
 ## 7. On the board
 
