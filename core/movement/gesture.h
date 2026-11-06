@@ -114,6 +114,7 @@ enum class Stage : uint8_t
 struct Player
 {
   Gesture gesture = Gesture::None;
+  Script sequence = {nullptr, 0}; // what it plays: script(gesture), or a test's own
   Stage stage = Stage::Keyframes;
   int index = 0;           // keyframe in progress
   uint32_t elapsedMs = 0;  // within the segment
@@ -129,6 +130,12 @@ struct Player
  * @brief Starts @p g from the feet at @p feet, standing at @p standing.
  */
 void start(Player &p, Gesture g, const Vector3 *feet, Vector3 standing);
+
+/**
+ * @brief Starts @p sequence as gesture @p g: for host tests that play a
+ * script of their own.
+ */
+void start(Player &p, Gesture g, const Script &sequence, const Vector3 *feet, Vector3 standing);
 
 /**
  * @brief Advances by @p dtMs, carrying time over segment boundaries, and

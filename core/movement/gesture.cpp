@@ -106,7 +106,7 @@ static void beginSegment(Player &p, Vector3 standing)
     switch (p.stage)
     {
     case Stage::Keyframes:
-      p.to[i] = keyframeFoot(script(p.gesture).frames[p.index], i, standing);
+      p.to[i] = keyframeFoot(p.sequence.frames[p.index], i, standing);
       break;
     case Stage::Plant:
       p.to[i] = plantedFoot(i, standing, p.pose);
@@ -120,7 +120,7 @@ static void beginSegment(Player &p, Vector3 standing)
   for (int i = 0; i < LEG_COUNT; i++)
     longest = fmaxf(longest, p.from[i].distanceTo(p.to[i]));
   if (p.stage == Stage::Keyframes)
-    base = script(p.gesture).frames[p.index].durationMs;
+    base = p.sequence.frames[p.index].durationMs;
   else if (longest < 0.5f)
     base = 0; // a return step with nothing to move: skip it
   uint32_t minimum = minimumDurationMs(longest);
@@ -133,7 +133,7 @@ static void beginSegment(Player &p, Vector3 standing)
 // Moves on from a completed segment.
 static void nextSegment(Player &p, Vector3 standing)
 {
-  Script s = script(p.gesture);
+  const Script &s = p.sequence;
   switch (p.stage)
   {
   case Stage::Keyframes:
@@ -159,11 +159,17 @@ static void nextSegment(Player &p, Vector3 standing)
 
 void start(Player &p, Gesture g, const Vector3 *feet, Vector3 standing)
 {
+  start(p, g, script(g), feet, standing);
+}
+
+void start(Player &p, Gesture g, const Script &sequence, const Vector3 *feet, Vector3 standing)
+{
   p = Player();
   p.gesture = g;
+  p.sequence = sequence;
   for (int i = 0; i < LEG_COUNT; i++)
     p.from[i] = p.to[i] = feet[i];
-  p.done = script(g).count == 0;
+  p.done = sequence.count == 0;
   if (!p.done)
     beginSegment(p, standing);
 }
