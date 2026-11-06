@@ -136,6 +136,34 @@ func TestEmergencyStopToggle(t *testing.T) {
 	r.want(ModeStand, 2)
 }
 
+// Select + X switches the page and leaves the stride alone, however the
+// buttons are released; X alone still toggles the stride.
+func TestTopViewToggle(t *testing.T) {
+	r := newRig(t)
+	stride := r.last.Stride
+	r.down(HandSelect)
+	r.down(HandX)
+	if !r.h.TopView() {
+		t.Fatal("Select + X did not show the top view")
+	}
+	r.up(HandSelect) // released while X is still held
+	r.hold(100)
+	r.up(HandX)
+	if r.last.Stride != stride || !r.h.TopView() {
+		t.Fatalf("stride %d (was %d), top view %v", r.last.Stride, stride, r.h.TopView())
+	}
+	r.down(HandSelect)
+	r.tap(HandX)
+	r.up(HandSelect)
+	if r.h.TopView() || r.last.Stride != stride {
+		t.Fatalf("second Select + X: top view %v, stride %d", r.h.TopView(), r.last.Stride)
+	}
+	r.tap(HandX)
+	if r.last.Stride == stride {
+		t.Fatal("X alone did not toggle the stride")
+	}
+}
+
 func TestSelectReleasedFirst(t *testing.T) {
 	for _, b := range []Buttons{HandStart, HandY} {
 		r := newRig(t)

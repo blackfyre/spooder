@@ -5,6 +5,7 @@ import (
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/padmap"
 	"github.com/blackfyre/spooder/desktop/handheld/internal/wlan"
+	"github.com/blackfyre/spooder/desktop/internal/legview"
 	"github.com/blackfyre/spooder/desktop/internal/protocol"
 	"github.com/blackfyre/spooder/desktop/internal/session"
 )
@@ -20,6 +21,17 @@ type Robot struct {
 	Gesture   string
 	VoltageMv uint16
 	CurrentMa uint16
+	// Source is the robot's source in control (session.Source names): a
+	// fault clear counts only from it.
+	Source string
+}
+
+// Pose is the robot's legs from the shown pose frame, for the top view.
+type Pose struct {
+	Have  bool // a pose frame has been taken
+	Stale bool // none has arrived for StaleAfter (or none yet)
+	Pose  legview.Pose
+	Legs  [legview.Legs]legview.Leg3 // Pose in the body frame
 }
 
 // Requested is what the pak requests.
@@ -48,11 +60,18 @@ type LinkView struct {
 // Screen is the drive screen's model.
 type Screen struct {
 	Robot     Robot
+	Pose      Pose
 	Requested Requested
 	Link      LinkView
 	State     State
 	Leave     Action // the leave in progress, while State is Leaving or Acting
 	Notice    string // the last error worth showing, or ""
+	// Held is the controls held at the last step; Clearing the Select + Y
+	// hold's progress towards its fault clear (0 to 1).
+	Held     padmap.Buttons
+	Clearing float64
+	// TopView shows the top view in place of the panels (Select + X).
+	TopView bool
 }
 
 func strideName(s padmap.StrideMode) string {
@@ -74,7 +93,10 @@ func (a *App) Screen(now time.Time) Screen {
 	st := a.link.Status(now)
 	a.mu.Lock()
 	d, estop := a.desired, a.hand.EmergencyStop()
-	sc := Screen{State: a.state, Notice: a.notice}
+	sc := Screen{State: a.state, Notice: a.notice, Held: a.hand.Held(), TopView: a.hand.TopView()}
+	if a.begun {
+		sc.Clearing = a.hand.ClearProgress(a.ms(now))
+	}
 	if a.state == Leaving || a.state == Acting {
 		sc.Leave = a.leave.action
 	}
@@ -101,6 +123,15 @@ func (a *App) Screen(now time.Time) Screen {
 		sc.Robot.Faults = session.FaultNames(t.Faults)
 		sc.Robot.Gesture = session.GestureName(t.Gesture)
 		sc.Robot.VoltageMv, sc.Robot.CurrentMa = t.VoltageMv, t.CurrentMa
+		sc.Robot.Source = session.SourceFrom(t.Flags).String()
+	}
+
+	pose := st.Shown[protocol.TypePose]
+	sc.Pose.Have = pose.Have
+	sc.Pose.Stale = !pose.Have || now.Sub(pose.ArrivedAt) >= StaleAfter
+	if pose.Have {
+		sc.Pose.Pose = legview.FromFrame(pose.Frame.Pose)
+		sc.Pose.Legs = legview.Body3(sc.Pose.Pose)
 	}
 
 	sc.Link = LinkView{

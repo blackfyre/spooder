@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -75,6 +76,19 @@ func TestPakDrivesAndLeaves(t *testing.T) {
 	if sc.Link.Lost != 0 || sc.Link.Invalid != 0 {
 		t.Errorf("lost %d, invalid %d, want 0", sc.Link.Lost, sc.Link.Invalid)
 	}
+	// The top view's pose: fresh, every leg placed, and Select + X shows it.
+	if !sc.Pose.Have || sc.Pose.Stale {
+		t.Errorf("pose have %v, stale %v, want a fresh pose", sc.Pose.Have, sc.Pose.Stale)
+	}
+	for leg, l := range sc.Pose.Legs {
+		if !l.Set {
+			t.Errorf("leg %d not placed while walking", leg)
+		}
+	}
+	p.Tap(padmap.HandSelect | padmap.HandX)
+	if !p.S.App.Screen(time.Now()).TopView {
+		t.Error("Select + X did not show the top view")
+	}
 
 	pressed := time.Now()
 	p.S.App.Press(app.ActionExit, pressed)
@@ -122,4 +136,78 @@ func TestPakDrivesAndLeaves(t *testing.T) {
 	if sc := q.S.App.Screen(time.Now()); sc.Requested.Mode != "Sleep" {
 		t.Errorf("new run requests %q, want Sleep", sc.Requested.Mode)
 	}
+}
+
+// faults is the robot's latched fault bits from its status command.
+func (b *Bridge) faults() uint64 {
+	b.t.Helper()
+	answer, err := b.Do("status")
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	for _, f := range strings.Fields(answer) {
+		if v, ok := strings.CutPrefix(f, "faults="); ok {
+			var n uint64
+			if _, err := fmt.Sscanf(v, "0x%x", &n); err != nil {
+				b.t.Fatalf("faults in %q: %v", answer, err)
+			}
+			return n
+		}
+	}
+	b.t.Fatalf("no faults in %q", answer)
+	return 0
+}
+
+// waitFaults waits until want reports true for the robot's fault bits.
+func (b *Bridge) waitFaults(what string, want func(uint64) bool, timeout time.Duration) {
+	b.t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		f := b.faults()
+		if want(f) {
+			return
+		}
+		if time.Now().After(deadline) {
+			b.t.Fatalf("faults never %s (last 0x%02x)", what, f)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// The e-stop from the handheld latches the robot's emergency-stop fault;
+// releasing it leaves the fault latched, and Select + Y held 1 s clears it
+// through the bridge's counter translation.
+func TestPakEmergencyStopAndFaultClear(t *testing.T) {
+	const estopFault = 0x20 // protection::EMERGENCY_STOP
+	b := StartBridge(t)
+	p := StartPak(t, b)
+	b.WaitSessions(1, 2*time.Second)
+	time.Sleep(200 * time.Millisecond) // Begin masks controls held at the start
+
+	if src := p.S.App.Screen(time.Now()).Robot.Source; src != "bridge" {
+		t.Fatalf("robot reports source %q in control, want bridge", src)
+	}
+	p.Tap(padmap.HandSelect | padmap.HandStart)
+	if !p.S.App.Screen(time.Now()).Requested.EStop {
+		t.Fatal("Select + Start did not set the handheld's e-stop")
+	}
+	b.waitFaults("latch the e-stop", func(f uint64) bool { return f&estopFault != 0 }, 2*time.Second)
+
+	p.Tap(padmap.HandSelect | padmap.HandStart)
+	if p.S.App.Screen(time.Now()).Requested.EStop {
+		t.Fatal("Select + Start did not release the handheld's e-stop")
+	}
+	time.Sleep(300 * time.Millisecond)
+	if b.faults()&estopFault == 0 {
+		t.Fatal("the e-stop fault cleared without a fault clear")
+	}
+
+	p.S.App.SetControls(padmap.Controls{Buttons: padmap.HandSelect | padmap.HandY})
+	time.Sleep(500 * time.Millisecond)
+	if c := p.S.App.Screen(time.Now()).Clearing; c <= 0 || c >= 1 {
+		t.Errorf("clear hold at 0.5 s shows %.2f, want between 0 and 1", c)
+	}
+	time.Sleep(800 * time.Millisecond)
+	p.S.App.SetControls(padmap.Controls{})
+	b.waitFaults("clear the e-stop", func(f uint64) bool { return f&estopFault == 0 }, 2*time.Second)
 }

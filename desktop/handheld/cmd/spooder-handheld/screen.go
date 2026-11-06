@@ -5,48 +5,110 @@ import (
 	"strings"
 	"time"
 
+	"github.com/veandco/go-sdl2/gfx"
 	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/app"
+	"github.com/blackfyre/spooder/desktop/handheld/internal/padmap"
 	"github.com/blackfyre/spooder/desktop/internal/ui/fonts/files"
 )
 
-// The drive screen's layout is for 1280×720 (the TrimUI Smart Pro) and
-// scales with the window's width. Two columns: the robot on the left, with
-// the leave banner or a notice below it; what the pak requests and the
-// link's quality on the right; the controls' help along the bottom.
+// The drive screen in the Blackfyre look, dark as the design system's
+// Applications section builds it: the window on bf-ink, panels on
+// bf-ink-raised with a black outline, wells on bf-ink-code, text in
+// bf-surface, labels in uppercase tracked JetBrains Mono in bf-ink-subtle,
+// one orange. The layout is for 1280×720 (the TrimUI Smart Pro) and scales
+// with the window's width: a header (the title and the status chips), the
+// robot's panel on the left, what the pak requests and the link's quality
+// on the right, and the controls as keycaps along the bottom (the leave
+// banner in their place while leaving). Select + X shows the top view in
+// the panels' place (topview.go).
 const (
-	layoutWidth  = 1280
-	margin       = 32
-	columnGap    = 40
-	titleSize    = 28
-	labelSize    = 22
-	valueSize    = 24
-	titleGap     = 8  // below a column title, above its rule
-	ruleHeight   = 2  // the rule under a column title
-	ruleGap      = 10 // below the rule
-	rowGap       = 4  // between rows
-	blockGap     = 16 // below a block of rows
-	valueAtShare = 0.42
+	layoutWidth = 1280
+	margin      = 28
+	panelGap    = 20
+	panelPad    = 20
+	panelRadius = 16 // cards inside the window: bf-radius-2xl
+	wellRadius  = 10 // bf-radius-lg
+	chipHeight  = 38
+	keyHeight   = 40
+	keyRadius   = 7 // the keyboards' corners
+	keyEdge     = 3 // bf-shadow-raised-dark's edge
+	headerH     = 56
+	labelGap    = 6  // between a cell's label and its value
+	kickerGap   = 14 // below a panel's kicker
+	cellGap     = 14 // between rows of cells
+	dotRadius   = 6
+
+	heroSize  = 76 // the body mode
+	titleSize = 40 // "Spooder."
+	valueSize = 28 // values in Archivo
+	bigMono   = 44 // the supply's figures
+	monoSize  = 28 // numbers
+	microSize = 17 // labels, kickers, chips and keycaps
+	hintSize  = 13 // the keys named beside a requested value's label
+
+	// Tracking, in em: labels and keycaps keep the label spacing (0.06em);
+	// kickers 0.1em, micro labels 0.12em.
+	trackLabel  = 0.06
+	trackKicker = 0.10
+	trackMicro  = 0.12
 )
 
+// The Blackfyre tokens the screen draws with (desktop/internal/ui/theme.go
+// has the same values from the design system).
 var (
-	colBackground = sdl.Color{R: 0x12, G: 0x13, B: 0x16, A: 0xff}
-	colText       = sdl.Color{R: 0xe8, G: 0xe6, B: 0xe1, A: 0xff}
-	colDim        = sdl.Color{R: 0x8a, G: 0x8f, B: 0x98, A: 0xff}
-	colWarn       = sdl.Color{R: 0xe0, G: 0xa0, B: 0x30, A: 0xff}
-	colDanger     = sdl.Color{R: 0xe0, G: 0x50, B: 0x50, A: 0xff}
-	colRule       = sdl.Color{R: 0x2c, G: 0x2f, B: 0x35, A: 0xff}
+	colWindow    = hex(0x1B1B19) // bf-ink
+	colPanel     = hex(0x2C2C29) // bf-ink-raised
+	colWell      = hex(0x121211) // bf-ink-code
+	colChip      = hex(0x242421) // bf-ink-chip
+	colKey       = hex(0x383834) // bf-ink-card-hover
+	colKeyEdge   = hex(0x0E0E0D) // bf-ink-deep
+	colOutline   = hex(0x000000) // bf-shadow-outline-dark
+	colText      = hex(0xF3F2EE) // bf-surface
+	colMuted     = hex(0xA19E96) // bf-ink-subtle
+	colAccent    = hex(0xE2551D) // bf-accent
+	colAccentTxt = hex(0xFF8A4C) // bf-accent-on-dark
+	colOnAccent  = hex(0x1B1B19) // bf-on-accent
+	colOk        = hex(0x7FD88A) // bf-ok
+	colWarn      = hex(0xE0AF68) // bf-warn: fill, and text on dark
+	colOnStatus  = hex(0x1B1B19) // bf-ink, on status fills
 )
 
-const helpText = "Menu leave   Select+Start e-stop   Select+Y 1 s clear fault   L2 gestures"
+func hex(v uint32) sdl.Color {
+	return sdl.Color{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 0xff}
+}
 
-// fontSet is the screen's three faces: Archivo SemiBold for titles and
-// labels, JetBrains Mono for values (the Blackfyre typefaces; gabagool keeps
-// its own fonts internal).
+// key is a keycap's label and the control that presses it (none for Menu,
+// which never reaches the mapping).
+type key struct {
+	label string
+	b     padmap.Buttons
+}
+
+// The controls along the bottom: keycaps, then what they do. clear marks the
+// fault clear, whose hold fills its text; onView is what the page toggle
+// does while the top view shows.
+var helpKeys = []struct {
+	keys   []key
+	does   string
+	clear  bool
+	onView string
+}{
+	{[]key{{"MENU", 0}}, "LEAVE", false, ""},
+	{[]key{{"SELECT", padmap.HandSelect}, {"START", padmap.HandStart}}, "E-STOP", false, ""},
+	{[]key{{"SELECT", padmap.HandSelect}, {"Y", padmap.HandY}}, "HOLD: CLEAR FAULT", true, ""},
+	{[]key{{"SELECT", padmap.HandSelect}, {"X", padmap.HandX}}, "VIEW", false, "PANELS"},
+	{[]key{{"L2", padmap.HandL2}}, "GESTURES", false, ""},
+}
+
+// fontSet is the screen's faces: Archivo SemiBold for what is read,
+// JetBrains Mono for labels and numbers (the Blackfyre typefaces; gabagool
+// keeps its own fonts internal).
 type fontSet struct {
-	title, label, mono *ttf.Font
+	hero, title, value     *ttf.Font // Archivo
+	big, mono, micro, hint *ttf.Font // JetBrains Mono
 }
 
 func openFont(data []byte, size int) (*ttf.Font, error) {
@@ -66,86 +128,155 @@ func openFont(data []byte, size int) (*ttf.Font, error) {
 func loadFonts(scale float64) (*fontSet, error) {
 	px := func(v int) int { return int(float64(v)*scale + 0.5) }
 	f := &fontSet{}
-	var err error
-	if f.title, err = openFont(files.ArchivoSemiBold, px(titleSize)); err != nil {
-		return nil, err
-	}
-	if f.label, err = openFont(files.ArchivoSemiBold, px(labelSize)); err != nil {
-		f.close()
-		return nil, err
-	}
-	if f.mono, err = openFont(files.JetBrainsMonoRegular, px(valueSize)); err != nil {
-		f.close()
-		return nil, err
+	for _, o := range []struct {
+		dst  **ttf.Font
+		data []byte
+		size int
+	}{
+		{&f.hero, files.ArchivoSemiBold, heroSize},
+		{&f.title, files.ArchivoSemiBold, titleSize},
+		{&f.value, files.ArchivoSemiBold, valueSize},
+		{&f.big, files.JetBrainsMonoRegular, bigMono},
+		{&f.mono, files.JetBrainsMonoRegular, monoSize},
+		{&f.micro, files.JetBrainsMonoRegular, microSize},
+		{&f.hint, files.JetBrainsMonoRegular, hintSize},
+	} {
+		ft, err := openFont(o.data, px(o.size))
+		if err != nil {
+			f.close()
+			return nil, err
+		}
+		*o.dst = ft
 	}
 	return f, nil
 }
 
 func (f *fontSet) close() {
-	for _, ft := range []*ttf.Font{f.title, f.label, f.mono} {
+	for _, ft := range []*ttf.Font{f.hero, f.title, f.value, f.big, f.mono, f.micro, f.hint} {
 		if ft != nil {
 			ft.Close()
 		}
 	}
 }
 
-// Rows per block. The layout test checks the blocks fit the screen with
-// these counts.
-const (
-	robotRowCount     = 6
-	requestedRowCount = 6
-	linkRowCount      = 6
-)
+// tracking is em in pixels for f's size.
+func tracking(f *ttf.Font, em float64) int32 {
+	return int32(float64(f.Height())*em*0.8 + 0.5) // a line is about 1.25em
+}
+
+// trackedWidth is s's width in f with em tracking between its characters.
+func trackedWidth(f *ttf.Font, s string, em float64) int32 {
+	var w int32
+	n := 0
+	for _, r := range s {
+		if m, err := f.GlyphMetrics(r); err == nil {
+			w += int32(m.Advance)
+		}
+		n++
+	}
+	if n > 1 {
+		w += int32(n-1) * tracking(f, em)
+	}
+	return w
+}
+
+// textWidth is s's width in f, untracked.
+func textWidth(f *ttf.Font, s string) int32 {
+	w, _, err := f.SizeUTF8(s)
+	if err != nil {
+		return 0
+	}
+	return int32(w)
+}
+
+// fit shortens str with an ellipsis until it is at most width wide in f.
+func fit(f *ttf.Font, str string, width int32) string {
+	if textWidth(f, str) <= width {
+		return str
+	}
+	r := []rune(str)
+	for len(r) > 0 {
+		r = r[:len(r)-1]
+		cut := strings.TrimRight(string(r), " ,") + "…"
+		if textWidth(f, cut) <= width {
+			return cut
+		}
+	}
+	return ""
+}
 
 // layout is the screen's geometry for one window size and font set.
 type layout struct {
-	left, right, colW int32
-	valueOff          int32 // a value's x offset in its column
-	top               int32
-	titleH, rowH      int32
-	labelH            int32
-	gap               func(int) int32
-	footerY           int32 // the help line's top
-	bannerY           int32 // the leave banner's or notice's top, left column
-	linkY             int32 // the link block's top, right column
-	rightBottom       int32 // the right column's bottom
+	scale                 float64
+	w, h                  int32
+	left, colW, right     int32 // the two columns
+	headerY, bodyY        int32
+	footerY               int32 // the keycaps' top
+	bodyBottom            int32
+	requestedY, requested int32 // the right column's panels: top and height
+	linkY, link           int32
+	microH, valueH        int32
 }
 
 func newLayout(w, h int32, f *fontSet) layout {
-	scale := float64(w) / layoutWidth
-	gap := func(v int) int32 { return int32(float64(v)*scale + 0.5) }
-	l := layout{gap: gap}
-	l.left = gap(margin)
-	l.colW = (w - 2*gap(margin) - gap(columnGap)) / 2
-	l.right = l.left + l.colW + gap(columnGap)
-	l.valueOff = int32(float64(l.colW) * valueAtShare)
-	l.top = gap(margin)
-	l.titleH = int32(f.title.Height())
-	l.labelH = int32(f.label.Height())
-	l.rowH = int32(f.mono.Height()) + gap(rowGap)
-	l.footerY = h - gap(margin) - l.labelH
-	l.bannerY = l.blockBottom(l.top, robotRowCount)
-	l.linkY = l.blockBottom(l.top, requestedRowCount)
-	l.rightBottom = l.blockBottom(l.linkY, linkRowCount)
+	l := layout{scale: float64(w) / layoutWidth, w: w, h: h}
+	l.left = l.gap(margin)
+	l.colW = (w - 2*l.gap(margin) - l.gap(panelGap)) / 2
+	l.right = l.left + l.colW + l.gap(panelGap)
+	l.headerY = l.gap(margin) - l.gap(4)
+	l.bodyY = l.headerY + l.gap(headerH) + l.gap(16)
+	l.footerY = h - l.gap(margin) - l.gap(keyHeight) - l.gap(keyEdge)
+	l.bodyBottom = l.footerY - l.gap(panelGap)
+	l.microH = int32(f.micro.Height())
+	l.valueH = int32(f.value.Height())
+	// The requested panel takes its two rows of three cells; the link panel
+	// (three rows of two) the rest.
+	l.requestedY, l.requested = l.bodyY, l.gridH(requestedRows)
+	l.linkY = l.bodyY + l.requested + l.gap(panelGap)
+	l.link = l.bodyBottom - l.linkY
 	return l
 }
 
-// blockHeader is a block's title, rule and gaps.
-func (l layout) blockHeader() int32 {
-	return l.titleH + l.gap(titleGap) + l.gap(ruleHeight) + l.gap(ruleGap)
+func (l layout) gap(v int) int32 { return int32(float64(v)*l.scale + 0.5) }
+
+// cellH is one label-over-value cell's height.
+func (l layout) cellH() int32 { return l.microH + l.gap(labelGap) + l.valueH }
+
+// gridH is the height a panel needs for its kicker and rows of cells.
+func (l layout) gridH(rows int) int32 {
+	return 2*l.gap(panelPad) + l.microH + l.gap(kickerGap) + int32(rows)*l.cellH() + int32(rows-1)*l.gap(cellGap)
 }
 
-// blockBottom is the y below a block of n rows starting at y.
-func (l layout) blockBottom(y int32, n int) int32 {
-	return y + l.blockHeader() + int32(n)*l.rowH + l.gap(blockGap)
+// cell is one labelled value, with the keys that change it named beside
+// its label.
+type cell struct {
+	label, value string
+	colour       sdl.Color
+	mono         bool // a number: JetBrains Mono
+	keys         []string
+}
+
+// texCache keeps rendered text between frames; draw drops what a frame did
+// not use.
+type texKey struct {
+	f *ttf.Font
+	s string
+	c sdl.Color
+}
+
+type texEntry struct {
+	tex  *sdl.Texture
+	w, h int32
+	used bool
 }
 
 // screen draws the drive screen (design D4) on gabagool's renderer.
 type screen struct {
-	win window
-	r   *sdl.Renderer
-	f   *fontSet
-	l   layout
+	win   window
+	r     *sdl.Renderer
+	f     *fontSet
+	l     layout
+	cache map[texKey]*texEntry
 }
 
 // window is what the screen needs of gabagool's window, whose type lives in
@@ -164,176 +295,506 @@ func newScreen(win window, r *sdl.Renderer) (*screen, error) {
 	return &screen{win: win, r: r, f: f, l: newLayout(win.GetWidth(), win.GetHeight(), f)}, nil
 }
 
-func (s *screen) close() { s.f.close() }
-
-// fit shortens str with an ellipsis until it is at most width wide in f.
-func fit(f *ttf.Font, str string, width int32) string {
-	if w, _, err := f.SizeUTF8(str); err != nil || int32(w) <= width {
-		return str
+func (s *screen) close() {
+	for k, e := range s.cache {
+		_ = e.tex.Destroy()
+		delete(s.cache, k)
 	}
-	r := []rune(str)
-	for len(r) > 0 {
-		r = r[:len(r)-1]
-		cut := strings.TrimRight(string(r), " ,") + "…"
-		if w, _, err := f.SizeUTF8(cut); err == nil && int32(w) <= width {
-			return cut
-		}
-	}
-	return ""
+	s.f.close()
 }
 
-// text draws str at x, y, shortened to width.
-func (s *screen) text(f *ttf.Font, str string, x, y, width int32, c sdl.Color) {
-	str = fit(f, str, width)
-	if str == "" {
-		return
+// texture returns str rendered in f and c, from the cache when it can.
+func (s *screen) texture(f *ttf.Font, str string, c sdl.Color) *texEntry {
+	if s.cache == nil {
+		s.cache = map[texKey]*texEntry{}
+	}
+	k := texKey{f, str, c}
+	if e, ok := s.cache[k]; ok {
+		e.used = true
+		return e
 	}
 	surf, err := f.RenderUTF8Blended(str, c)
 	if err != nil {
-		return
+		return nil
 	}
 	defer surf.Free()
 	tex, err := s.r.CreateTextureFromSurface(surf)
 	if err != nil {
-		return
+		return nil
 	}
-	defer tex.Destroy()
-	_ = s.r.Copy(tex, nil, &sdl.Rect{X: x, Y: y, W: surf.W, H: surf.H})
+	e := &texEntry{tex: tex, w: surf.W, h: surf.H, used: true}
+	s.cache[k] = e
+	return e
 }
 
-// wrapped draws str wrapped to width at x, y, at most up to maxY.
-func (s *screen) wrapped(f *ttf.Font, str string, x, y, width, maxY int32, c sdl.Color) {
-	if str == "" || maxY <= y {
-		return
+// endFrame drops the textures this frame did not use.
+func (s *screen) endFrame() {
+	for k, e := range s.cache {
+		if !e.used {
+			_ = e.tex.Destroy()
+			delete(s.cache, k)
+			continue
+		}
+		e.used = false
 	}
-	surf, err := f.RenderUTF8BlendedWrapped(str, c, int(width))
-	if err != nil {
-		return
-	}
-	defer surf.Free()
-	tex, err := s.r.CreateTextureFromSurface(surf)
-	if err != nil {
-		return
-	}
-	defer tex.Destroy()
-	h := min(surf.H, maxY-y)
-	_ = s.r.Copy(tex, &sdl.Rect{W: surf.W, H: h}, &sdl.Rect{X: x, Y: y, W: surf.W, H: h})
 }
 
-// row is one label and value of a block.
-type row struct {
-	label, value string
-	colour       sdl.Color
+// text draws str at x, y, shortened to width, and returns its width.
+func (s *screen) text(f *ttf.Font, str string, x, y, width int32, c sdl.Color) int32 {
+	str = fit(f, str, width)
+	if str == "" {
+		return 0
+	}
+	e := s.texture(f, str, c)
+	if e == nil {
+		return 0
+	}
+	_ = s.r.Copy(e.tex, nil, &sdl.Rect{X: x, Y: y, W: e.w, H: e.h})
+	return e.w
 }
 
-// block draws a titled block of rows at x, y.
-func (s *screen) block(title string, titleColour sdl.Color, rows []row, x, y int32) {
+// tracked draws str one character at a time with em tracking and returns
+// its width. Labels are short and set within their cells, so nothing is
+// shortened.
+func (s *screen) tracked(f *ttf.Font, str string, x, y int32, c sdl.Color, em float64) int32 {
+	x0, t := x, tracking(f, em)
+	for i, r := range str {
+		if i > 0 {
+			x += t
+		}
+		m, err := f.GlyphMetrics(r)
+		if err != nil {
+			continue
+		}
+		if r != ' ' {
+			if e := s.texture(f, string(r), c); e != nil {
+				_ = s.r.Copy(e.tex, nil, &sdl.Rect{X: x, Y: y, W: e.w, H: e.h})
+			}
+		}
+		x += int32(m.Advance)
+	}
+	return x - x0
+}
+
+func (s *screen) fill(x, y, w, h, rad int32, c sdl.Color) {
+	if w <= 0 || h <= 0 {
+		return
+	}
+	if rad <= 0 {
+		_ = s.r.SetDrawColor(c.R, c.G, c.B, c.A)
+		_ = s.r.FillRect(&sdl.Rect{X: x, Y: y, W: w, H: h})
+		return
+	}
+	gfx.RoundedBoxColor(s.r, x, y, x+w-1, y+h-1, min(rad, h/2, w/2), c)
+}
+
+// panel draws a card: a black outline, the raised face, and its kicker
+// ("01 · ROBOT"); it returns the y below the kicker.
+func (s *screen) panel(x, y, w, h int32, number, title string, titleColour sdl.Color) int32 {
 	l := s.l
-	s.text(s.f.title, title, x, y, l.colW, titleColour)
-	y += l.titleH + l.gap(titleGap)
-	_ = s.r.SetDrawColor(colRule.R, colRule.G, colRule.B, colRule.A)
-	_ = s.r.FillRect(&sdl.Rect{X: x, Y: y, W: l.colW, H: l.gap(ruleHeight)})
-	y += l.gap(ruleHeight) + l.gap(ruleGap)
-	labelDy := (int32(s.f.mono.Height()) - l.labelH) / 2
-	for _, rw := range rows {
-		s.text(s.f.label, rw.label, x, y+labelDy, l.valueOff-l.gap(8), colDim)
-		s.text(s.f.mono, rw.value, x+l.valueOff, y, l.colW-l.valueOff, rw.colour)
-		y += l.rowH
+	s.fill(x-1, y-1, w+2, h+2, l.gap(panelRadius)+1, colOutline)
+	s.fill(x, y, w, h, l.gap(panelRadius), colPanel)
+	kx, ky := x+l.gap(panelPad), y+l.gap(panelPad)
+	kx += s.tracked(s.f.micro, number, kx, ky, colAccentTxt, trackKicker)
+	kx += s.tracked(s.f.micro, " · ", kx, ky, colMuted, trackKicker)
+	s.tracked(s.f.micro, title, kx, ky, titleColour, trackKicker)
+	return ky + l.microH + l.gap(kickerGap)
+}
+
+// The panels' grids: rows and columns of cells.
+const (
+	requestedRows, requestedCols = 2, 3
+	linkRows, linkCols           = 3, 2
+)
+
+// cellW is a cell's width in a grid of cols across width.
+func (l layout) cellW(width int32, cols int) int32 {
+	return (width - int32(cols-1)*l.gap(cellGap)) / int32(cols)
+}
+
+// cells draws rows of cols label-over-value cells across width from x, y.
+func (s *screen) cells(cs []cell, cols int, x, y, width int32) {
+	l := s.l
+	colW := l.cellW(width, cols)
+	for i, c := range cs {
+		cx := x + int32(i%cols)*(colW+l.gap(cellGap))
+		cy := y + int32(i/cols)*(l.cellH()+l.gap(cellGap))
+		kx := cx + s.tracked(s.f.micro, c.label, cx, cy, colMuted, trackMicro) + l.gap(10)
+		for _, k := range c.keys {
+			kx += s.hintKey(kx, cy, k) + l.gap(4)
+		}
+		vy := cy + l.microH + l.gap(labelGap)
+		if c.mono {
+			// Mono sits on the same baseline as Archivo's value line.
+			vy += (l.valueH - int32(s.f.mono.Height())) / 2
+			s.text(s.f.mono, c.value, cx, vy, colW, c.colour)
+		} else {
+			s.text(s.f.value, c.value, cx, vy, colW, c.colour)
+		}
 	}
 }
 
-func onOff(on bool) string {
-	if on {
-		return "on"
+// chip draws a pill at x, y (its height chipHeight) with an optional dot
+// and tracked micro text; it returns its width.
+func (s *screen) chip(x, y int32, text string, face, fg sdl.Color, dot *sdl.Color) int32 {
+	l := s.l
+	h := l.gap(chipHeight)
+	pad := l.gap(14)
+	tw := trackedWidth(s.f.micro, text, trackLabel)
+	w := 2*pad + tw
+	if dot != nil {
+		w += 2*l.gap(dotRadius) + l.gap(10)
 	}
-	return "off"
+	s.fill(x, y, w, h, h/2, face)
+	tx := x + pad
+	if dot != nil {
+		r := l.gap(dotRadius)
+		gfx.FilledCircleColor(s.r, tx+r, y+h/2, r, *dot)
+		gfx.AACircleColor(s.r, tx+r, y+h/2, r, *dot)
+		tx += 2*r + l.gap(10)
+	}
+	s.tracked(s.f.micro, text, tx, y+(h-l.microH)/2, fg, trackLabel)
+	return w
+}
+
+// chipWidth is chip's width without drawing it.
+func (s *screen) chipWidth(text string, dot bool) int32 {
+	l := s.l
+	w := 2*l.gap(14) + trackedWidth(s.f.micro, text, trackLabel)
+	if dot {
+		w += 2*l.gap(dotRadius) + l.gap(10)
+	}
+	return w
+}
+
+// keycapWidth is a footer keycap's width.
+func (s *screen) keycapWidth(label string) int32 {
+	l := s.l
+	return max(l.gap(keyHeight), 2*l.gap(12)+trackedWidth(s.f.micro, label, trackLabel))
+}
+
+// keycap draws a raised key at x, y and returns its width. A pressed key
+// sits down on its edge, as the system's controls do on :active, with its
+// label in the orange text tone.
+func (s *screen) keycap(x, y int32, label string, pressed bool) int32 {
+	l := s.l
+	h := l.gap(keyHeight)
+	w := s.keycapWidth(label)
+	fg := colText
+	if pressed {
+		y += l.gap(keyEdge)
+		fg = colAccentTxt
+	} else {
+		s.fill(x, y+l.gap(keyEdge), w, h, l.gap(keyRadius), colKeyEdge)
+	}
+	s.fill(x, y, w, h, l.gap(keyRadius), colKey)
+	tw := trackedWidth(s.f.micro, label, trackLabel)
+	s.tracked(s.f.micro, label, x+(w-tw)/2, y+(h-l.microH)/2, fg, trackLabel)
+	return w
+}
+
+// hintKeyWidth is a small key's width beside a label.
+func (s *screen) hintKeyWidth(label string) int32 {
+	l := s.l
+	return max(l.microH, 2*l.gap(6)+trackedWidth(s.f.hint, label, trackLabel))
+}
+
+// hintKey draws a small flat key, as high as a label, at x, y and returns
+// its width.
+func (s *screen) hintKey(x, y int32, label string) int32 {
+	l := s.l
+	w := s.hintKeyWidth(label)
+	s.fill(x, y, w, l.microH, l.gap(4), colKey)
+	tw := trackedWidth(s.f.hint, label, trackLabel)
+	s.tracked(s.f.hint, label, x+(w-tw)/2, y+(l.microH-int32(s.f.hint.Height()))/2, colText, trackLabel)
+	return w
 }
 
 func (s *screen) draw(sc app.Screen) {
 	l := s.l
-	_ = s.r.SetDrawColor(colBackground.R, colBackground.G, colBackground.B, colBackground.A)
-	_ = s.r.Clear()
-
-	s.block(robotTitle(sc.Robot), robotColour(sc.Robot), robotRows(sc.Robot), l.left, l.top)
-	s.block("REQUESTED", colText, requestedRows(sc.Requested), l.right, l.top)
-	s.block("LINK", colText, linkRows(sc.Link), l.right, l.linkY)
-
-	switch sc.State {
-	case app.Leaving:
-		s.wrapped(s.f.title, fmt.Sprintf("Leaving (%s): waiting for the robot to sleep", sc.Leave), l.left, l.bannerY, l.colW, l.footerY, colWarn)
-	case app.Acting:
-		s.wrapped(s.f.title, fmt.Sprintf("Leaving (%s)", sc.Leave), l.left, l.bannerY, l.colW, l.footerY, colWarn)
-	default:
-		s.wrapped(s.f.label, sc.Notice, l.left, l.bannerY, l.colW, l.footerY, colWarn)
+	s.fill(0, 0, l.w, l.h, 0, colWindow)
+	s.header(sc)
+	if sc.TopView {
+		s.topView(sc)
+	} else {
+		s.robot(sc.Robot, sc.Notice)
+		s.requested(sc.Requested)
+		s.link(sc.Link)
 	}
-	s.text(s.f.label, helpText, l.left, l.footerY, 2*l.colW+l.gap(columnGap), colDim)
+	if sc.State == app.Leaving || sc.State == app.Acting {
+		s.leaveBanner(sc)
+	} else {
+		s.footer(sc.Held, sc.Clearing, sc.TopView)
+	}
+	s.endFrame()
 	s.win.Present()
 }
 
-func robotTitle(rb app.Robot) string {
-	if rb.Stale {
-		return "ROBOT (stale)"
+// header: "Spooder." with the orange full stop, then the chips on the right:
+// the link's state, the signal, and the emergency stop (orange when set).
+func (s *screen) header(sc app.Screen) {
+	l := s.l
+	y := l.headerY
+	tx := l.left
+	tx += s.text(s.f.title, "Spooder", tx, y+(l.gap(headerH)-int32(s.f.title.Height()))/2, l.colW, colText)
+	s.text(s.f.title, ".", tx, y+(l.gap(headerH)-int32(s.f.title.Height()))/2, l.colW, colAccent)
+
+	cy := y + (l.gap(headerH)-l.gap(chipHeight))/2
+	type chipSpec struct {
+		text     string
+		face, fg sdl.Color
+		dot      *sdl.Color
 	}
-	return "ROBOT"
+	estop := chipSpec{"E-STOP OFF", colChip, colMuted, nil}
+	if sc.Requested.EStop {
+		estop = chipSpec{"E-STOP ON", colAccent, colOnAccent, nil}
+	}
+	ok, warn, muted := colOk, colWarn, colMuted
+	linkChip := chipSpec{"NO FRAMES", colChip, colText, &muted}
+	if sc.Link.HaveFrame {
+		if sc.Link.SinceLast >= app.StaleAfter {
+			linkChip = chipSpec{"LINK STALE", colChip, colText, &warn}
+		} else {
+			linkChip = chipSpec{"LINK", colChip, colText, &ok}
+		}
+	}
+	signal := "SIGNAL —"
+	if sc.Link.SignalKnown {
+		signal = fmt.Sprintf("%d DBM", sc.Link.SignalDBm)
+	}
+	chips := []chipSpec{linkChip, {signal, colChip, colText, nil}, estop}
+	x := l.w - l.gap(margin)
+	for i := len(chips) - 1; i >= 0; i-- {
+		c := chips[i]
+		x -= s.chipWidth(c.text, c.dot != nil)
+		s.chip(x, cy, c.text, c.face, c.fg, c.dot)
+		x -= l.gap(10)
+	}
 }
 
-func robotColour(rb app.Robot) sdl.Color {
+// robot: the body mode large, output on or off, the supply in a well, gait
+// and gesture, and the faults as chips; a notice at the panel's foot.
+func (s *screen) robot(rb app.Robot, notice string) {
+	l := s.l
+	x, w := l.left, l.colW
+	h := l.bodyBottom - l.bodyY
+	title, tc := "ROBOT", colMuted
 	if rb.Stale {
-		return colWarn
+		title, tc = "ROBOT · STALE", colWarn
 	}
-	return colText
-}
-
-func robotRows(rb app.Robot) []row {
-	if !rb.Have {
-		return []row{{"Telemetry", "none yet", colDim}}
-	}
+	y := s.panel(x, l.bodyY, w, h, "01", title, tc)
+	ix, iw := x+l.gap(panelPad), w-2*l.gap(panelPad)
 	val := colText
 	if rb.Stale {
-		val = colDim
+		val = colMuted
 	}
-	faults, fc := "none", val
-	if len(rb.Faults) > 0 {
-		faults, fc = strings.Join(rb.Faults, ", "), colDanger
+
+	// The body mode, a display title: an orange full stop, and the output
+	// chip beside it.
+	body := "No telemetry"
+	if rb.Have {
+		body = rb.Body
 	}
-	gesture := rb.Gesture
-	if gesture == "" {
-		gesture = "none"
+	heroY := y - l.gap(8)
+	bw := s.text(s.f.hero, body, ix, heroY, iw, val)
+	if rb.Have {
+		bw += s.text(s.f.hero, ".", ix+bw, heroY, iw-bw, colAccent)
+		out, dot := "OUTPUT OFF", colMuted
+		if rb.OutputsOn {
+			out, dot = "OUTPUT ON", colOk
+		}
+		if rb.Stale {
+			dot = colMuted
+		}
+		cw := s.chipWidth(out, true)
+		s.chip(ix+iw-cw, heroY+(int32(s.f.hero.Height())-l.gap(chipHeight))/2, out, colChip, colText, &dot)
 	}
-	return []row{
-		{"Body", rb.Body, val},
-		{"Gait", rb.Gait, val},
-		{"Output", onOff(rb.OutputsOn), val},
-		{"Faults", faults, fc},
-		{"Gesture", gesture, val},
-		{"Supply", fmt.Sprintf("%.2f V %.2f A", float64(rb.VoltageMv)/1000, float64(rb.CurrentMa)/1000), val},
+	y = heroY + int32(s.f.hero.Height()) + l.gap(10)
+
+	// The supply in a well.
+	wellH := l.gap(18) + l.microH + l.gap(labelGap) + int32(s.f.big.Height()) + l.gap(18)
+	s.fill(ix, y, iw, wellH, l.gap(wellRadius), colWell)
+	volts, amps := "—", "—"
+	if rb.Have {
+		volts = fmt.Sprintf("%.2f V", float64(rb.VoltageMv)/1000)
+		amps = fmt.Sprintf("%.2f A", float64(rb.CurrentMa)/1000)
+	}
+	half := iw / 2
+	for i, v := range []struct{ label, value string }{{"SUPPLY", volts}, {"CURRENT", amps}} {
+		vx := ix + l.gap(20) + int32(i)*half
+		s.tracked(s.f.micro, v.label, vx, y+l.gap(18), colMuted, trackMicro)
+		s.text(s.f.big, v.value, vx, y+l.gap(18)+l.microH+l.gap(labelGap), half-l.gap(24), val)
+	}
+	y += wellH + l.gap(22)
+
+	s.cells(robotCells(rb, val), robotCols, ix, y, iw)
+	y += l.cellH() + l.gap(cellGap)
+
+	// Faults: chips that wrap; the emergency stop in orange, others in the
+	// warning tone, always with their names.
+	s.tracked(s.f.micro, "FAULTS", ix, y, colMuted, trackMicro)
+	y += l.microH + l.gap(labelGap) + l.gap(2)
+	bottom := l.bodyBottom - l.gap(panelPad)
+	if notice != "" {
+		bottom -= l.microH + l.gap(12)
+	}
+	s.faultChips(rb, ix, y, iw, bottom, val)
+	if notice != "" {
+		ny := l.bodyBottom - l.gap(panelPad) - l.microH
+		nx := ix + s.tracked(s.f.micro, "NOTICE  ", ix, ny, colWarn, trackMicro)
+		s.text(s.f.micro, notice, nx, ny, ix+iw-nx, colWarn)
 	}
 }
 
-func requestedRows(rq app.Requested) []row {
-	estop, ec := "off", colText
-	if rq.EStop {
-		estop, ec = "STOP", colDanger
-	}
-	return []row{
-		{"Mode", rq.Mode, colText},
-		{"Height, speed", fmt.Sprintf("%d, %d", rq.Height, rq.Speed), colText},
-		{"Gait", rq.Gait, colText},
-		{"Stride", rq.Stride, colText},
-		{"Sticks", rq.StickMode, colText},
-		{"E-stop", estop, ec},
+// faultChips draws the faults from x, y as chips that wrap within width,
+// down to bottom: the emergency stop in orange, others in the warning tone,
+// always with their names.
+func (s *screen) faultChips(rb app.Robot, x, y, width, bottom int32, val sdl.Color) {
+	l := s.l
+	switch {
+	case !rb.Have:
+		s.text(s.f.value, "—", x, y, width, colMuted)
+	case len(rb.Faults) == 0:
+		s.text(s.f.value, "None", x, y, width, val)
+	default:
+		cx := x
+		for _, name := range rb.Faults {
+			text := strings.ToUpper(name)
+			face := colWarn
+			if strings.Contains(name, "emergency") {
+				face = colAccent
+			}
+			cw := s.chipWidth(text, false)
+			if cx > x && cx+cw > x+width {
+				cx, y = x, y+l.gap(chipHeight)+l.gap(8)
+			}
+			if y+l.gap(chipHeight) > bottom {
+				break
+			}
+			s.chip(cx, y, text, face, colOnStatus, nil)
+			cx += cw + l.gap(8)
+		}
 	}
 }
 
-func linkRows(l app.LinkView) []row {
-	signal := "unknown"
-	if l.SignalKnown {
-		signal = fmt.Sprintf("%d dBm", l.SignalDBm)
+func (s *screen) requested(rq app.Requested) {
+	l := s.l
+	y := s.panel(l.right, l.requestedY, l.colW, l.requested, "02", "REQUESTED", colMuted)
+	s.cells(requestedCells(rq), requestedCols, l.right+l.gap(panelPad), y, l.colW-2*l.gap(panelPad))
+}
+
+func (s *screen) link(lv app.LinkView) {
+	l := s.l
+	y := s.panel(l.right, l.linkY, l.colW, l.link, "03", "LINK", colMuted)
+	s.cells(linkCells(lv), linkCols, l.right+l.gap(panelPad), y, l.colW-2*l.gap(panelPad))
+}
+
+// footer: the controls as keycaps, each pressed while its control is held;
+// the fault clear's text fills with the orange as its hold runs (clearing,
+// 0 to 1); the page toggle names the page it goes to.
+func (s *screen) footer(held padmap.Buttons, clearing float64, topView bool) {
+	l := s.l
+	x, y := l.left, l.footerY
+	ty := y + (l.gap(keyHeight)-l.microH)/2
+	for i, h := range helpKeys {
+		if i > 0 {
+			x += l.gap(28)
+		}
+		for j, k := range h.keys {
+			if j > 0 {
+				x += l.gap(6) + s.tracked(s.f.micro, "+", x+l.gap(6), ty, colMuted, trackLabel) + l.gap(6)
+			}
+			x += s.keycap(x, y, k.label, k.b != 0 && held&k.b != 0)
+		}
+		x += l.gap(10)
+		fg := colMuted
+		if h.clear && clearing > 0 {
+			fg = colText
+		}
+		does := h.does
+		if topView && h.onView != "" {
+			does = h.onView
+		}
+		tw := s.tracked(s.f.micro, does, x, ty, fg, trackLabel)
+		if h.clear && clearing > 0 {
+			bar := l.gap(3)
+			s.fill(x, ty+l.microH+l.gap(4), tw, bar, 0, colChip)
+			s.fill(x, ty+l.microH+l.gap(4), int32(float64(tw)*clearing+0.5), bar, 0, colAccent)
+		}
+		x += tw
 	}
-	since, sc := "no frame yet", colWarn
-	if l.HaveFrame {
-		since, sc = l.SinceLast.Round(10*time.Millisecond).String(), colText
-		if l.SinceLast >= app.StaleAfter {
+}
+
+// leaveBanner: an orange band with bf-on-accent text in the footer's place.
+func (s *screen) leaveBanner(sc app.Screen) {
+	l := s.l
+	h := l.gap(keyHeight) + l.gap(keyEdge)
+	y := l.footerY
+	s.fill(l.left, y, l.w-2*l.gap(margin), h, l.gap(wellRadius), colAccent)
+	text := fmt.Sprintf("LEAVING (%s) · WAITING FOR THE ROBOT TO SLEEP", strings.ToUpper(sc.Leave.String()))
+	if sc.State == app.Acting {
+		text = fmt.Sprintf("LEAVING (%s)", strings.ToUpper(sc.Leave.String()))
+	}
+	s.tracked(s.f.micro, text, l.left+l.gap(20), y+(h-l.microH)/2, colOnAccent, trackLabel)
+}
+
+// robotCols is the robot panel's cells across.
+const robotCols = 3
+
+// robotCells is the robot panel's gait, gesture and source in control. A
+// source other than the bridge shows in the warning tone: the robot takes a
+// fault clear only from the source in control.
+func robotCells(rb app.Robot, val sdl.Color) []cell {
+	gesture, gait, source, sc := "None", "—", "—", val
+	if rb.Have {
+		gait = rb.Gait
+		if rb.Gesture != "" {
+			gesture = rb.Gesture
+		}
+		source = sourceName(rb.Source)
+		if rb.Source != "bridge" && !rb.Stale {
+			sc = colWarn
+		}
+	}
+	return []cell{{"GAIT", gait, val, false, nil}, {"GESTURE", gesture, val, false, nil}, {"SOURCE", source, sc, false, nil}}
+}
+
+func sourceName(s string) string {
+	switch s {
+	case "bridge":
+		return "Bridge"
+	case "USB":
+		return "USB"
+	case "conflict":
+		return "Conflict"
+	}
+	return "None"
+}
+
+// requestedCells names, beside each label, the keys that change it (the
+// mapping, internal/padmap): Y sleeps and wakes, Start walks and stands.
+func requestedCells(rq app.Requested) []cell {
+	return []cell{
+		{"MODE", rq.Mode, colText, false, []string{"Y", "START"}},
+		{"GAIT", rq.Gait, colText, false, []string{"L1", "R1"}},
+		{"STRIDE", rq.Stride, colText, false, []string{"X"}},
+		{"HEIGHT", fmt.Sprint(rq.Height), colText, true, []string{"↑", "↓"}},
+		{"SPEED", fmt.Sprint(rq.Speed), colText, true, []string{"←", "→"}},
+		{"STICKS", rq.StickMode, colText, false, []string{"B"}},
+	}
+}
+
+func linkCells(lv app.LinkView) []cell {
+	signal := "Unknown"
+	sigMono := false
+	if lv.SignalKnown {
+		signal, sigMono = fmt.Sprintf("%d dBm", lv.SignalDBm), true
+	}
+	since, sc := "No frame yet", colWarn
+	sinceMono := false
+	if lv.HaveFrame {
+		since, sc, sinceMono = lv.SinceLast.Round(10*time.Millisecond).String(), colText, true
+		if lv.SinceLast >= app.StaleAfter {
 			sc = colWarn
 		}
 	}
@@ -343,12 +804,12 @@ func linkRows(l app.LinkView) []row {
 		}
 		return colText
 	}
-	return []row{
-		{"Signal", signal, colText},
-		{"Tel/pose/diag /s", fmt.Sprintf("%d / %d / %d", l.Telemetry, l.Pose, l.Diagnostics), colText},
-		{"Invalid", fmt.Sprint(l.Invalid), count(l.Invalid)},
-		{"Lost / late", fmt.Sprintf("%d / %d", l.Lost, l.Late), count(l.Lost + l.Late)},
-		{"Last frame", since, sc},
-		{"Sent (errors)", fmt.Sprintf("%d (%d)", l.Sent, l.SendErrors), count(l.SendErrors)},
+	return []cell{
+		{"SIGNAL", signal, colText, sigMono, nil},
+		{"LAST FRAME", since, sc, sinceMono, nil},
+		{"TEL · POSE · DIAG /S", fmt.Sprintf("%d · %d · %d", lv.Telemetry, lv.Pose, lv.Diagnostics), colText, true, nil},
+		{"INVALID", fmt.Sprint(lv.Invalid), count(lv.Invalid), true, nil},
+		{"LOST · LATE", fmt.Sprintf("%d · %d", lv.Lost, lv.Late), count(lv.Lost + lv.Late), true, nil},
+		{"SENT (ERRORS)", fmt.Sprintf("%d (%d)", lv.Sent, lv.SendErrors), count(lv.SendErrors), true, nil},
 	}
 }

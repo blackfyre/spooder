@@ -20,11 +20,11 @@ const (
 	HandLeft
 	HandStart
 	HandSelect
-	// handL2 and handR2 are the triggers beyond half travel, set by the
+	// HandL2 and HandR2 are the triggers beyond half travel, set by the
 	// layer itself from the analogue values, so that they are masked like
 	// the buttons.
-	handL2
-	handR2
+	HandL2
+	HandR2
 )
 
 // Controls is one sample of the TrimUI's controls in SDL units.
@@ -54,12 +54,13 @@ func ScaleAxis(v int16) int32 {
 // handheld's own emergency stop.
 //
 // It keeps the PadState from showing the mapping a press the user did not
-// make: a Start or Y pressed with Select held is masked until that button
-// is released, whatever Select does meanwhile; so is every control held
+// make: a Start, X or Y pressed with Select held is masked until that
+// button is released, whatever Select does meanwhile; so is every control held
 // when driving begins or when the neutral pad (a leave) ends.
 type Handheld struct {
 	mapper     Mapper
 	estop      bool
+	topView    bool // Select + X: the drive screen's top-view page
 	neutral    bool
 	maskHeld   bool    // mask every control held at the next Step
 	prev       Buttons // the controls held at the last Step
@@ -111,17 +112,38 @@ func (h *Handheld) SetNeutral(on bool) {
 // EmergencyStop is the handheld's e-stop toggle (Select + Start).
 func (h *Handheld) EmergencyStop() bool { return h.estop }
 
+// TopView is the drive screen's page toggle (Select + X): the top view in
+// place of the panels. It never reaches the mapping.
+func (h *Handheld) TopView() bool { return h.topView }
+
+// Held is the controls held at the last Step, the triggers beyond half
+// travel included.
+func (h *Handheld) Held() Buttons { return h.prev }
+
+// ClearProgress is how far the Select + Y hold is towards its fault clear
+// at nowMs: 0 when no hold is armed, rising to 1 when the clear is sent.
+func (h *Handheld) ClearProgress(nowMs uint32) float64 {
+	m := &h.mapper
+	if !h.clearArmed || !m.clearHeld {
+		return 0
+	}
+	if m.clearFired {
+		return 1
+	}
+	return min(1, float64(nowMs-m.clearSinceMs)/ComboHoldMs)
+}
+
 // Command is the command frame payload for d with the handheld's e-stop.
 func (h *Handheld) Command(d Desired) protocol.Command { return ToCommand(d, h.estop) }
 
 // Step advances the layer and the mapping by one sample taken at nowMs.
 func (h *Handheld) Step(c Controls, nowMs uint32) Desired {
-	held := c.Buttons &^ (handL2 | handR2)
+	held := c.Buttons &^ (HandL2 | HandR2)
 	if c.TriggerL > TriggerThreshold {
-		held |= handL2
+		held |= HandL2
 	}
 	if c.TriggerR > TriggerThreshold {
-		held |= handR2
+		held |= HandR2
 	}
 	if h.maskHeld {
 		h.maskHeld = false
@@ -137,6 +159,10 @@ func (h *Handheld) Step(c Controls, nowMs uint32) Desired {
 	if selectHeld && pressed&HandStart != 0 {
 		h.estop = !h.estop
 		h.masked |= HandStart
+	}
+	if selectHeld && pressed&HandX != 0 {
+		h.topView = !h.topView
+		h.masked |= HandX
 	}
 	if selectHeld && pressed&HandY != 0 {
 		h.masked |= HandY
@@ -176,7 +202,7 @@ var buttonMap = []struct {
 	pad  uint16
 }{
 	{HandA, ButtonA}, {HandB, ButtonB}, {HandX, ButtonX}, {HandY, ButtonY},
-	{HandL1, ButtonL1}, {HandR1, ButtonR1}, {handL2, ButtonL2}, {handR2, ButtonR2},
+	{HandL1, ButtonL1}, {HandR1, ButtonR1}, {HandL2, ButtonL2}, {HandR2, ButtonR2},
 }
 
 var dpadMap = []struct {

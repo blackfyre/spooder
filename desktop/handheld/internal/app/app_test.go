@@ -416,6 +416,33 @@ func TestScreenStaleAndFaults(t *testing.T) {
 	}
 }
 
+// The top view's legs come from the shown pose frame: a leg with a pulse
+// set is placed, one never set is not, and the pose goes stale as telemetry
+// does.
+func TestScreenPose(t *testing.T) {
+	r := newRig(t)
+	if sc := r.a.Screen(r.now); sc.Pose.Have || !sc.Pose.Stale {
+		t.Fatalf("pose %+v before any frame, want none, stale", sc.Pose)
+	}
+	var p protocol.Pose
+	for j := 0; j < 3; j++ { // leg 0 only
+		p.Joints[j] = protocol.PoseJoint{CommandedCentideg: 9000, ServoCentideg: 9000, PulseUs: 1500}
+	}
+	if _, ok := r.link.rx.Datagram(protocol.EncodePose(p, 4), r.now); !ok {
+		t.Fatal("pose refused")
+	}
+	sc := r.a.Screen(r.now.Add(499 * time.Millisecond))
+	if !sc.Pose.Have || sc.Pose.Stale || !sc.Pose.Legs[0].Set || sc.Pose.Legs[1].Set {
+		t.Fatalf("pose %+v at 499 ms, want fresh with leg 0 alone set", sc.Pose)
+	}
+	if sc.Pose.Legs[0].Points[3] == sc.Pose.Legs[0].Points[0] {
+		t.Fatal("leg 0's foot at its pivot")
+	}
+	if sc = r.a.Screen(r.now.Add(StaleAfter)); !sc.Pose.Stale || !sc.Pose.Legs[0].Set {
+		t.Fatalf("pose %+v at 500 ms, want stale, still placed", sc.Pose)
+	}
+}
+
 func TestParseFlags(t *testing.T) {
 	var out strings.Builder
 	c, err := ParseFlags(nil, &out)
