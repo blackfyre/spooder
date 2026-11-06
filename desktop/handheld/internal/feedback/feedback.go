@@ -107,7 +107,7 @@ func (d *Detector) detected(e Event, now time.Time) {
 // known; the first fresh telemetry since the run started, or since a leave
 // ended (a resume), is the baseline (its latched faults), not the link
 // regained: the link is lost only after telemetry was fresh, and regained
-// only after it was lost.
+// only after it was lost. A leave pauses the link's judging only.
 func (d *Detector) Update(in Inputs) Event {
 	now := in.Now
 	if !d.started {
@@ -133,16 +133,22 @@ func (d *Detector) Update(in Inputs) Event {
 	if in.Leaving && !d.leaving {
 		d.detected(Leaving, now)
 	}
+	if d.leaving && !in.Leaving {
+		// The leave ended (a resume after a suspend): what follows starts
+		// anew, as a run does.
+		d.seen, d.wasFresh = false, false
+	}
 	d.leaving = in.Leaving
 
 	switch {
-	case in.Leaving:
-		// A leave pauses the link's judging, and what follows it (a resume
-		// after a suspend) starts anew, as a run does.
-		d.seen = false
 	case in.TelemetryFresh && !d.seen:
 		d.seen = true
-		d.faults = in.Faults // the baseline at the start
+		d.faults = in.Faults // the baseline at the start, or after a gap in a leave
+	case in.Leaving && !in.TelemetryFresh:
+		// A leave pauses only the link's judging (the suspend stops the
+		// link); faults and the e-stop are still judged. A gap in a leave
+		// makes the next fresh telemetry the baseline, as a gap does.
+		d.seen = false
 	case in.TelemetryFresh && !d.wasFresh:
 		d.detected(LinkRegained, now)
 		d.faults = in.Faults // the baseline after a gap

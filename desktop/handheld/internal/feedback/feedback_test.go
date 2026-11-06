@@ -92,6 +92,27 @@ func TestResumeIsSilent(t *testing.T) {
 	r.want(33100, LinkRegained)
 }
 
+// A leave pauses only the link's judging: a fault latching and the e-stop
+// still sound, telemetry lapsing and returning does not.
+func TestLeaveJudgesFaults(t *testing.T) {
+	r := newRig(t)
+	r.in.Leaving = true
+	r.want(100, Leaving)
+	r.in.Faults = 0x01
+	r.want(2000, FaultLatched)
+	r.want(2500, None)
+	r.in.EStop = true
+	r.want(4000, EstopOn)
+	r.in.TelemetryFresh = false
+	r.want(6000, None)
+	r.want(7000, None)
+	r.in.TelemetryFresh, r.in.Faults = true, 0x01|0x04 // latched in the gap: the new baseline
+	r.want(8000, None)
+	r.want(9000, None)
+	r.in.Faults |= 0x02
+	r.want(10000, FaultLatched)
+}
+
 // Each event, from the change that makes it.
 func TestEvents(t *testing.T) {
 	r := newRig(t)
