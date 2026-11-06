@@ -252,6 +252,10 @@ func TestFaultNames(t *testing.T) {
 	if FaultNames(0) != nil {
 		t.Fatal("faults without bits")
 	}
+	// The bench simulation supply fault is named, not "fault bit 6".
+	if got := FaultNames(FaultSimulationSupply | 1<<7); !reflect.DeepEqual(got, []string{"supply in simulation", "fault bit 7"}) {
+		t.Fatalf("%v", got)
+	}
 }
 
 // calibrating returns a session in control with the robot in Calibrate and

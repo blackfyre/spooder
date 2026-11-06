@@ -91,6 +91,7 @@ const (
 	FaultBrownout         uint16 = 1 << 3
 	FaultOvervoltage      uint16 = 1 << 4
 	FaultEmergencyStop    uint16 = 1 << 5
+	FaultSimulationSupply uint16 = 1 << 6 // a real supply measured in bench simulation
 )
 
 var faultNames = []struct {
@@ -103,6 +104,7 @@ var faultNames = []struct {
 	{FaultBrownout, "brown-out"},
 	{FaultOvervoltage, "overvoltage"},
 	{FaultEmergencyStop, "emergency stop"},
+	{FaultSimulationSupply, "supply in simulation"},
 }
 
 // FaultNames names every set fault bit, in bit order; unknown bits are

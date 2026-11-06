@@ -17,8 +17,8 @@
 
 ## 4. Viewers
 
-- [ ] 4.1 Show simulation on the bridge screen (D7): `SIM` in the status strip in the warning tone, `OUT SIM` on the drive page, and the names `SIM SUPPLY` and `sim supply` for the new fault in `core/status/status_screen`. Verify with new cases in `test/test_status_screen` via `mise run test` (each scenario of this change's status-display delta, SIM beside each named fault and the source conflict with every line within its field width, pages without the flag unchanged), `mise run build-bridge` and `mise run bridge-screenshots` passing with the existing images unchanged.
-- [ ] 4.2 Show simulation in the desktop calibrator (D7): the banner, the output cell marked as simulated, the fault name `supply in simulation` in `session.FaultNames`, and `SIM` in the console's telemetry line. Verify with Go tests via `mise run desktop-test` (the banner and output text with the flag set and their absence without it, the fault named rather than `fault bit 6`, the console line), and that `mise run desktop-build` passes.
+- [x] 4.1 Show simulation on the bridge screen (D7): `SIM` in the status strip in the warning tone, `OUT SIM` on the drive page, and the names `SIM SUPPLY` and `sim supply` for the new fault in `core/status/status_screen`. Verify with new cases in `test/test_status_screen` via `mise run test` (each scenario of this change's status-display delta, SIM beside each named fault and the source conflict with every line within its field width, pages without the flag unchanged), `mise run build-bridge` and `mise run bridge-screenshots` passing with the existing images unchanged.
+- [x] 4.2 Show simulation in the desktop calibrator (D7): the banner, the output cell marked as simulated, the fault name `supply in simulation` in `session.FaultNames`, and `SIM` in the console's telemetry line. Verify with Go tests via `mise run desktop-test` (the banner and output text with the flag set and their absence without it, the fault named rather than `fault bit 6`, the console line), and that `mise run desktop-build` passes.
 
 ## 5. Documentation
 

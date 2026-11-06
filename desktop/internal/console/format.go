@@ -80,13 +80,18 @@ func formatTelemetry(seq uint8, t protocol.Telemetry) string {
 		session.BodyMode(t.BodyMode).String(),
 		gait,
 		"output " + output,
+	}
+	if t.Flags&protocol.TelemetrySimulated != 0 {
+		parts = append(parts, "SIM") // bench simulation: no servo moves
+	}
+	parts = append(parts,
 		fmt.Sprintf("%.2f V", float64(t.VoltageMv)/1000),
 		fmt.Sprintf("%.2f A", float64(t.CurrentMa)/1000),
-		"faults " + faults,
+		"faults "+faults,
 		fmt.Sprintf("link %d ok %d bad", t.ValidFrames, t.DiscardedFrames),
-		"source " + source,
-	}
-	parts = append(parts, bridgeText(t))
+		"source "+source,
+		bridgeText(t),
+	)
 	if t.Gesture != protocol.GestureNone {
 		gesture := session.GestureName(t.Gesture)
 		if !strings.HasPrefix(gesture, "gesture ") { // an unknown id is named "gesture N"

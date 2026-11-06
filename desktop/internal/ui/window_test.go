@@ -430,6 +430,13 @@ func TestLayoutsInEveryState(t *testing.T) {
 			w.tab = tab
 			frame(w, router)
 		}
+		// Bench simulation with its supply fault, beside the other banners.
+		s.Frame(protocol.Frame{Type: protocol.TypeTelemetry, Telemetry: protocol.Telemetry{BodyMode: uint8(session.BodyWalk),
+			OutputsOn: true, Faults: 0x40, Flags: protocol.TelemetrySimulated | protocol.TelemetryUSBInControl}}, link.Stats{})
+		for tab := 0; tab < tabCount; tab++ {
+			w.tab = tab
+			frame(w, router)
+		}
 		click(w, router, &w.prepare)
 		if w.exp.plan == nil {
 			t.Fatalf("no plan: %s", w.exp.status)

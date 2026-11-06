@@ -151,6 +151,27 @@ func fieldDiffers(a, b calib.Joint, f calib.Field) bool {
 
 func voltsText(mv uint16) string { return fmt.Sprintf("%d.%02d V", mv/1000, (mv%1000)/10) }
 func ampsText(ma uint16) string  { return fmt.Sprintf("%d.%02d A", ma/1000, (ma%1000)/10) }
+
+// simulated reports whether the latest telemetry has the bench simulation
+// flag: the robot models its servos and supply, and no servo moves.
+func simulated(snap session.Snapshot) bool {
+	return snap.HaveTelemetry && snap.Telemetry.Flags&protocol.TelemetrySimulated != 0
+}
+
+// The bench simulation banner.
+const (
+	simulationTitle = "Bench simulation"
+	simulationBody  = "No servo moves: the robot runs on USB power and simulates its servos and supply. Restart it to leave."
+)
+
+// outputText is the servo output cell: on, off, or on as simulated.
+func outputText(t protocol.Telemetry) string {
+	if t.OutputsOn && t.Flags&protocol.TelemetrySimulated != 0 {
+		return "on (sim)"
+	}
+	return onOffText(t.OutputsOn)
+}
+
 func onOffText(on bool) string {
 	if on {
 		return "on"

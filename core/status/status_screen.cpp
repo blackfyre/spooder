@@ -26,6 +26,8 @@ const char *faultName(uint16_t bit)
     return "high V";
   case protection::EMERGENCY_STOP:
     return "e-stop";
+  case protection::SIMULATION_SUPPLY:
+    return "sim supply";
   default:
     return nullptr;
   }
@@ -72,6 +74,8 @@ static const char *stripName(uint16_t bit)
     return "HIGH V";
   case protection::EMERGENCY_STOP:
     return "E-STOP";
+  case protection::SIMULATION_SUPPLY:
+    return "SIM SUPPLY";
   default:
     return nullptr;
   }
@@ -179,6 +183,12 @@ static void composeStrip(const Inputs &in, Strip &s)
       stripAdd(s, line, "USB IN CONTROL");
       warn = true;
     }
+    // Bench simulation: no servo moves, whatever the output reports.
+    if (t.flags & protocol::TELEMETRY_SIMULATED)
+    {
+      stripAdd(s, line, "SIM");
+      warn = true;
+    }
   }
   else
   {
@@ -262,7 +272,12 @@ static void composeDrive(const Inputs &in, DriveBody &d)
     return; // bars absent
   }
   const protocol::Telemetry &t = in.telemetry;
-  text(d.output, t.outputsOn ? Tone::Good : Tone::Muted, "%s", t.outputsOn ? "OUT ON" : "OUT OFF");
+  if (!t.outputsOn)
+    text(d.output, Tone::Muted, "OUT OFF");
+  else if (t.flags & protocol::TELEMETRY_SIMULATED)
+    text(d.output, Tone::Warn, "OUT SIM"); // the modelled output: no servo moves
+  else
+    text(d.output, Tone::Good, "OUT ON");
   // Amber while setting a new low or high beyond the held one.
   milli(d.voltage, in.voltageLow.present && in.voltageLow.warning ? Tone::Warn : Tone::Normal, "", t.voltageMv, "V");
   milli(d.current, in.currentPeak.present && in.currentPeak.warning ? Tone::Warn : Tone::Normal, "", t.currentMa, "A");

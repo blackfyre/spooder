@@ -15,6 +15,7 @@ import (
 	"github.com/blackfyre/spooder/desktop/internal/export"
 	"github.com/blackfyre/spooder/desktop/internal/link"
 	"github.com/blackfyre/spooder/desktop/internal/protocol"
+	"github.com/blackfyre/spooder/desktop/internal/session"
 )
 
 func TestSelectionMoves(t *testing.T) {
@@ -200,5 +201,70 @@ func TestExportModel(t *testing.T) {
 	}
 	if saved != root || m.plan != nil || m.failed {
 		t.Fatalf("after write: saved %q %+v", saved, m)
+	}
+}
+
+// snapshotAfter is a session's snapshot once it has received @p tel.
+func snapshotAfter(tel protocol.Telemetry) session.Snapshot {
+	s := session.New(func() time.Time { return clock }, nil)
+	s.Frame(protocol.Frame{Type: protocol.TypeTelemetry, Telemetry: tel}, link.Stats{})
+	return s.Snapshot()
+}
+
+func bannerTitles(bs []bannerSpec) []string {
+	var out []string
+	for _, b := range bs {
+		out = append(out, b.title)
+	}
+	return out
+}
+
+// Spec "Robot in simulation": the banner and the output as simulated with the
+// flag; neither without it.
+func TestSimulationBannerAndOutput(t *testing.T) {
+	sim := protocol.Telemetry{BodyMode: uint8(session.BodyWalk), OutputsOn: true, VoltageMv: 6000,
+		Flags: protocol.TelemetrySimulated | protocol.TelemetryUSBInControl}
+	snap := snapshotAfter(sim)
+	bs := bannerSpecs(snap, "")
+	if len(bs) != 1 || bs[0].title != simulationTitle || bs[0].kind != bannerWarning || !strings.Contains(bs[0].body, "No servo moves") {
+		t.Fatalf("banners %+v", bs)
+	}
+	if got := outputText(snap.Telemetry); got != "on (sim)" {
+		t.Errorf("output %q", got)
+	}
+	// Output off in simulation is plainly off.
+	off := sim
+	off.OutputsOn = false
+	if got := outputText(off); got != "off" {
+		t.Errorf("output off %q", got)
+	}
+	// Beside the other banners, in order.
+	snap.EmergencyStop = true
+	if got := bannerTitles(bannerSpecs(snap, "busy")); strings.Join(got, "|") != "Emergency stop|Bench simulation|Not done" {
+		t.Errorf("order %v", got)
+	}
+
+	plain := sim
+	plain.Flags = protocol.TelemetryUSBInControl
+	snap = snapshotAfter(plain)
+	if bs := bannerSpecs(snap, ""); len(bs) != 0 {
+		t.Errorf("banners without the flag %+v", bs)
+	}
+	if got := outputText(snap.Telemetry); got != "on" {
+		t.Errorf("output without the flag %q", got)
+	}
+	// No telemetry yet: no banner.
+	var none session.Snapshot
+	none.Telemetry.Flags = protocol.TelemetrySimulated
+	if bs := bannerSpecs(none, ""); len(bs) != 0 {
+		t.Errorf("banners without telemetry %+v", bs)
+	}
+}
+
+// Spec "Supply appears in simulation": the fault named, not by bit number.
+func TestSimulationSupplyFaultIsNamed(t *testing.T) {
+	snap := snapshotAfter(protocol.Telemetry{Flags: protocol.TelemetrySimulated, Faults: session.FaultSimulationSupply})
+	if got := faultsText(snap.Faults); got != "supply in simulation" {
+		t.Errorf("faults %q", got)
 	}
 }

@@ -114,10 +114,47 @@ func (w *window) linkState(gtx layout.Context) layout.Dimensions {
 	)
 }
 
-// banners: the e-stop, a source conflict, a refused action.
+// bannerKind picks a banner's colours.
+type bannerKind int
+
+const (
+	bannerAlarm   bannerKind = iota // the accent: the e-stop
+	bannerWarning                   // the warning fill
+	bannerNotice                    // a quiet surface: a refused action
+)
+
+type bannerSpec struct {
+	kind        bannerKind
+	title, body string
+}
+
+// bannerSpecs is what the banners show, in order: the e-stop, a source
+// conflict, bench simulation, stray bytes, and @p notice when not empty.
+func bannerSpecs(snap session.Snapshot, notice string) []bannerSpec {
+	var bs []bannerSpec
+	if snap.EmergencyStop {
+		bs = append(bs, bannerSpec{bannerAlarm, "Emergency stop",
+			"The app signals an emergency stop. Releasing it does not clear the robot's fault: take control and use Clear fault."})
+	}
+	if snap.HaveTelemetry && snap.Source == session.SourceConflict {
+		bs = append(bs, bannerSpec{bannerWarning, "Source conflict",
+			"The bridge and this app both claim control, so the robot sleeps. Release control here or disconnect the gamepad."})
+	}
+	if simulated(snap) {
+		bs = append(bs, bannerSpec{bannerWarning, simulationTitle, simulationBody})
+	}
+	if snap.StrayLines > 0 {
+		bs = append(bs, bannerSpec{bannerWarning, "Stray 0xA5",
+			fmt.Sprintf("Debug lines with a byte 0xA5 outside a frame: %d. The robot's text must be ASCII (see the log).", snap.StrayLines)})
+	}
+	if notice != "" {
+		bs = append(bs, bannerSpec{bannerNotice, "Not done", notice})
+	}
+	return bs
+}
+
+// banners: the e-stop, a source conflict, bench simulation, a refused action.
 func (w *window) banners(gtx layout.Context) layout.Dimensions {
-	snap := w.snap
-	var ws []layout.Widget
 	banner := func(bg, fg color.NRGBA, title, body string) layout.Widget {
 		return func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.X = gtx.Constraints.Max.X
@@ -129,20 +166,20 @@ func (w *window) banners(gtx layout.Context) layout.Dimensions {
 			})
 		}
 	}
-	if snap.EmergencyStop {
-		ws = append(ws, banner(w.pal.Accent, w.pal.OnAccent, "Emergency stop",
-			"The app signals an emergency stop. Releasing it does not clear the robot's fault: take control and use Clear fault."))
-	}
-	if snap.HaveTelemetry && snap.Source == session.SourceConflict {
-		ws = append(ws, banner(w.pal.Yellow, w.pal.OnStatus, "Source conflict",
-			"The bridge and this app both claim control, so the robot sleeps. Release control here or disconnect the gamepad."))
-	}
-	if snap.StrayLines > 0 {
-		ws = append(ws, banner(w.pal.Yellow, w.pal.OnStatus, "Stray 0xA5",
-			fmt.Sprintf("Debug lines with a byte 0xA5 outside a frame: %d. The robot's text must be ASCII (see the log).", snap.StrayLines)))
-	}
+	notice := ""
 	if w.notice != "" && gtx.Now.Sub(w.noticeAt) < noticeFor {
-		ws = append(ws, banner(w.pal.SurfaceAlt, w.pal.Fg, "Not done", w.notice))
+		notice = w.notice
+	}
+	var ws []layout.Widget
+	for _, b := range bannerSpecs(w.snap, notice) {
+		bg, fg := w.pal.Yellow, w.pal.OnStatus
+		switch b.kind {
+		case bannerAlarm:
+			bg, fg = w.pal.Accent, w.pal.OnAccent
+		case bannerNotice:
+			bg, fg = w.pal.SurfaceAlt, w.pal.Fg
+		}
+		ws = append(ws, banner(bg, fg, b.title, b.body))
 	}
 	if len(ws) == 0 {
 		return layout.Dimensions{}
@@ -200,7 +237,7 @@ func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 				return layout.Flex{}.Layout(gtx,
 					w.cell("Mode", bodyText(snap), c),
 					w.cell("Gait", session.GaitName(t.Gait), c),
-					w.cell("Output", onOffText(t.OutputsOn), c),
+					w.cell("Output", outputText(t), c),
 					w.cell("Supply", voltsText(t.VoltageMv), c),
 					w.cell("Current", ampsText(t.CurrentMa), c),
 					w.wideCell(1.6, "Source", sourceText(snap), c),

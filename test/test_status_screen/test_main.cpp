@@ -785,6 +785,158 @@ void test_switch_notice_never_cuts_a_fault()
   TEST_ASSERT_FALSE(stripHas("SWITCH"));
 }
 
+// --- bench simulation ------------------------------------------------------------
+
+static Inputs simulating()
+{
+  Inputs in = healthy();
+  in.telemetry.flags = protocol::TELEMETRY_SIMULATED;
+  return in;
+}
+
+// True if @p word stands whole in the strip: strip words are two spaces apart
+// and may hold single spaces, so "SIM" is not found in "SIM SUPPLY".
+static bool stripHasWord(const char *word)
+{
+  size_t n = strlen(word);
+  for (const auto &l : view.strip.lines)
+    for (const char *at = l; *at;)
+    {
+      const char *end = strstr(at, "  ");
+      size_t len = end ? (size_t)(end - at) : strlen(at);
+      if (len == n && strncmp(at, word, n) == 0)
+        return true;
+      if (!end)
+        break;
+      at = end + 2;
+    }
+  return false;
+}
+
+// The delta's simulation scenario: SIM on every page, in the warning tone;
+// the drive page's output as simulated.
+void test_simulation_is_named_on_every_page()
+{
+  Inputs in = simulating();
+  for (Page p : {Page::Drive, Page::Power, Page::Link})
+  {
+    composePage(in, p, view);
+    TEST_ASSERT_EQUAL_STRING("SIM", view.strip.lines[0]);
+    TEST_ASSERT_EQUAL_STRING("", view.strip.lines[1]);
+    TEST_ASSERT_TRUE(view.strip.tone == Tone::Warn);
+    TEST_ASSERT_FALSE(stripHas("NO FAULTS"));
+  }
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_EQUAL_STRING("OUT SIM", view.drive.output.text);
+  TEST_ASSERT_TRUE(view.drive.output.tone == Tone::Warn);
+  in.telemetry.outputsOn = false;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_EQUAL_STRING("OUT OFF", view.drive.output.text);
+  TEST_ASSERT_TRUE(view.drive.output.tone == Tone::Muted);
+}
+
+void test_simulation_needs_fresh_telemetry()
+{
+  Inputs in = simulating();
+  in.telemetryFresh = false;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_FALSE(stripHasWord("SIM"));
+  TEST_ASSERT_EQUAL_STRING("OUT --", view.drive.output.text);
+}
+
+// The delta's supply scenario: the fault named in the fault tone, beside SIM.
+void test_simulation_supply_fault_is_named_beside_sim()
+{
+  Inputs in = simulating();
+  in.telemetry.faults = protection::SIMULATION_SUPPLY;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_EQUAL_STRING("SIM SUPPLY  SIM", view.strip.lines[0]);
+  TEST_ASSERT_TRUE(view.strip.tone == Tone::Bad);
+  TEST_ASSERT_EQUAL_STRING("sim supply", faultName(protection::SIMULATION_SUPPLY));
+  TEST_ASSERT_NULL(faultName(1u << 7));
+}
+
+// The strip's names of fault bits 0 to 6.
+static const char *const FAULT_STRIP_NAMES[] = {"OVERCURRENT", "OVERLOAD", "LOW V",     "BROWN-OUT",
+                                                "HIGH V",      "E-STOP",   "SIM SUPPLY"};
+
+// SIM beside each named fault, and beside the source states, the reachable
+// combination in simulation (an e-stop and the supply fault with a source
+// conflict) included: every word whole and every line within its field.
+void test_sim_beside_each_fault_and_source_state_fits()
+{
+  const uint16_t bits[] = {protection::OVERCURRENT,       protection::SUSTAINED_CURRENT,
+                           protection::UNDERVOLTAGE,      protection::BROWNOUT,
+                           protection::OVERVOLTAGE,       protection::EMERGENCY_STOP,
+                           protection::SIMULATION_SUPPLY, protection::EMERGENCY_STOP | protection::SIMULATION_SUPPLY};
+  const uint8_t sources[] = {0, protocol::TELEMETRY_SOURCE_CONFLICT, protocol::TELEMETRY_USB_IN_CONTROL};
+  for (uint8_t source : sources)
+    for (uint16_t faults : bits)
+      for (Page p : {Page::Drive, Page::Power, Page::Link})
+      {
+        Inputs in = simulating();
+        in.telemetry.flags |= source;
+        in.telemetry.faults = faults;
+        composePage(in, p, view);
+        assertStripFits();
+        TEST_ASSERT_TRUE(stripHasWord("SIM"));
+        for (uint16_t bit = 1; bit < (1u << 7); bit <<= 1)
+          if (faults & bit)
+          {
+            TEST_ASSERT_NOT_NULL(faultName(bit));
+            const char *n = FAULT_STRIP_NAMES[__builtin_ctz(bit)];
+            TEST_ASSERT_TRUE_MESSAGE(stripHasWord(n), n);
+          }
+        if (source == protocol::TELEMETRY_SOURCE_CONFLICT)
+          TEST_ASSERT_TRUE(stripHasWord("SOURCE CONFLICT"));
+        if (source == protocol::TELEMETRY_USB_IN_CONTROL)
+          TEST_ASSERT_TRUE(stripHasWord("USB IN CONTROL"));
+        TEST_ASSERT_TRUE(view.strip.tone ==
+                         (faults || source == protocol::TELEMETRY_SOURCE_CONFLICT ? Tone::Bad : Tone::Warn));
+        if (p == Page::Drive)
+          TEST_ASSERT_TRUE(view.drive.output.text[0] != '\0' && strlen(view.drive.output.text) <= (size_t)TEXT_CHARS);
+      }
+}
+
+// Without the flag every page is as before: composing with the flag cleared
+// gives the same view as the other bits alone, and differs from simulation
+// only in the strip and the drive page's output.
+void test_pages_without_the_simulation_flag_are_unchanged()
+{
+  for (Page p : {Page::Drive, Page::Power, Page::Link})
+  {
+    Inputs in = healthy();
+    in.telemetry.flags = protocol::TELEMETRY_BRIDGE_IN_CONTROL | protocol::TELEMETRY_BRIDGE_LINK_UP;
+    composePage(in, p, view);
+    View plain = view;
+    TEST_ASSERT_EQUAL_STRING("NO FAULTS", plain.strip.lines[0]);
+    TEST_ASSERT_FALSE(stripHasWord("SIM"));
+    if (p == Page::Drive)
+      TEST_ASSERT_EQUAL_STRING("OUT ON", plain.drive.output.text);
+
+    in.telemetry.flags |= protocol::TELEMETRY_SIMULATED;
+    composePage(in, p, view);
+    TEST_ASSERT_EQUAL_MEMORY(&plain.header, &view.header, sizeof(Header));
+    TEST_ASSERT_EQUAL_MEMORY(&plain.power, &view.power, sizeof(PowerBody));
+    TEST_ASSERT_EQUAL_MEMORY(&plain.link, &view.link, sizeof(LinkBody));
+    // Field by field: Bar has padding.
+    for (const Text DriveBody::*t : {&DriveBody::voltage, &DriveBody::current, &DriveBody::height, &DriveBody::speed,
+                                     &DriveBody::modes, &DriveBody::sensors})
+    {
+      TEST_ASSERT_EQUAL_STRING((plain.drive.*t).text, (view.drive.*t).text);
+      TEST_ASSERT_TRUE((plain.drive.*t).tone == (view.drive.*t).tone);
+    }
+    for (const Bar DriveBody::*b :
+         {&DriveBody::voltageBar, &DriveBody::currentBar, &DriveBody::heightBar, &DriveBody::speedBar})
+    {
+      TEST_ASSERT_EQUAL((plain.drive.*b).present, (view.drive.*b).present);
+      TEST_ASSERT_EQUAL_FLOAT((plain.drive.*b).fraction, (view.drive.*b).fraction);
+      TEST_ASSERT_EQUAL((plain.drive.*b).held, (view.drive.*b).held);
+      TEST_ASSERT_EQUAL_FLOAT((plain.drive.*b).heldFraction, (view.drive.*b).heldFraction);
+    }
+  }
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -824,5 +976,10 @@ int main()
   RUN_TEST(test_switch_notice_alone_warns);
   RUN_TEST(test_switch_notice_beside_a_fault_in_the_faults_tone);
   RUN_TEST(test_switch_notice_never_cuts_a_fault);
+  RUN_TEST(test_simulation_is_named_on_every_page);
+  RUN_TEST(test_simulation_needs_fresh_telemetry);
+  RUN_TEST(test_simulation_supply_fault_is_named_beside_sim);
+  RUN_TEST(test_sim_beside_each_fault_and_source_state_fits);
+  RUN_TEST(test_pages_without_the_simulation_flag_are_unchanged);
   return UNITY_END();
 }
