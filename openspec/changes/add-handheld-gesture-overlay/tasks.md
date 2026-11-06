@@ -6,7 +6,7 @@
 
 ## 2. The handheld's gesture table
 
-- [ ] 2.1 Add `desktop/handheld/internal/gestures` (D2: `Parse`, `Format`, the generator `gen` behind `//go:generate`, the generated `table_gen.go`) and its golden test. Verify with `go test ./internal/gestures` in `desktop/handheld` that the table equals `Format(Parse(test/golden/gestures.txt))`, that say hi and wiggle are scripted with their frames and dance, attack and ball are not, that the test fails with `SPOODER_GESTURES_GOLDEN` naming a scratch copy with one angle changed and with one `none` turned `scripted`, and that a second `go generate ./internal/gestures` writes the same bytes (`cmp` against a scratch copy of the first run's `table_gen.go`).
+- [x] 2.1 Add `desktop/handheld/internal/gestures` (D2: `Parse`, `Format`, the generator `gen` behind `//go:generate`, the generated `table_gen.go`) and its golden test. Verify with `go test ./internal/gestures` in `desktop/handheld` that the table equals `Format(Parse(test/golden/gestures.txt))`, that say hi and wiggle are scripted with their frames and dance, attack and ball are not, that the test fails with `SPOODER_GESTURES_GOLDEN` naming a scratch copy with one angle changed and with one `none` turned `scripted`, and that a second `go generate ./internal/gestures` writes the same bytes (`cmp` against a scratch copy of the first run's `table_gen.go`).
 
 ## 3. The overlay
 
