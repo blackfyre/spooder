@@ -1076,6 +1076,22 @@ void test_fault_mid_gesture_stops_reporting_the_gesture()
   TEST_ASSERT_EQUAL(0, t->telemetry.gesture);
 }
 
+void test_emergency_stop_preempts_held_ball_in_the_arrival_tick()
+{
+  standOnUsb();
+  requestGesture(usb(), protocol::GESTURE_BALL);
+  ticks(400);
+  TEST_ASSERT_TRUE(state.body.mode == body::Mode::Perform);
+  TEST_ASSERT_TRUE(state.body.perform.stage == gesture::Stage::Holding);
+  bridge().active = true;
+  bridge().estop = true;
+  tick();
+  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  TEST_ASSERT_TRUE(board.inhibited);
+  TEST_ASSERT_FALSE(board.on);
+  TEST_ASSERT_TRUE(state.body.perform.stage == gesture::Stage::Holding);
+}
+
 void test_gesture_from_the_idle_bridge_is_ignored()
 {
   standOnUsb();
@@ -1357,6 +1373,7 @@ int main()
   RUN_TEST(test_gesture_plays_over_usb_and_telemetry_reports_it);
   RUN_TEST(test_explicit_stand_request_ends_a_gesture);
   RUN_TEST(test_fault_mid_gesture_stops_reporting_the_gesture);
+  RUN_TEST(test_emergency_stop_preempts_held_ball_in_the_arrival_tick);
   RUN_TEST(test_gesture_from_the_idle_bridge_is_ignored);
   RUN_TEST(test_usb_telemetry_reports_the_bridge_link);
   RUN_TEST(test_simulation_flag_clear_with_bench_zero_and_set_in_simulation);

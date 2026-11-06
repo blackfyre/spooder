@@ -28,8 +28,7 @@ void setUp() {}
 void tearDown() {}
 
 constexpr uint32_t STEP_MS = 50;
-// A scripted gesture must be done by then: one that holds its last pose
-// (ball, add-gestures part two) needs its preview end decided first.
+// A preview ends at completion or at the first held pose (ball).
 constexpr uint32_t MAX_PREVIEW_MS = 10000;
 
 // One token per gesture id, as the golden file names them (fields are
@@ -51,7 +50,7 @@ static const char *const HEADER = "# Spooder gestures: golden previews.\n"
                                   "# the commanded joint angles in degrees, leg 0 to 5, coxa femur tibia each,\n"
                                   "# as a pose frame carries them: the player started with every foot at the\n"
                                   "# standing point at body height 0, sampled at t = 0 and every 50 ms until\n"
-                                  "# done (the last sample included), each foot solved by\n"
+                                  "# done or holding (the last sample included), each foot solved by\n"
                                   "# kinematics::solveLegInRange with the default calibration's offsets for its\n"
                                   "# leg, as the body solves it, and the offsets then taken off again.\n"
                                   "# Lines starting with # are comments.\n";
@@ -124,7 +123,7 @@ static void buildGolden(Text &t)
     advance(p, 0, standing, targets);
     addPose(t, id, 0, targets, offsets);
     uint32_t tMs = 0;
-    while (!p.done)
+    while (!p.done && p.stage != Stage::Holding)
     {
       char msg[64];
       snprintf(msg, sizeof(msg), "gesture %d not done within %u ms", id, (unsigned)MAX_PREVIEW_MS);
@@ -150,7 +149,7 @@ static void goldenPath(char *out, int size)
   snprintf(out, size, "%.*stest/golden/gestures.txt", prefix, file);
 }
 
-// Say hi and wiggle have scripts; dance, attack and ball do not yet. A
+// Say hi, wiggle and provisional ball have scripts; dance and attack do not. A
 // script landing for one of them changes this test with the golden file.
 void test_scripted_ids()
 {
@@ -158,7 +157,7 @@ void test_scripted_ids()
   TEST_ASSERT_TRUE(available(2));
   TEST_ASSERT_FALSE(available(3));
   TEST_ASSERT_FALSE(available(4));
-  TEST_ASSERT_FALSE(available(5));
+  TEST_ASSERT_TRUE(available(5));
 }
 
 void test_golden_previews()

@@ -82,7 +82,7 @@ void test_only_scripted_gestures_are_available()
   // Part two: they need the measured body geometry.
   TEST_ASSERT_FALSE(available((uint8_t)Gesture::Dance));
   TEST_ASSERT_FALSE(available((uint8_t)Gesture::Attack));
-  TEST_ASSERT_FALSE(available((uint8_t)Gesture::Ball));
+  TEST_ASSERT_TRUE(available((uint8_t)Gesture::Ball));
   TEST_ASSERT_FALSE(available(GESTURE_ID_COUNT));
   TEST_ASSERT_FALSE(available(255));
 }
@@ -288,6 +288,55 @@ void test_stop_finishes_the_keyframe_puts_feet_down_then_straightens()
   playChecked(Gesture::SayHi, -60, 5, 1500);
 }
 
+void test_ball_holds_and_every_interrupted_unfold_is_safe()
+{
+  Script ball = script(Gesture::Ball);
+  for (float ground : GROUNDS)
+    for (int stopFrame = 0; stopFrame <= ball.count; stopFrame++)
+    {
+      Vector3 standing = standingAt(ground), feet[LEG_COUNT];
+      for (auto &foot : feet)
+        foot = standing;
+      Player p;
+      start(p, Gesture::Ball, feet, standing);
+      bool stopped = false, unfolded = false;
+      int holdSteps = 0;
+      for (int n = 0; n < 10000 && !p.done; n++)
+      {
+        if (stopFrame < ball.count && p.stage == Stage::Keyframes && p.index == stopFrame)
+          p.stopRequested = stopped = true;
+        if (p.stage == Stage::Holding)
+        {
+          TEST_ASSERT_FALSE(p.done);
+          for (int leg = 0; leg < LEG_COUNT; leg++)
+            TEST_ASSERT_FLOAT_WITHIN(0.001f, 0,
+                                     feet[leg].distanceTo(keyframeFoot(ball.frames[ball.count - 1], leg, standing)));
+          if (++holdSteps == 200)
+            p.stopRequested = stopped = true;
+        }
+        advance(p, 5, standing, feet);
+        if (stopped && p.stage == Stage::Keyframes)
+          TEST_ASSERT_EQUAL_INT(stopFrame, p.index);
+        if (!unfolded && p.stage == Stage::Unfold && stopFrame < ball.count)
+          for (int leg = 0; leg < LEG_COUNT; leg++)
+            TEST_ASSERT_FLOAT_WITHIN(0.001f, 0,
+                                     p.from[leg].distanceTo(keyframeFoot(ball.frames[stopFrame], leg, standing)));
+        unfolded |= p.stage == Stage::Unfold;
+        TEST_ASSERT_TRUE(p.stage != Stage::Plant && p.stage != Stage::Straighten);
+        for (int leg = 0; leg < LEG_COUNT; leg++)
+        {
+          TEST_ASSERT_TRUE(kinematics::isValidTarget(feet[leg]));
+          TEST_ASSERT_TRUE(withinServoRange(leg, feet[leg]));
+        }
+      }
+      TEST_ASSERT_TRUE(p.done);
+      TEST_ASSERT_TRUE(unfolded);
+      TEST_ASSERT_TRUE(stopped);
+      for (auto foot : feet)
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, 0, foot.distanceTo(standing));
+    }
+}
+
 void test_unavailable_gesture_is_done_at_once()
 {
   Vector3 feet[kinematics::LEG_COUNT];
@@ -308,6 +357,7 @@ int main()
   RUN_TEST(test_gesture_keeps_the_speed_limit_and_ends_standing);
   RUN_TEST(test_time_carries_over_keyframe_boundaries);
   RUN_TEST(test_stop_finishes_the_keyframe_puts_feet_down_then_straightens);
+  RUN_TEST(test_ball_holds_and_every_interrupted_unfold_is_safe);
   RUN_TEST(test_unavailable_gesture_is_done_at_once);
   return UNITY_END();
 }

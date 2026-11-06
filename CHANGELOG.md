@@ -6,6 +6,8 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 
 ### Added
 
+- **Ball hold and unfold.** A provisional ball script lowers and folds all six legs, holds in Perform, then unfolds before another mode or gesture request. Sleep and safety interruptions still pre-empt at once; final ground clearance remains part of the ball choreography.
+
 - **Bridge screen pages.** The bridge's status screen is graphical, in the Blackfyre dark palette with Archivo and JetBrains Mono, and has three pages switched by a short press of the left button: drive (mode chip, voltage and current with bars, height and speed, stride, stick and output), power (the last 60 s of voltage and current as 10 Hz traces, with the window's lowest voltage and highest current) and link (frames per second each side accepts and rejects, telemetry age, source, gamepad and its battery). The e-stop, every latched fault and a lost link show in a status strip on every page. Only the bridge needs flashing.
 - **Held extremes.** The bridge's drive page marks the recent peak current and lowest voltage on their bars, and the desktop calibrator's current and supply charts draw them as named lines: held 3 s after they were reached, then easing back to the reading at 2 A/s or 0.5 V/s. On the bridge, a current beating the held peak by more than 0.1 A, or a voltage sagging 0.05 V below the held low, turns its value amber for a second.
 - **Bridge screenshots.** `mise run bridge-screenshots` renders the bridge screen's pages and states to `docs/images/bridge-*.png` with the bridge's own drawing code on the host; the readme shows them.

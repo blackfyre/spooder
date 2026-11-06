@@ -554,7 +554,8 @@ static void resolveMode(BodyState &s, RequestedMode req, const MovementCommand &
   {
     // Any other mode, or a new explicit request (Stand again included), ends
     // the gesture after its current keyframe.
-    if (req != RequestedMode::Stand || cmd.modeRequestSeq != s.performRequestSeq)
+    if (req != RequestedMode::Stand || cmd.modeRequestSeq != s.performRequestSeq ||
+        (s.perform.stage == gesture::Stage::Holding && newGesture != 0))
       s.perform.stopRequested = true;
     return;
   }

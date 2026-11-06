@@ -37,6 +37,23 @@ static const Keyframe WIGGLE[] = {
     {400, {Vector3()}, {}},
 };
 
+// Provisional lowering only: task 2.5 replaces this with the underside-derived
+// ground clearance. All rotations stay zero while task 2.2 runs separately.
+constexpr float BALL_PROVISIONAL_LOWERING_MM = 10;
+static const Pose BALL_LOW = {Vector3(0, 0, -BALL_PROVISIONAL_LOWERING_MM)};
+static const Keyframe BALL[] = {
+    {600, BALL_LOW, {}},
+    {800,
+     BALL_LOW,
+     {{0, Vector3(160, 0, -80)},
+      {1, Vector3(160, 0, -80)},
+      {2, Vector3(160, 0, -80)},
+      {3, Vector3(160, 0, -80)},
+      {4, Vector3(160, 0, -80)},
+      {5, Vector3(160, 0, -80)}}},
+};
+static const Keyframe BALL_UNFOLD[] = {{800, BALL_LOW, {}}, {600, {Vector3()}, {}}};
+
 Script script(Gesture g)
 {
   switch (g)
@@ -45,8 +62,10 @@ Script script(Gesture g)
     return {SAY_HI, (int)(sizeof(SAY_HI) / sizeof(SAY_HI[0]))};
   case Gesture::Wiggle:
     return {WIGGLE, (int)(sizeof(WIGGLE) / sizeof(WIGGLE[0]))};
+  case Gesture::Ball:
+    return {BALL, 2, true, BALL_UNFOLD, 2};
   default:
-    // Dance, attack and ball need the measured body geometry
+    // Dance and attack need the measured body geometry
     // (add-gestures part two).
     return {nullptr, 0};
   }
@@ -105,6 +124,12 @@ static void beginSegment(Player &p, Vector3 standing)
   {
     switch (p.stage)
     {
+    case Stage::Holding:
+      p.to[i] = p.from[i];
+      break;
+    case Stage::Unfold:
+      p.to[i] = keyframeFoot(p.sequence.unfold[p.index], i, standing);
+      break;
     case Stage::Keyframes:
       p.to[i] = keyframeFoot(p.sequence.frames[p.index], i, standing);
       break;
@@ -121,6 +146,8 @@ static void beginSegment(Player &p, Vector3 standing)
     longest = fmaxf(longest, p.from[i].distanceTo(p.to[i]));
   if (p.stage == Stage::Keyframes)
     base = p.sequence.frames[p.index].durationMs;
+  else if (p.stage == Stage::Unfold)
+    base = p.sequence.unfold[p.index].durationMs;
   else if (longest < 0.5f)
     base = 0; // a return step with nothing to move: skip it
   uint32_t minimum = minimumDurationMs(longest);
@@ -139,13 +166,38 @@ static void nextSegment(Player &p, Vector3 standing)
   case Stage::Keyframes:
     p.pose = s.frames[p.index].pose;
     p.index++;
+    if (s.holds && p.stopRequested)
+    {
+      // Even before the hold, finish this keyframe then take the unfold.
+      // Its first target spreads the feet at the lowered height before rising.
+      p.stage = Stage::Unfold;
+      p.index = 0;
+      break;
+    }
     if (p.index >= s.count)
     {
+      if (s.holds)
+      {
+        p.stage = Stage::Holding;
+        return;
+      }
       p.done = true; // the last keyframe stands straight
       return;
     }
     if (p.stopRequested)
       p.stage = Stage::Plant;
+    break;
+  case Stage::Holding:
+    p.stage = Stage::Unfold;
+    p.index = 0;
+    break;
+  case Stage::Unfold:
+    p.pose = s.unfold[p.index].pose;
+    if (++p.index >= s.unfoldCount)
+    {
+      p.done = true;
+      return;
+    }
     break;
   case Stage::Plant:
     p.stage = Stage::Straighten;
@@ -179,6 +231,12 @@ void advance(Player &p, uint32_t dtMs, Vector3 standing, Vector3 *out)
   uint32_t remaining = dtMs;
   while (!p.done)
   {
+    if (p.stage == Stage::Holding)
+    {
+      if (!p.stopRequested)
+        break;
+      nextSegment(p, standing);
+    }
     uint32_t left = p.durationMs - p.elapsedMs;
     if (remaining < left)
     {
