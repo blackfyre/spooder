@@ -7,6 +7,14 @@ The robot SHALL play a requested gesture from Stand, in a dedicated Perform mode
 - **WHEN** the body stands and say hi is requested
 - **THEN** the body shifts its weight, lifts a front leg, waves it, puts it down and returns to Stand
 
+#### Scenario: Attack with the front pair
+- **WHEN** the body stands and attack is requested
+- **THEN** the body leans back over the middle and rear legs, which stay planted, the front pair rises and strikes forward and down, plants again, and the body returns to Stand
+
+#### Scenario: Dance on planted feet
+- **WHEN** the body stands and dance is requested
+- **THEN** the body rolls, nods, twists and bobs at a fixed tempo with every foot planted, taps one front foot at the end and returns to Stand
+
 #### Scenario: Request while walking
 - **WHEN** the body is walking and a gesture is requested
 - **THEN** the request is ignored and walking continues
@@ -17,6 +25,10 @@ The ball gesture SHALL lower the body onto the ground and fold the legs in, then
 #### Scenario: Leaving the ball
 - **WHEN** the body is curled in the ball pose and Walk is requested
 - **THEN** the body unfolds into Stand, then walks
+
+#### Scenario: Sleep from the ball
+- **WHEN** the body is curled in the ball pose and Sleep is requested
+- **THEN** the body goes to Sleep at once, without unfolding first
 
 ### Requirement: Interrupting a gesture
 Sleep, a stale command, the emergency stop and power faults SHALL interrupt a gesture at once, exactly as they interrupt walking. Another mode request SHALL end the gesture at its next keyframe and return through Stand.
