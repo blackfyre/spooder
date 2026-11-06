@@ -193,6 +193,7 @@ func drive(a *app.App, runErr <-chan error) {
 		}
 	}()
 
+	timing := newDrawTiming(os.Getenv, os.Stderr)
 	var lastDraw time.Time
 	for {
 		select {
@@ -209,9 +210,11 @@ func drive(a *app.App, runErr <-chan error) {
 			}
 		}
 		a.SetControls(pad.controls())
+		timing.controlsSet(time.Now())
 		if now := time.Now(); scr != nil && now.Sub(lastDraw) >= drawPeriod {
 			lastDraw = now
 			scr.draw(a.Screen(now))
+			timing.drew(time.Since(now))
 		}
 		sdl.Delay(uint32(pollPeriod / time.Millisecond))
 	}

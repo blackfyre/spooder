@@ -23,7 +23,8 @@ import (
 // robot's panel on the left, what the pak requests and the link's quality
 // on the right, and the controls as keycaps along the bottom (the leave
 // banner in their place while leaving). Select + X shows the driving view in
-// the panels' place (driveview.go).
+// the panels' place (driveview.go). Holding L2 opens the gesture overlay
+// over either page (gestures.go).
 const (
 	layoutWidth = 1280
 	margin      = 28
@@ -277,6 +278,19 @@ type screen struct {
 	f     *fontSet
 	l     layout
 	cache map[texKey]*texEntry
+	// now is the screen's clock (design D5 of add-handheld-gesture-overlay):
+	// the wall clock in main, a fixed or stepped one in tests; nil is the
+	// wall clock.
+	now func() time.Time
+	ov  overlayState // the gesture overlay (gestures.go)
+}
+
+// clock is the screen's time now.
+func (s *screen) clock() time.Time {
+	if s.now == nil {
+		return time.Now()
+	}
+	return s.now()
 }
 
 // window is what the screen needs of gabagool's window, whose type lives in
@@ -292,7 +306,7 @@ func newScreen(win window, r *sdl.Renderer) (*screen, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &screen{win: win, r: r, f: f, l: newLayout(win.GetWidth(), win.GetHeight(), f)}, nil
+	return &screen{win: win, r: r, f: f, l: newLayout(win.GetWidth(), win.GetHeight(), f), now: time.Now}, nil
 }
 
 func (s *screen) close() {
@@ -512,6 +526,8 @@ func (s *screen) hintKey(x, y int32, label string) int32 {
 
 func (s *screen) draw(sc app.Screen) {
 	l := s.l
+	now := s.clock()
+	s.ov.update(sc, now)
 	s.fill(0, 0, l.w, l.h, 0, colWindow)
 	s.header(sc)
 	if sc.DriveView {
@@ -525,6 +541,9 @@ func (s *screen) draw(sc app.Screen) {
 		s.leaveBanner(sc)
 	} else {
 		s.footer(sc.Held, sc.Clearing, sc.DriveView)
+	}
+	if s.ov.open {
+		s.overlay(sc, now)
 	}
 	s.endFrame()
 	s.win.Present()

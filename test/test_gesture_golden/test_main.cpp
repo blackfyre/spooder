@@ -2,7 +2,8 @@
 // gesture id, whether it has a script, and for a scripted one the joint
 // angles gesture::Player produces from the standing point at body height 0,
 // sampled every 50 ms and solved as the body solves them
-// (kinematics::solveLegInRange with the default calibration's offsets).
+// (kinematics::solveLegInRange with the default calibration's offsets), less
+// those offsets: the commanded angles a pose frame carries.
 // Compared with test/golden/gestures.txt, from which the handheld's Go table
 // is generated (desktop/handheld/internal/gestures). After a deliberate
 // change of a script, its timing, the IK or the default offsets, regenerate
@@ -10,6 +11,7 @@
 // regenerate the Go table. SPOODER_GESTURES_GOLDEN names another copy of the
 // file (to check that a changed value fails the test).
 #include <unity.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,11 +48,12 @@ static const char *const HEADER = "# Spooder gestures: golden previews.\n"
                                   "# scripted exactly when the robot has a script for it. A scripted gesture is\n"
                                   "# followed by its poses, one line each:\n"
                                   "#   pose <id> <t_ms> <18 joint angles>\n"
-                                  "# the angles in degrees, leg 0 to 5, coxa femur tibia each: the player\n"
-                                  "# started with every foot at the standing point at body height 0, sampled at\n"
-                                  "# t = 0 and every 50 ms until done (the last sample included), each foot\n"
-                                  "# solved by kinematics::solveLegInRange with the default calibration's\n"
-                                  "# offsets for its leg, as the body solves it.\n"
+                                  "# the commanded joint angles in degrees, leg 0 to 5, coxa femur tibia each,\n"
+                                  "# as a pose frame carries them: the player started with every foot at the\n"
+                                  "# standing point at body height 0, sampled at t = 0 and every 50 ms until\n"
+                                  "# done (the last sample included), each foot solved by\n"
+                                  "# kinematics::solveLegInRange with the default calibration's offsets for its\n"
+                                  "# leg, as the body solves it, and the offsets then taken off again.\n"
                                   "# Lines starting with # are comments.\n";
 
 struct Text
@@ -69,6 +72,13 @@ static void add(Text &t, const char *fmt, ...)
   TEST_ASSERT_TRUE_MESSAGE(t.len < (int)sizeof(t.buf), "golden text buffer too small");
 }
 
+// v rounded to two decimals, a rounded -0 written as 0.
+static double commanded(float v)
+{
+  double r = round(v * 100.0) / 100.0;
+  return r == 0 ? 0.0 : r;
+}
+
 static void addPose(Text &t, int id, uint32_t tMs, const Vector3 *targets, const Vector3 *offsets)
 {
   add(t, "pose %d %u", id, (unsigned)tMs);
@@ -79,7 +89,10 @@ static void addPose(Text &t, int id, uint32_t tMs, const Vector3 *targets, const
     char msg[64];
     snprintf(msg, sizeof(msg), "gesture %d leg %d at %u ms: target refused", id, leg, (unsigned)tMs);
     TEST_ASSERT_TRUE_MESSAGE(kinematics::solveLegInRange(target, offsets[leg], a), msg);
-    add(t, " %.2f %.2f %.2f", a.coxa, a.femur, a.tibia);
+    // The commanded angles: the solution less the offsets, as the pose
+    // frame's commanded field carries them (link_receiver).
+    add(t, " %.2f %.2f %.2f", commanded(a.coxa - offsets[leg].x), commanded(a.femur - offsets[leg].y),
+        commanded(a.tibia - offsets[leg].z));
   }
   add(t, "\n");
 }

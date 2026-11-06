@@ -18,6 +18,7 @@ type Robot struct {
 	OutputsOn bool
 	Faults    []string // by name; empty when none
 	Gesture   string
+	GestureID uint8 // the gesture being played (protocol.Gesture*), 0 when none
 	VoltageMv uint16
 	CurrentMa uint16
 	// Source is the robot's source in control (session.Source names): a
@@ -45,6 +46,10 @@ type Requested struct {
 	Stride    string
 	StickMode string
 	EStop     bool
+	// Gesture is the latest gesture request (protocol.Gesture*) and
+	// GestureSeq its counter, advanced on every request.
+	Gesture    uint8
+	GestureSeq uint8
 }
 
 // LinkView is the link's quality (design D3).
@@ -105,13 +110,15 @@ func (a *App) Screen(now time.Time) Screen {
 	a.mu.Unlock()
 
 	sc.Requested = Requested{
-		Mode:      session.RequestedMode(d.Mode).String(),
-		Height:    d.Height,
-		Speed:     d.Speed,
-		Gait:      session.GaitName(d.Gait),
-		Stride:    strideName(d.Stride),
-		StickMode: stickName(d.StickMode),
-		EStop:     estop,
+		Mode:       session.RequestedMode(d.Mode).String(),
+		Height:     d.Height,
+		Speed:      d.Speed,
+		Gait:       session.GaitName(d.Gait),
+		Stride:     strideName(d.Stride),
+		StickMode:  stickName(d.StickMode),
+		EStop:      estop,
+		Gesture:    d.Gesture,
+		GestureSeq: d.GestureRequestCounter,
 	}
 
 	tel := st.Shown[protocol.TypeTelemetry]
@@ -124,6 +131,7 @@ func (a *App) Screen(now time.Time) Screen {
 		sc.Robot.OutputsOn = t.OutputsOn
 		sc.Robot.Faults = session.FaultNames(t.Faults)
 		sc.Robot.Gesture = session.GestureName(t.Gesture)
+		sc.Robot.GestureID = t.Gesture
 		sc.Robot.VoltageMv, sc.Robot.CurrentMa = t.VoltageMv, t.CurrentMa
 		sc.Robot.Source = session.SourceFrom(t.Flags).String()
 		sc.Robot.Simulated = t.Flags&protocol.TelemetrySimulated != 0

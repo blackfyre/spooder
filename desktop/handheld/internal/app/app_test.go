@@ -623,3 +623,54 @@ func TestStartOnDeviceNotJoined(t *testing.T) {
 		t.Fatalf("ran\n%s\nbefore the address check passed", run.log())
 	}
 }
+
+// The gesture overlay's inputs (add-handheld-gesture-overlay, D4): L2
+// beyond half travel and A advance the request counter by one with say hi,
+// the frames sent are the same whether or not the screen is read, and the
+// telemetry's gesture reaches the screen by id.
+func TestScreenGesture(t *testing.T) {
+	plain, read := newRig(t), newRig(t)
+	seq0 := read.a.Screen(read.now).Requested.GestureSeq
+	var sent [2][]protocol.Command
+	tick := func(i int, r *rig) {
+		sent[i] = append(sent[i], r.step())
+		if i == 1 {
+			r.a.Screen(r.now)
+		}
+	}
+	both := func(c padmap.Controls, n int) {
+		for k := 0; k < n; k++ {
+			for i, r := range []*rig{plain, read} {
+				r.c = c
+				tick(i, r)
+			}
+		}
+	}
+	both(padmap.Controls{}, 2)
+	both(padmap.Controls{TriggerL: padmap.TriggerThreshold + 1}, 2)
+	both(padmap.Controls{TriggerL: padmap.TriggerThreshold + 1, Buttons: padmap.HandA}, 2)
+	sc := read.a.Screen(read.now)
+	if sc.Held&padmap.HandL2 == 0 {
+		t.Fatalf("held %b, want L2", sc.Held)
+	}
+	if sc.Requested.GestureSeq != seq0+1 || sc.Requested.Gesture != protocol.GestureSayHi {
+		t.Fatalf("request %d #%d, want say hi #%d", sc.Requested.Gesture, sc.Requested.GestureSeq, seq0+1)
+	}
+	both(padmap.Controls{}, 2)
+	for k := range sent[0] {
+		if sent[0][k] != sent[1][k] {
+			t.Fatalf("tick %d: sent %+v while reading the screen, %+v without", k, sent[1][k], sent[0][k])
+		}
+	}
+	if last := sent[1][len(sent[1])-1]; last.Gesture != protocol.GestureSayHi || last.GestureRequestCounter != sc.Requested.GestureSeq {
+		t.Fatalf("command %+v, want the say-hi request", last)
+	}
+
+	b := protocol.EncodeTelemetry(protocol.Telemetry{BodyMode: uint8(session.BodyPerform), OutputsOn: true, Gesture: protocol.GestureWiggle}, 3)
+	if _, ok := read.link.rx.Datagram(b, read.now); !ok {
+		t.Fatal("telemetry refused")
+	}
+	if sc := read.a.Screen(read.now); sc.Robot.GestureID != protocol.GestureWiggle || sc.Robot.Body != "Perform" {
+		t.Fatalf("robot %+v, want wiggle (2) in Perform", sc.Robot)
+	}
+}

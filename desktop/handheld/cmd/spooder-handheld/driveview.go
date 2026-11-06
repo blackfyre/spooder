@@ -36,8 +36,12 @@ const (
 // below the pivots, near a standing robot's middle.
 var chaseTarget = legview.Point3{Z: -80}
 
-// camera is a perspective camera: its position and its orthonormal axes.
-type camera struct{ pos, right, up, fwd legview.Point3 }
+// camera is a perspective camera: its position, its orthonormal axes and its
+// distance from its target, where the screen plane is.
+type camera struct {
+	pos, right, up, fwd legview.Point3
+	dist                float64
+}
 
 // chase is the driving view's camera: behind the robot, looking forward and
 // down at chasePitchDeg, chaseDistance from chaseTarget.
@@ -51,6 +55,7 @@ func newChase(pitchDeg, dist float64) camera {
 		right: legview.Point3{X: 1},
 		up:    legview.Point3{Y: math.Sin(a), Z: math.Cos(a)},
 		fwd:   fwd,
+		dist:  dist,
 	}
 }
 
@@ -62,7 +67,7 @@ func dot3(a, b legview.Point3) float64 { return a.X*b.X + a.Y*b.Y + a.Z*b.Z }
 func (c camera) project(p legview.Point3) (legview.Vec2, float64) {
 	v := legview.Point3{X: p.X - c.pos.X, Y: p.Y - c.pos.Y, Z: p.Z - c.pos.Z}
 	d := dot3(v, c.fwd)
-	k := chaseDistance / d
+	k := c.dist / d
 	return legview.Vec2{X: dot3(v, c.right) * k, Y: dot3(v, c.up) * k}, d
 }
 
@@ -96,16 +101,15 @@ func frameBox() (lo, hi legview.Point3) {
 		-(legview.TibiaLength + legview.FemurLength/2), legview.FemurLength)
 }
 
-// chaseBounds are the view's fixed screen-plane extents (minX, minY, maxX,
-// maxY): the frame box's corners projected, so the drawing does not jump as
-// the pose changes. A box's projection lies within its corners' hull.
-func chaseBounds() [4]float64 {
-	lo, hi := frameBox()
+// boxBounds are a box's screen-plane extents through c (minX, minY, maxX,
+// maxY): its corners projected. A box's projection lies within its corners'
+// hull.
+func boxBounds(c camera, lo, hi legview.Point3) [4]float64 {
 	b := [4]float64{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)}
 	for _, x := range []float64{lo.X, hi.X} {
 		for _, y := range []float64{lo.Y, hi.Y} {
 			for _, z := range []float64{lo.Z, hi.Z} {
-				q, _ := chase.project(legview.Point3{X: x, Y: y, Z: z})
+				q, _ := c.project(legview.Point3{X: x, Y: y, Z: z})
 				b[0], b[1] = math.Min(b[0], q.X), math.Min(b[1], q.Y)
 				b[2], b[3] = math.Max(b[2], q.X), math.Max(b[3], q.Y)
 			}
@@ -114,27 +118,74 @@ func chaseBounds() [4]float64 {
 	return b
 }
 
-// viewport maps the chase camera's screen plane to pixels.
+// chaseBounds are the driving view's fixed screen-plane extents: the frame
+// box through the chase camera, so the drawing does not jump as the pose
+// changes.
+func chaseBounds() [4]float64 {
+	lo, hi := frameBox()
+	return boxBounds(chase, lo, hi)
+}
+
+// viewport maps a camera's screen plane to pixels.
 type viewport struct {
+	cam        camera
 	scale      float64
 	minX, maxY float64
 	x, y       float64 // the drawing's top left
 }
 
-// chaseViewport fits the view's fixed bounds into w × h at x, y, centred.
-func chaseViewport(x, y, w, h int32) viewport {
-	b := chaseBounds()
+// fitViewport fits a camera's screen-plane bounds b into w × h at x, y,
+// centred.
+func fitViewport(cam camera, b [4]float64, x, y, w, h int32) viewport {
 	bw, bh := b[2]-b[0], b[3]-b[1]
 	s := math.Min(float64(w)/bw, float64(h)/bh)
-	return viewport{scale: s, minX: b[0], maxY: b[3],
+	return viewport{cam: cam, scale: s, minX: b[0], maxY: b[3],
 		x: float64(x) + (float64(w)-bw*s)/2, y: float64(y) + (float64(h)-bh*s)/2}
 }
 
 // pt is a body point's pixel, and its perspective factor: how much larger
 // than at the target's distance it draws.
 func (v viewport) pt(p legview.Point3) (int32, int32, float64) {
-	q, d := chase.project(p)
-	return int32(v.x + (q.X-v.minX)*v.scale + 0.5), int32(v.y + (v.maxY-q.Y)*v.scale + 0.5), chaseDistance / d
+	q, d := v.cam.project(p)
+	return int32(v.x + (q.X-v.minX)*v.scale + 0.5), int32(v.y + (v.maxY-q.Y)*v.scale + 0.5), v.cam.dist / d
+}
+
+// depth is the depth of the middle of points.
+func (v viewport) depth(pts ...legview.Point3) float64 {
+	var m legview.Point3
+	for _, p := range pts {
+		m.X, m.Y, m.Z = m.X+p.X, m.Y+p.Y, m.Z+p.Z
+	}
+	n := float64(len(pts))
+	_, d := v.cam.project(legview.Point3{X: m.X / n, Y: m.Y / n, Z: m.Z / n})
+	return d
+}
+
+// palette is the tone the legs draw in.
+type palette int
+
+const (
+	paletteNormal palette = iota // the text tone; muted while output is off or the pose stale
+	paletteLit                   // the orange
+	paletteMuted                 // muted
+)
+
+// chaseStyle is how drawChase draws: through which camera, framed on which
+// bounds, its line widths' scale, which details, and in which tone.
+type chaseStyle struct {
+	cam     camera
+	bounds  [4]float64 // the screen-plane extents fitted into the rectangle
+	lines   float64    // line widths' scale
+	grid    bool       // the ground grid
+	numbers bool       // the leg numbers
+	limits  bool       // the limit rings
+	palette palette
+}
+
+// pageStyle is the driving view's: the chase camera on the frame box, every
+// detail.
+func pageStyle() chaseStyle {
+	return chaseStyle{cam: chase, bounds: chaseBounds(), lines: 1, grid: true, numbers: true, limits: true}
 }
 
 // driveViewWellW is the well's width for a drawing height h: the view's
@@ -162,9 +213,8 @@ func (s *screen) driveView(sc app.Screen) {
 	wellW := l.driveViewWellW(wellH)
 	s.fill(ix, y, wellW, wellH, l.gap(wellRadius), colWell)
 	if sc.Pose.Have {
-		vp := chaseViewport(ix+l.gap(viewPad), y+l.gap(viewPad), wellW-2*l.gap(viewPad), wellH-2*l.gap(viewPad))
 		_ = s.r.SetClipRect(&sdl.Rect{X: ix, Y: y, W: wellW, H: wellH})
-		s.drawChase(vp, sc.Pose)
+		s.drawChase(ix+l.gap(viewPad), y+l.gap(viewPad), wellW-2*l.gap(viewPad), wellH-2*l.gap(viewPad), sc.Pose, pageStyle())
 		_ = s.r.SetClipRect(nil)
 	} else {
 		msg := "No pose"
@@ -217,29 +267,23 @@ type piece struct {
 	draw  func()
 }
 
-// depthOf is the depth of the middle of points.
-func depthOf(pts ...legview.Point3) float64 {
-	var m legview.Point3
-	for _, p := range pts {
-		m.X, m.Y, m.Z = m.X+p.X, m.Y+p.Y, m.Z+p.Z
-	}
-	n := float64(len(pts))
-	_, d := chase.project(legview.Point3{X: m.X / n, Y: m.Y / n, Z: m.Z / n})
-	return d
-}
-
-// drawChase draws the robot from the chase camera: the ground grid, then the
-// plate's faces and the legs' segments far to near, then the limit rings and
-// the leg numbers over them. Legs are in the text tone while output is on
-// and the pose fresh, muted otherwise.
-func (s *screen) drawChase(vp viewport, p app.Pose) {
+// drawChase draws the robot into w × h at x, y as st says: the ground grid,
+// then the plate's faces and the legs' segments far to near, then the limit
+// rings and the leg numbers over them. In the normal palette the legs are in
+// the text tone while output is on and the pose fresh, muted otherwise.
+func (s *screen) drawChase(x, y, w, h int32, p app.Pose, st chaseStyle) {
 	l := s.l
+	vp := fitViewport(st.cam, st.bounds, x, y, w, h)
 	c := colText
-	if !p.Pose.OutputsOn || p.Stale {
+	switch {
+	case st.palette == paletteLit:
+		c = colAccentTxt
+	case st.palette == paletteMuted, !p.Pose.OutputsOn || p.Stale:
 		c = colMuted
 	}
-	// A width in pixels at the target's distance, scaled by perspective.
-	width := func(w int, k float64) int32 { return max(1, int32(float64(l.gap(w))*k+0.5)) }
+	// A width in pixels at the target's distance, scaled by perspective and
+	// the style.
+	width := func(w int, k float64) int32 { return max(1, int32(float64(l.gap(w))*k*st.lines+0.5)) }
 	poly := func(pts []legview.Point3, fill, edge sdl.Color) {
 		vx, vy := make([]int16, len(pts)), make([]int16, len(pts))
 		for i, q := range pts {
@@ -250,7 +294,7 @@ func (s *screen) drawChase(vp viewport, p app.Pose) {
 		gfx.AAPolygonColor(s.r, vx, vy, edge)
 	}
 
-	if ground, ok := legview.Ground(p.Legs); ok {
+	if ground, ok := legview.Ground(p.Legs); ok && st.grid {
 		s.drawGrid(vp, ground)
 	}
 
@@ -259,9 +303,9 @@ func (s *screen) drawChase(vp viewport, p app.Pose) {
 	for i := range top {
 		j := (i + 1) % len(top)
 		side := []legview.Point3{top[i], top[j], bottom[j], bottom[i]}
-		pieces = append(pieces, piece{depthOf(side...), func() { poly(side, colChip, colKey) }})
+		pieces = append(pieces, piece{vp.depth(side...), func() { poly(side, colChip, colKey) }})
 	}
-	pieces = append(pieces, piece{depthOf(top...), func() {
+	pieces = append(pieces, piece{vp.depth(top...), func() {
 		poly(top, colKey, colMuted)
 		// The front marker, a chevron on the plate.
 		z := legview.PlateThickness / 2
@@ -274,7 +318,7 @@ func (s *screen) drawChase(vp viewport, p app.Pose) {
 	for _, leg := range p.Legs {
 		if !leg.Set {
 			q := leg.Points[0]
-			pieces = append(pieces, piece{depthOf(q), func() {
+			pieces = append(pieces, piece{vp.depth(q), func() {
 				x, y, k := vp.pt(q)
 				s.disc(x, y, width(4, k), colMuted)
 			}})
@@ -282,7 +326,7 @@ func (s *screen) drawChase(vp viewport, p app.Pose) {
 		}
 		for i, segW := range [3]int{7, 4, 4} {
 			a, b, foot := leg.Points[i], leg.Points[i+1], i == 2
-			pieces = append(pieces, piece{depthOf(a, b), func() {
+			pieces = append(pieces, piece{vp.depth(a, b), func() {
 				ax, ay, ka := vp.pt(a)
 				bx, by, kb := vp.pt(b)
 				gfx.ThickLineColor(s.r, ax, ay, bx, by, width(segW, (ka+kb)/2), c)
@@ -301,7 +345,7 @@ func (s *screen) drawChase(vp viewport, p app.Pose) {
 	}
 
 	for leg, lg := range p.Legs {
-		if !lg.Set {
+		if !lg.Set || !st.limits {
 			continue
 		}
 		for j := 0; j < 3; j++ {
@@ -313,6 +357,9 @@ func (s *screen) drawChase(vp viewport, p app.Pose) {
 	// Each leg's number beyond its foot, outward from its pivot on the
 	// screen (beside the pivot when never set, outward from the body's
 	// centre), on a backing so the drawing under it does not hide it.
+	if !st.numbers {
+		return
+	}
 	ox, oy, _ := vp.pt(legview.Point3{})
 	for leg, lg := range p.Legs {
 		px, py, _ := vp.pt(lg.Points[0])

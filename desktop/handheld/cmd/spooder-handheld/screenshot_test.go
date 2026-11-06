@@ -43,13 +43,16 @@ func (surfaceWindow) Present()           {}
 var screenshotCases = []struct {
 	name string
 	sc   app.Screen
+	// open draws the case twice, that far apart: a gesture overlay held
+	// open that long.
+	open time.Duration
 }{
 	{"driving", app.Screen{
 		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, Gesture: "", VoltageMv: 7840, CurrentMa: 3420, Source: "bridge"},
 		Requested: app.Requested{Mode: "Walk", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 40 * time.Millisecond, SignalKnown: true, SignalDBm: -33, Sent: 18250},
 		State:     app.Driving,
-	}},
+	}, 0},
 	{"fault", app.Screen{
 		Robot:     app.Robot{Have: true, Body: "Sleep", Gait: "Tripod", Faults: []string{"emergency stop", "undervoltage"}, VoltageMv: 50, Source: "none"},
 		Requested: app.Requested{Mode: "Sleep", Height: 0, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer", EStop: true},
@@ -57,21 +60,21 @@ var screenshotCases = []struct {
 		State:     app.Driving,
 		Held:      padmap.HandSelect | padmap.HandY,
 		Clearing:  0.6,
-	}},
+	}, 0},
 	{"stale", app.Screen{
 		Robot:     app.Robot{Have: true, Stale: true, Body: "Stand", Gait: "Ripple", OutputsOn: true, VoltageMv: 7600, CurrentMa: 1200, Source: "bridge"},
 		Requested: app.Requested{Mode: "Stand", Height: 80, Speed: 44, Gait: "Ripple", Stride: "Fixed", StickMode: "Crab"},
 		Link:      app.LinkView{HaveFrame: true, SinceLast: 2300 * time.Millisecond, Sent: 9120, SendErrors: 4},
 		State:     app.Driving,
 		Notice:    "send: network is unreachable",
-	}},
+	}, 0},
 	{"leaving", app.Screen{
 		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, VoltageMv: 7810, CurrentMa: 2900, Source: "bridge"},
 		Requested: app.Requested{Mode: "Sleep", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 20 * time.Millisecond, SignalKnown: true, SignalDBm: -40, Sent: 30111},
 		State:     app.Leaving,
 		Leave:     app.ActionExit,
-	}},
+	}, 0},
 	{"driveview", app.Screen{
 		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, Faults: []string{"undervoltage"}, VoltageMv: 7840, CurrentMa: 3420, Source: "bridge"},
 		Pose:      walkingPose(),
@@ -80,23 +83,39 @@ var screenshotCases = []struct {
 		State:     app.Driving,
 		Held:      padmap.HandSelect | padmap.HandX,
 		DriveView: true,
-	}},
+	}, 0},
 	{"driveview-nopose", app.Screen{
 		Requested: app.Requested{Mode: "Sleep", Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		State:     app.Driving,
 		DriveView: true,
-	}},
+	}, 0},
 	{"simulation", app.Screen{
 		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, VoltageMv: 6000, CurrentMa: 2160, Source: "bridge", Simulated: true},
 		Pose:      walkingPose(),
 		Requested: app.Requested{Mode: "Walk", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 40 * time.Millisecond, SignalKnown: true, SignalDBm: -33, Sent: 18250},
 		State:     app.Driving,
-	}},
+	}, 0},
 	{"waiting", app.Screen{
 		Requested: app.Requested{Mode: "Sleep", Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		State:     app.Driving,
-	}},
+	}, 0},
+	{"gestures", app.Screen{
+		Robot:     app.Robot{Have: true, Body: "Perform", Gait: "Tripod", OutputsOn: true, Gesture: "wiggle", GestureID: 2, VoltageMv: 7810, CurrentMa: 2300, Source: "bridge"},
+		Requested: app.Requested{Mode: "Stand", Height: 0, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer", Gesture: 2, GestureSeq: 3},
+		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 30 * time.Millisecond, SignalKnown: true, SignalDBm: -48, Sent: 12040},
+		State:     app.Driving,
+		Held:      padmap.HandL2,
+	}, 650 * time.Millisecond},
+	{"gestures-stand-first", app.Screen{
+		Robot:     app.Robot{Have: true, Body: "Sleep", Gait: "Tripod", OutputsOn: true, VoltageMv: 7900, CurrentMa: 400, Source: "bridge"},
+		Pose:      walkingPose(),
+		Requested: app.Requested{Mode: "Sleep", Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
+		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 30 * time.Millisecond, SignalKnown: true, SignalDBm: -48, Sent: 2040},
+		State:     app.Driving,
+		Held:      padmap.HandL2 | padmap.HandA,
+		DriveView: true,
+	}, 1200 * time.Millisecond},
 }
 
 // TestDrawsEveryState draws each state on a software renderer at the
@@ -120,7 +139,12 @@ func TestDrawsEveryState(t *testing.T) {
 			t.Fatal(err)
 		}
 		win := surfaceWindow{1280, 720}
-		s := &screen{win: win, r: r, f: f, l: newLayout(win.w, win.h, f)}
+		now := time.Unix(1000, 0)
+		s := &screen{win: win, r: r, f: f, l: newLayout(win.w, win.h, f), now: func() time.Time { return now }}
+		if c.open > 0 {
+			s.draw(c.sc)
+			now = now.Add(c.open)
+		}
 		s.draw(c.sc)
 		if dir != "" {
 			if err := img.SavePNG(surf, filepath.Join(dir, c.name+".png")); err != nil {

@@ -28,7 +28,8 @@ const StepMs = 50
 // each.
 const Joints = 18
 
-// maxAngle bounds a joint angle in degrees, the servos' range.
+// maxAngle bounds a commanded joint angle's magnitude in degrees: a joint
+// turns at most half a turn either way.
 const maxAngle = 180
 
 // Gesture is one gesture id's preview.
@@ -37,8 +38,10 @@ type Gesture struct {
 	Name     string // the golden file's token, such as "say_hi"
 	Scripted bool   // the robot has a script for it
 	StepMs   int    // time between frames
-	// Frames are the commanded joint angles in degrees from t = 0, one every
-	// StepMs, the last one the script's end; none when not scripted.
+	// Frames are the commanded joint angles in degrees (the IK's solution
+	// before calibration offsets, as a pose frame's commanded field and
+	// legview.Angles take them) from t = 0, one every StepMs, the last one
+	// the script's end; none when not scripted.
 	Frames [][Joints]float32
 }
 
@@ -148,7 +151,7 @@ func parsePose(gs []Gesture, f []string) error {
 	var fr [Joints]float32
 	for i := range fr {
 		v, err := strconv.ParseFloat(f[3+i], 32)
-		if err != nil || math.IsNaN(v) || v < 0 || v > maxAngle {
+		if err != nil || math.IsNaN(v) || v < -maxAngle || v > maxAngle {
 			return fmt.Errorf("angle %q", f[3+i])
 		}
 		fr[i] = float32(v)

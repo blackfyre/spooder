@@ -90,7 +90,7 @@ func TestParseRefuses(t *testing.T) {
 		"angle not a number":          strings.Replace(v, "pose 1 50 90", "pose 1 50 x", 1),
 		"angle NaN":                   strings.Replace(v, "pose 1 50 90", "pose 1 50 NaN", 1),
 		"angle out of range":          strings.Replace(v, "pose 1 50 90", "pose 1 50 180.5", 1),
-		"negative angle":              strings.Replace(v, "pose 1 50 90", "pose 1 50 -1", 1),
+		"angle below range":           strings.Replace(v, "pose 1 50 90", "pose 1 50 -180.5", 1),
 		"bad availability":            strings.Replace(v, "dance none", "dance maybe", 1),
 		"bad name":                    strings.Replace(v, "dance", "Dance", 1),
 		"unknown record":              v + "frame 1\n",
