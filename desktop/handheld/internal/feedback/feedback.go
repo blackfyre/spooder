@@ -78,6 +78,7 @@ func FromScreen(sc app.Screen, now time.Time) Inputs {
 // RepeatAfter.
 type Detector struct {
 	started        bool
+	seen           bool // fresh telemetry taken since the run started or the last leave ended
 	wasFresh       bool
 	faults         uint16
 	estop          bool
@@ -102,13 +103,18 @@ func (d *Detector) detected(e Event, now time.Time) {
 }
 
 // Update takes in and returns the event to play now, or None. The first
-// call only takes what is already so (latched faults, the e-stop) as known.
+// call only takes what is already so (the e-stop, the gesture counter) as
+// known; the first fresh telemetry since the run started, or since a leave
+// ended (a resume), is the baseline (its latched faults), not the link
+// regained: the link is lost only after telemetry was fresh, and regained
+// only after it was lost.
 func (d *Detector) Update(in Inputs) Event {
 	now := in.Now
 	if !d.started {
 		d.started = true
-		d.wasFresh = in.TelemetryFresh
-		if in.TelemetryFresh {
+		d.seen = in.TelemetryFresh && !in.Leaving
+		d.wasFresh = d.seen
+		if d.seen {
 			d.faults = in.Faults
 		}
 		d.estop, d.leaving, d.gestureSeq = in.EStop, in.Leaving, in.GestureSeq
@@ -130,6 +136,13 @@ func (d *Detector) Update(in Inputs) Event {
 	d.leaving = in.Leaving
 
 	switch {
+	case in.Leaving:
+		// A leave pauses the link's judging, and what follows it (a resume
+		// after a suspend) starts anew, as a run does.
+		d.seen = false
+	case in.TelemetryFresh && !d.seen:
+		d.seen = true
+		d.faults = in.Faults // the baseline at the start
 	case in.TelemetryFresh && !d.wasFresh:
 		d.detected(LinkRegained, now)
 		d.faults = in.Faults // the baseline after a gap
@@ -141,7 +154,7 @@ func (d *Detector) Update(in Inputs) Event {
 		}
 		d.faults = in.Faults
 	}
-	d.wasFresh = in.TelemetryFresh
+	d.wasFresh = in.TelemetryFresh && d.seen
 
 	if in.GestureSeq != d.gestureSeq {
 		d.gestureSeq = in.GestureSeq

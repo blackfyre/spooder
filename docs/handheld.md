@@ -43,7 +43,7 @@ The pak plays short generated tones, at about -12 dBFS, so the driver hears what
 |---|---|
 | A protection fault latched (the e-stop's excepted) | three short low beeps |
 | E-stop set / released | a falling / a rising two-tone |
-| Link lost (no telemetry for 500 ms) / regained | one low / one high tone |
+| Link lost (no telemetry for 500 ms, after it arrived) / regained (not at the start or a resume) | one low / one high tone |
 | Gesture refused (not playing 600 ms after the request) | a short low buzz |
 | Gesture accepted (telemetry reports it playing) | a short high blip |
 | Leaving (Menu or Power) | a falling three-tone |

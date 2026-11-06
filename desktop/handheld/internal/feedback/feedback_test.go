@@ -50,6 +50,48 @@ func TestBaselineIsSilent(t *testing.T) {
 	}
 }
 
+// The pak's real start: no telemetry at the first redraw (the link sends
+// nothing for its first 150 ms, telemetry comes every 100 ms), then fresh
+// telemetry. Its arrival is the baseline, not the link regained; a later
+// lapse and its return sound once each.
+func TestFirstTelemetryIsSilent(t *testing.T) {
+	r := &rig{t: t, in: Inputs{Now: t0}}
+	r.want(0, None)
+	r.want(100, None)
+	r.in.TelemetryFresh, r.in.Faults = true, 0x04 // a fault latched before the run
+	for ms := 200; ms < 3000; ms += 50 {
+		r.want(ms, None)
+	}
+	r.in.TelemetryFresh = false
+	r.want(3000, LinkLost)
+	r.want(3500, None)
+	r.in.TelemetryFresh = true
+	r.want(4500, LinkRegained)
+	r.want(5000, None)
+}
+
+// A resume after a suspend starts anew as a run does: the stale telemetry
+// at the wake and its first fresh frame sound nothing; a lapse after it does.
+func TestResumeIsSilent(t *testing.T) {
+	r := newRig(t)
+	r.in.Leaving = true
+	r.want(100, Leaving)
+	r.want(400, None)
+	r.in.TelemetryFresh = false // the suspend, and the wake while it ends
+	r.want(30000, None)
+	r.in.Leaving = false // resumed
+	r.want(30050, None)
+	r.want(30150, None)
+	r.in.TelemetryFresh = true
+	for ms := 30250; ms < 32000; ms += 50 {
+		r.want(ms, None)
+	}
+	r.in.TelemetryFresh = false
+	r.want(32000, LinkLost)
+	r.in.TelemetryFresh = true
+	r.want(33100, LinkRegained)
+}
+
 // Each event, from the change that makes it.
 func TestEvents(t *testing.T) {
 	r := newRig(t)
