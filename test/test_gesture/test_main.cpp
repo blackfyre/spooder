@@ -490,6 +490,32 @@ void test_pose_keeps_planted_feet_fixed_through_rotation_and_stop()
   }
 }
 
+// The scenario's moves, played: within the first seven beats the body rolls
+// both ways, nods, twists and bounces below its resting height.
+void test_dance_rolls_nods_twists_and_bounces()
+{
+  Vector3 standing = standingAt(-100), feet[LEG_COUNT];
+  for (Vector3 &foot : feet)
+    foot = standing;
+  Player p;
+  start(p, Gesture::Dance, feet, standing);
+  float rollMin = 0, rollMax = 0, pitch = 0, yaw = 0, zMin = 0;
+  float rest = script(Gesture::Dance).frames[0].pose.translation.z;
+  for (uint32_t t = 0; t < 3500 && !p.done; t += 5)
+  {
+    advance(p, 5, standing, feet);
+    rollMin = fminf(rollMin, p.pose.rollDeg);
+    rollMax = fmaxf(rollMax, p.pose.rollDeg);
+    pitch = fmaxf(pitch, fabsf(p.pose.pitchDeg));
+    yaw = fmaxf(yaw, fabsf(p.pose.yawDeg));
+    zMin = fminf(zMin, p.pose.translation.z);
+  }
+  TEST_ASSERT_TRUE_MESSAGE(rollMin <= -1 && rollMax >= 1, "rolls left and right");
+  TEST_ASSERT_TRUE_MESSAGE(pitch >= 1, "nods");
+  TEST_ASSERT_TRUE_MESSAGE(yaw >= 1, "twists");
+  TEST_ASSERT_TRUE_MESSAGE(zMin <= rest - 4, "bounces below its resting height");
+}
+
 void test_dance_keeps_the_beat_and_only_taps_on_the_last_beat()
 {
   Script dance = script(Gesture::Dance);
@@ -655,6 +681,7 @@ int main()
   UNITY_BEGIN();
   RUN_TEST(test_attack_keeps_four_feet_planted_and_supports_body_and_gravity);
   RUN_TEST(test_dance_keeps_the_beat_and_only_taps_on_the_last_beat);
+  RUN_TEST(test_dance_rolls_nods_twists_and_bounces);
   RUN_TEST(test_pose_keeps_planted_feet_fixed_through_rotation_and_stop);
   RUN_TEST(test_explicit_foot_targets_follow_straight_segments);
   RUN_TEST(test_zero_rotation_matches_translation_for_every_leg);
