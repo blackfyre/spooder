@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
+
+	"github.com/veandco/go-sdl2/sdl"
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/app"
 	"github.com/blackfyre/spooder/desktop/handheld/internal/gestures"
@@ -328,5 +331,67 @@ func TestDrawTiming(t *testing.T) {
 	want := "spooder-handheld: draw timing: 2 draws, longest 12ms; 4 samplings, longest gap 973ms\n"
 	if out.String() != want {
 		t.Fatalf("report %q, want %q", out.String(), want)
+	}
+}
+
+// The overlay is drawn over either page while L2 is held and not once it is
+// released; the tiles of the gestures without a script, and only those, show
+// NOT YET (read from the rendered pixels: the chip's face at the start of the
+// status row, where a scripted tile shows its bare well).
+func TestOverlayDrawn(t *testing.T) {
+	f := testFonts(t)
+	surf, err := sdl.CreateRGBSurfaceWithFormat(0, 1280, 720, 32, sdl.PIXELFORMAT_ARGB8888)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer surf.Free()
+	r, err := sdl.CreateSoftwareRenderer(surf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Destroy() }()
+	now := time.Unix(1000, 0)
+	s := &screen{win: surfaceWindow{1280, 720}, r: r, f: f, l: newLayout(1280, 720, f), now: func() time.Time { return now }}
+	pixel := func(x, y int32) uint32 {
+		_ = r.Flush()
+		return *(*uint32)(unsafe.Pointer(&surf.Pixels()[y*surf.Pitch+x*4]))
+	}
+	rgb := func(c sdl.Color) uint32 { return 0xff000000 | uint32(c.R)<<16 | uint32(c.G)<<8 | uint32(c.B) }
+	g := s.overlayGeom()
+	at := func(tg tileGeom) (int32, int32) { return tg.status.x + 3, tg.status.y + tg.status.h/2 }
+	for _, driveView := range []bool{false, true} {
+		sc := app.Screen{
+			Robot:     app.Robot{Have: true, Body: "Stand", OutputsOn: true},
+			Requested: app.Requested{Mode: "Stand"},
+			State:     app.Driving,
+			DriveView: driveView,
+		}
+		// The page alone, then with L2 held, then released again.
+		s.draw(sc)
+		page := make([]uint32, len(g.tiles))
+		for i, tg := range g.tiles {
+			page[i] = pixel(at(tg))
+		}
+		sc.Held = padmap.HandL2
+		s.draw(sc)
+		for i, tg := range g.tiles {
+			tile := gestureTiles[i]
+			g, _ := preview(tile.gesture)
+			want := rgb(colWell)
+			if !g.Scripted {
+				want = rgb(colChip)
+			}
+			if got := pixel(at(tg)); got != want {
+				t.Errorf("drive view %v, L2 held: tile %s status row %08x, want %08x (scripted %v)", driveView, tile.key, got, want, g.Scripted)
+			}
+		}
+		sc.Held = 0
+		now = now.Add(time.Second)
+		s.draw(sc)
+		for i, tg := range g.tiles {
+			if got := pixel(at(tg)); got != page[i] {
+				t.Errorf("drive view %v, L2 released: tile %s's place %08x, the page alone %08x", driveView, gestureTiles[i].key, got, page[i])
+			}
+		}
 	}
 }
