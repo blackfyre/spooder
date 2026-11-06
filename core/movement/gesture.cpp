@@ -67,13 +67,14 @@ static const Keyframe DANCE[] = {
 // the ground, let it rest on its frame as the feet lift off, fold the feet in
 // towards the body and hold. Its heights are the underside's above the ground
 // (zAboveGround) and the feet's offsets from where that pose plants them, so
-// they hold at every body height. The fold is as deep as the femur's travel
-// allows with the default calibration: near the ground, a foot drawn further
-// in needs the femur raised past it (test_gesture checks every target). The
+// they hold at every body height. Near the ground, a foot drawn further in
+// needs the femur raised further: with the default calibration the first
+// fold to leave a servo's travel is 24 mm (test_gesture pins the 6 mm margin
+// and checks every target). The
 // unfold reverses it: spread the feet, put them down, then stand up.
 constexpr float BALL_CLEARANCE_MM = 3;      // the underside above the ground before it rests
 constexpr float BALL_FOOT_CLEARANCE_MM = 8; // the feet above the ground while the frame carries the body
-constexpr float BALL_FOLD_MM = 18;          // the feet drawn in towards the body
+constexpr float BALL_FOLD_MM = 18;          // the feet drawn in towards the body, 6 mm short of the travel
 static const Pose BALL_LOWERED = {Vector3(0, 0, BALL_CLEARANCE_MM)};
 static const Pose BALL_RESTING = {Vector3(0, 0, 0)};
 static const Vector3 BALL_LIFT(0, 0, BALL_FOOT_CLEARANCE_MM);

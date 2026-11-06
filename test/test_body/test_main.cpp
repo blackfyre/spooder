@@ -1,5 +1,6 @@
 #include <unity.h>
 #include "movement/body.h"
+#include "movement/body_geometry.h"
 #include "movement/servo_profile.h"
 #include <math.h>
 #include <stdio.h>
@@ -1414,10 +1415,79 @@ void test_sleep_and_stale_preempt_ball_without_unfolding()
     }
 }
 
+struct SleepRun
+{
+  float fastestFootMmS = 0; // largest foot move per 20 ms tick, as a speed
+  float fastestJointDegS = 0;
+  float lowestZ = 1e9f;   // lowest foot target (leg frame)
+  Vector3 end[LEG_COUNT]; // feet when output stops
+};
+
+// Requests Sleep from the current state and runs it until output stops.
+static SleepRun sleepFromHere(MovementCommand c)
+{
+  SleepRun r;
+  c.mode = RequestedMode::Sleep;
+  for (int n = 0; n < 500 && s.outputsEnabled; n++)
+  {
+    Vector3 before[LEG_COUNT];
+    JointAngles angles[LEG_COUNT];
+    for (int i = 0; i < LEG_COUNT; i++)
+    {
+      before[i] = s.feet[i];
+      angles[i] = s.angles[i];
+    }
+    run(c, 20);
+    r.fastestJointDegS = fmaxf(r.fastestJointDegS, largestChange(angles, s.angles) / 0.02f);
+    for (int i = 0; i < LEG_COUNT; i++)
+    {
+      r.fastestFootMmS = fmaxf(r.fastestFootMmS, s.feet[i].distanceTo(before[i]) / 0.02f);
+      r.lowestZ = fminf(r.lowestZ, s.feet[i].z);
+    }
+  }
+  TEST_ASSERT_FALSE(s.outputsEnabled);
+  for (int i = 0; i < LEG_COUNT; i++)
+    r.end[i] = s.feet[i];
+  return r;
+}
+
+// Every Sleep ends with the body on its feet at REST_POSE, its underside
+// UNDERSIDE_Z - REST_POSE.z (21.8 mm) above the floor, until output stops and
+// it settles onto its frame. From the ball, the floor is at the underside, so
+// Sleep's move to REST_POSE lifts the body by that much: to where every Sleep
+// ends, no further, and no faster than a Sleep from Stand at the same height.
+void test_sleep_from_ball_lifts_the_body_only_to_where_every_sleep_ends()
+{
+  const float LIFT = body_geometry::UNDERSIDE_Z - REST_POSE.z;
+  for (float height : {0.0f, 100.0f})
+  {
+    bootToStand();
+    MovementCommand c = command(RequestedMode::Stand);
+    c.height = height;
+    run(c, 6000);
+    SleepRun fromStand = sleepFromHere(c);
+    MovementCommand held = holdBall(height);
+    SleepRun fromBall = sleepFromHere(held);
+    char msg[160];
+    snprintf(msg, sizeof msg,
+             "height %.0f: lift %.2f mm, foot %.0f / %.0f mm/s, joint %.0f / %.0f deg/s (ball / stand)", (double)height,
+             (double)(body_geometry::UNDERSIDE_Z - fromBall.lowestZ), (double)fromBall.fastestFootMmS,
+             (double)fromStand.fastestFootMmS, (double)fromBall.fastestJointDegS, (double)fromStand.fastestJointDegS);
+    // The lift: the feet go below the floor (the underside) by LIFT, no more.
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, LIFT, body_geometry::UNDERSIDE_Z - fromBall.lowestZ, msg);
+    for (int i = 0; i < LEG_COUNT; i++)
+      TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0, fromBall.end[i].distanceTo(fromStand.end[i]), msg);
+    // Its bound: no faster than a normal Sleep, and within the joint budget.
+    TEST_ASSERT_TRUE_MESSAGE(fromBall.fastestFootMmS <= fromStand.fastestFootMmS, msg);
+    TEST_ASSERT_TRUE_MESSAGE(fromBall.fastestJointDegS <= s.jointBudgetDegPerS * BUDGET_TOLERANCE, msg);
+  }
+}
+
 int main()
 {
   UNITY_BEGIN();
   RUN_TEST(test_leaving_ball_unfolds_before_walk_stand_or_gesture);
+  RUN_TEST(test_sleep_from_ball_lifts_the_body_only_to_where_every_sleep_ends);
   RUN_TEST(test_sleep_and_stale_preempt_ball_without_unfolding);
   RUN_TEST(test_clamp_command_ranges);
   RUN_TEST(test_clamp_command_non_finite_values);
