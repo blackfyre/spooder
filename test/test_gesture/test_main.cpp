@@ -94,7 +94,7 @@ void test_shifting_the_body_moves_planted_feet_the_other_way()
   for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
   {
     Vector2 before = toBody(leg, standing);
-    Vector3 foot = plantedFoot(leg, standing, shift, 0);
+    Vector3 foot = plantedFoot(leg, standing, Pose{shift});
     Vector2 after = toBody(leg, foot);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, -shift.x, after.x - before.x);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, -shift.y, after.y - before.y);

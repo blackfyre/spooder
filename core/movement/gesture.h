@@ -5,11 +5,11 @@
 // the player that turns them into foot targets in each leg's frame.
 // Hardware-free: compiled for the board and for host tests.
 //
-// A keyframe is a body pose (a shift of the body over its planted feet, a
-// body height change and a twist) plus up to two lifted legs with their own
-// foot targets, reached with an eased move over the keyframe's duration from
-// where the previous keyframe ended. A planted foot stays where it is on the
-// ground: shifting the body moves it the other way in its leg frame.
+// A keyframe is a body pose (a translation of the body over its planted
+// feet and a rotation, add-gestures design D1) plus foot targets of their own
+// for any of the legs, reached with an eased move over the keyframe's duration
+// from where the previous keyframe ended. A planted foot stays where it is on
+// the ground: moving the body moves it the other way in its leg frame.
 #include <stdint.h>
 #include "kinematics.h"
 #include "vectors.h"
@@ -31,26 +31,47 @@ enum class Gesture : uint8_t
 };
 constexpr int GESTURE_ID_COUNT = 6; // ids 0..5
 
-constexpr int MAX_LIFTED_LEGS = 2;
+// Every leg may take a foot target of its own (ball folds all six).
+constexpr int MAX_LIFTED_LEGS = LEG_COUNT;
 
 struct Lift
 {
-  int8_t leg;   // -1 when unused
-  Vector3 foot; // target in the leg frame
+  int8_t leg = -1; // -1 when unused
+  Vector3 foot;    // target in the leg frame
+};
+
+// The body over its planted feet, in the body frame (x right, y forward,
+// z up, millimetres): a translation, then a rotation about the body's centre
+// by yaw (about z, + anticlockwise seen from above), pitch (about x, + nose
+// up) and roll (about y, + right side down). Rotation is task 2.2: until then
+// the player applies the translation only, and no script rotates.
+struct Pose
+{
+  Vector3 translation;
+  float yawDeg = 0;
+  float pitchDeg = 0;
+  float rollDeg = 0;
 };
 
 struct Keyframe
 {
   uint16_t durationMs;
-  Vector3 shift; // body over its planted feet, body frame: x right, y forward, z up (mm)
-  float twistMm; // planted feet moved along each leg frame's y: + turns the body anticlockwise
-  Lift lifts[MAX_LIFTED_LEGS];
+  Pose pose;
+  Lift lifts[MAX_LIFTED_LEGS]; // legs with a target of their own; the rest stay planted
+  float maxFootSpeedMmS =
+      0; // 0: MAX_FOOT_SPEED_MM_S; a higher value for this keyframe only, still under the joint budget (D2)
 };
 
 struct Script
 {
   const Keyframe *frames;
   int count;
+  // A holding script stays at its last keyframe, in Perform, until another
+  // request; that request first plays the unfold script, which ends at the
+  // stand pose (task 2.4, D1). Not used until then.
+  bool holds = false;
+  const Keyframe *unfold = nullptr;
+  int unfoldCount = 0;
 };
 
 /**
@@ -66,9 +87,9 @@ bool available(uint8_t id);
 
 /**
  * @brief Where a planted foot of @p leg is, in its leg frame, with the body
- * at @p shift and @p twistMm over a foot standing at @p standing.
+ * at @p pose over a foot standing at @p standing.
  */
-Vector3 plantedFoot(int leg, Vector3 standing, Vector3 shift, float twistMm);
+Vector3 plantedFoot(int leg, Vector3 standing, const Pose &pose);
 
 /**
  * @brief Foot target of @p leg at keyframe @p k's end, standing at @p standing.
@@ -99,8 +120,7 @@ struct Player
   uint32_t durationMs = 0; // of the segment, rate limit included
   Vector3 from[LEG_COUNT]; // feet at the segment's start
   Vector3 to[LEG_COUNT];   // and end
-  Vector3 shift;           // the body shift reached by the last keyframe
-  float twistMm = 0;
+  Pose pose;               // the body pose reached by the last keyframe
   bool stopRequested = false;
   bool done = true;
 };

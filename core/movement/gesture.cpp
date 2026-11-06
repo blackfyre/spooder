@@ -6,7 +6,6 @@
 namespace gesture
 {
 
-static const Lift NO_LIFT = {-1, Vector3()};
 
 // --- Scripts ---------------------------------------------------------------
 
@@ -18,25 +17,24 @@ static const Lift NO_LIFT = {-1, Vector3()};
 // with the default calibration).
 static const Vector3 HI_SHIFT(30, -35, -25);
 static const Keyframe SAY_HI[] = {
-    {600, HI_SHIFT, 0, {NO_LIFT, NO_LIFT}},
-    {400, HI_SHIFT, 0, {{0, Vector3(200, 0, 40)}, NO_LIFT}},
-    {350, HI_SHIFT, 0, {{0, Vector3(190, 60, 70)}, NO_LIFT}},
-    {350, HI_SHIFT, 0, {{0, Vector3(190, -60, 70)}, NO_LIFT}},
-    {350, HI_SHIFT, 0, {{0, Vector3(190, 60, 70)}, NO_LIFT}},
-    {350, HI_SHIFT, 0, {{0, Vector3(190, -60, 70)}, NO_LIFT}},
-    {400, HI_SHIFT, 0, {{0, Vector3(200, 0, 40)}, NO_LIFT}},
-    {400, HI_SHIFT, 0, {NO_LIFT, NO_LIFT}},
-    {600, Vector3(), 0, {NO_LIFT, NO_LIFT}},
+    {600, {HI_SHIFT}, {}},
+    {400, {HI_SHIFT}, {{0, Vector3(200, 0, 40)}}},
+    {350, {HI_SHIFT}, {{0, Vector3(190, 60, 70)}}},
+    {350, {HI_SHIFT}, {{0, Vector3(190, -60, 70)}}},
+    {350, {HI_SHIFT}, {{0, Vector3(190, 60, 70)}}},
+    {350, {HI_SHIFT}, {{0, Vector3(190, -60, 70)}}},
+    {400, {HI_SHIFT}, {{0, Vector3(200, 0, 40)}}},
+    {400, {HI_SHIFT}, {}},
+    {600, {Vector3()}, {}},
 };
 
 // Wiggle: sway side to side with a small bob, all six feet planted, then
 // stand straight. The twist waits for the measured body geometry (part two):
 // a uniform sideways move of every foot is not a rigid rotation.
 static const Keyframe WIGGLE[] = {
-    {400, Vector3(25, 0, 8), 0, {NO_LIFT, NO_LIFT}}, {300, Vector3(-25, 0, -8), 0, {NO_LIFT, NO_LIFT}},
-    {300, Vector3(25, 0, 8), 0, {NO_LIFT, NO_LIFT}}, {300, Vector3(-25, 0, -8), 0, {NO_LIFT, NO_LIFT}},
-    {300, Vector3(25, 0, 8), 0, {NO_LIFT, NO_LIFT}}, {300, Vector3(-25, 0, -8), 0, {NO_LIFT, NO_LIFT}},
-    {400, Vector3(), 0, {NO_LIFT, NO_LIFT}},
+    {400, {Vector3(25, 0, 8)}, {}},   {300, {Vector3(-25, 0, -8)}, {}}, {300, {Vector3(25, 0, 8)}, {}},
+    {300, {Vector3(-25, 0, -8)}, {}}, {300, {Vector3(25, 0, 8)}, {}},   {300, {Vector3(-25, 0, -8)}, {}},
+    {400, {Vector3()}, {}},
 };
 
 Script script(Gesture g)
@@ -61,15 +59,17 @@ bool available(uint8_t id)
 
 // --- Poses -----------------------------------------------------------------
 
-Vector3 plantedFoot(int leg, Vector3 standing, Vector3 shift, float twistMm)
+Vector3 plantedFoot(int leg, Vector3 standing, const Pose &pose)
 {
-  // The body moves by shift over feet that stay put, so each foot moves by
-  // -shift relative to the body: projected onto the leg frame's axes.
+  // The body moves by the translation over feet that stay put, so each foot
+  // moves by -translation relative to the body: projected onto the leg
+  // frame's axes. The rotation is task 2.2.
+  Vector3 shift = pose.translation;
   float a = gait::mountAngleDeg(leg) * (float)M_PI / 180.0f;
   float ex = cosf(a), ey = sinf(a);  // leg x in the body frame
   float yx = sinf(a), yy = -cosf(a); // leg y: x turned clockwise
   float dx = -shift.x, dy = -shift.y;
-  return Vector3(standing.x + dx * ex + dy * ey, standing.y + dx * yx + dy * yy + twistMm, standing.z - shift.z);
+  return Vector3(standing.x + dx * ex + dy * ey, standing.y + dx * yx + dy * yy, standing.z - shift.z);
 }
 
 Vector3 keyframeFoot(const Keyframe &k, int leg, Vector3 standing)
@@ -77,7 +77,7 @@ Vector3 keyframeFoot(const Keyframe &k, int leg, Vector3 standing)
   for (int j = 0; j < MAX_LIFTED_LEGS; j++)
     if (k.lifts[j].leg == leg)
       return k.lifts[j].foot;
-  return plantedFoot(leg, standing, k.shift, k.twistMm);
+  return plantedFoot(leg, standing, k.pose);
 }
 
 float ease(float t)
@@ -109,7 +109,7 @@ static void beginSegment(Player &p, Vector3 standing)
       p.to[i] = keyframeFoot(script(p.gesture).frames[p.index], i, standing);
       break;
     case Stage::Plant:
-      p.to[i] = plantedFoot(i, standing, p.shift, p.twistMm);
+      p.to[i] = plantedFoot(i, standing, p.pose);
       break;
     case Stage::Straighten:
       p.to[i] = standing;
@@ -137,8 +137,7 @@ static void nextSegment(Player &p, Vector3 standing)
   switch (p.stage)
   {
   case Stage::Keyframes:
-    p.shift = s.frames[p.index].shift;
-    p.twistMm = s.frames[p.index].twistMm;
+    p.pose = s.frames[p.index].pose;
     p.index++;
     if (p.index >= s.count)
     {
