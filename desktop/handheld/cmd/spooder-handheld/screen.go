@@ -539,14 +539,14 @@ func (s *screen) hintKey(x, y int32, label string, pressed bool) int32 {
 
 // hintPressed is whether a requested value's hint key for control b shows
 // as pressed with held held (design D2 of handheld-observations): while b is
-// held and its press reaches that value, so not Start, X or Y while Select
-// is held (the e-stop, the page and the fault clear), nor A, B, X or Y while
-// L2 is held (the gesture layer).
+// held and its press reaches that value, so not Start, X, Y or B while
+// Select is held (the e-stop, the page, the fault clear and the sound), nor
+// A, B, X or Y while L2 is held (the gesture layer).
 func hintPressed(b, held padmap.Buttons) bool {
 	switch {
 	case b == 0 || held&b == 0:
 		return false
-	case held&padmap.HandSelect != 0 && b&(padmap.HandStart|padmap.HandX|padmap.HandY) != 0:
+	case held&padmap.HandSelect != 0 && b&(padmap.HandStart|padmap.HandX|padmap.HandY|padmap.HandB) != 0:
 		return false
 	case held&padmap.HandL2 != 0 && b&(padmap.HandA|padmap.HandB|padmap.HandX|padmap.HandY) != 0:
 		return false
@@ -613,6 +613,10 @@ func (s *screen) header(sc app.Screen) {
 	}
 	sigDot := signalTone(sc.Link.SignalKnown, sc.Link.SignalDBm)
 	chips := []chipSpec{linkChip, {signal, colChip, colText, &sigDot}, estop}
+	if !sc.SoundOn {
+		// Select + B switched the sound feedback off.
+		chips = append([]chipSpec{{"SOUND OFF", colChip, colMuted, nil}}, chips...)
+	}
 	if sc.Robot.Have && sc.Robot.Simulated {
 		// Bench simulation, on both pages: no servo moves.
 		chips = append([]chipSpec{{"SIM", colWarn, colOnStatus, nil}}, chips...)

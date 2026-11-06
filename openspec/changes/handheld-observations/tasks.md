@@ -23,10 +23,15 @@
 
 - [x] 5.1 Run every gate, one at a time: `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run e2e`, `mise run handheld-test`, `mise run handheld-build` and `mise run handheld-package`. Verify all pass.
 
-## 6. Audio feedback
+## 6. Sound feedback
 
-- [ ] 6.1 Settle D4's open questions with the user; then add the implementation tasks here.
+- [x] 6.1 Settle D4's open questions with the user (decisions recorded in design.md).
+- [x] 6.2 Add `Select` + `B` to the handheld layer (D4). Verify with `go test ./internal/padmap` that it toggles the sound, leaves the stick mode alone however the buttons are released, and that `B` alone still toggles the stick mode.
+- [x] 6.3 Add `internal/feedback` (the detector, tones, `Render`, `Player`, the setting) and the SDL player and wiring in `cmd/spooder-handheld` (D4). Verify with `go test ./internal/feedback` each event from its change, a silent start, the 1 s repeat guard (and that the test fails without it), the priorities, the gesture rules, every event's tone (distinct, ramped to zero, peaking at the level), that nothing plays with the sound off and switching it on plays no old event, and that the setting is kept; with `go test ./cmd/spooder-handheld` the `SOUND OFF` chip's room in the header and that the `B` hint key does not press with Select held.
+- [x] 6.4 Document the sound and `Select` + `B` in `docs/handheld.md` and `docs/controls.md`, and in `desktop/CLAUDE.md` and `CHANGELOG.md`.
+- [x] 6.5 Run every gate of 5.1 again.
 
 ## 7. On the devices
 
 - [ ] 7.1 With the bridge in WiFi drive and the robot on its supply, check on the TrimUI that the driving view names say hi while it plays, that the hint keys press, and that the supply values read green at rest; on the bridge's drive and power pages, that the values read green and turn amber or orange as the bands say (a lab supply turned down through 5.6 V and 5.2 V).
+- [ ] 7.2 On the TrimUI: the tones play (e-stop set and released, a gesture accepted and refused, the link lost by switching the bridge off, leaving), the device's volume buttons change their level, NextUI's mute silences them (or record that it does not), and `Select` + `B` silences them, kept after restarting the pak.

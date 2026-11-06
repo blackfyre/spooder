@@ -29,8 +29,9 @@ The handheld uses the gamepad's controls, by the TrimUI's own labels, with `Star
 | `Select` + `Start` | Toggle the emergency stop |
 | `Select` + `Y` held 1 s | Clear faults |
 | `Select` + `X` | Switch the drive screen between its panels and the driving view (nothing sent changes) |
+| `Select` + `B` | Switch the pak's [sound feedback](handheld.md#sound) off or on, kept for the next run (nothing sent changes) |
 | `L2` beyond half travel + `A` / `B` / `X` / `Y` / `R2` | Gesture: say hi / wiggle / dance / attack / ball, as on the gamepad; while `L2` is held the drive screen shows the [gesture overlay](handheld.md#gestures) (nothing sent changes) |
 | `Menu` | Leave: Sleep first, confirmed by telemetry (Sleep or output off) or after 3 s |
 | `Power` short / held 2 s | Suspend / power off, after the same Sleep request and wait |
 
-Select is a modifier with no function of its own: a Start, X or Y pressed with it acts only as the combination, and not again until released. The pak starts in Sleep, so `Y` stands the robot and `Start` walks it. There is no Calibrate on the handheld; calibration stays on the bridge's portal and the desktop calibrator.
+Select is a modifier with no function of its own: a Start, X, Y or B pressed with it acts only as the combination, and not again until released. The pak starts in Sleep, so `Y` stands the robot and `Start` walks it. There is no Calibrate on the handheld; calibration stays on the bridge's portal and the desktop calibrator.

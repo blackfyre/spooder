@@ -54,13 +54,14 @@ func ScaleAxis(v int16) int32 {
 // handheld's own emergency stop.
 //
 // It keeps the PadState from showing the mapping a press the user did not
-// make: a Start, X or Y pressed with Select held is masked until that
+// make: a Start, X, Y or B pressed with Select held is masked until that
 // button is released, whatever Select does meanwhile; so is every control held
 // when driving begins or when the neutral pad (a leave) ends.
 type Handheld struct {
 	mapper     Mapper
 	estop      bool
 	driveView  bool // Select + X: the drive screen's driving-view page
+	soundOff   bool // Select + B: the pak's sound feedback off
 	neutral    bool
 	maskHeld   bool    // mask every control held at the next Step
 	prev       Buttons // the controls held at the last Step
@@ -116,6 +117,13 @@ func (h *Handheld) EmergencyStop() bool { return h.estop }
 // place of the panels. It never reaches the mapping.
 func (h *Handheld) DriveView() bool { return h.driveView }
 
+// SoundOn is the pak's sound feedback toggle (Select + B, design D4 of
+// handheld-observations). It never reaches the mapping.
+func (h *Handheld) SoundOn() bool { return !h.soundOff }
+
+// SetSoundOn sets the sound toggle (the setting kept from an earlier run).
+func (h *Handheld) SetSoundOn(on bool) { h.soundOff = !on }
+
 // Held is the controls held at the last Step, the triggers beyond half
 // travel included.
 func (h *Handheld) Held() Buttons { return h.prev }
@@ -163,6 +171,10 @@ func (h *Handheld) Step(c Controls, nowMs uint32) Desired {
 	if selectHeld && pressed&HandX != 0 {
 		h.driveView = !h.driveView
 		h.masked |= HandX
+	}
+	if selectHeld && pressed&HandB != 0 {
+		h.soundOff = !h.soundOff
+		h.masked |= HandB
 	}
 	if selectHeld && pressed&HandY != 0 {
 		h.masked |= HandY

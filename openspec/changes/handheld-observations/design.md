@@ -18,7 +18,6 @@ See proposal.md for the motivation; the four items come from the user's field no
 - Colour is never the only signal: the value stays the label.
 
 **Non-Goals:**
-- Audio implementation (design only, D4).
 - Any protocol, robot firmware or mapping change; bands for the 2S pack itself, which the board does not measure.
 - Changes to the gesture scripts or `core/movement`.
 
@@ -51,7 +50,7 @@ The mapping's other masks (a button pressed with Select stays masked until relea
 | Voltage | at or below `minMv` (undervoltage; brown-out is below it) or at or above `maxMv` (overvoltage) | within `minMv − brownoutMv` of either limit | otherwise |
 | Current | at or above `tripCurrentMa` (overcurrent) | at or above `sustainedCurrentMa` (the average that puts the robot to sleep) | otherwise |
 
-With the example limits: voltage fault ≤ 5.2 V or ≥ 6.8 V, warning 5.2–5.6 V and 6.4–6.8 V, ok 5.6–6.4 V; current warning from 6 A, fault from 9 A. The voltage warning margin is the one decision the limits do not settle (the open question below); the current bands are the limits themselves.
+With the example limits: voltage fault ≤ 5.2 V or ≥ 6.8 V, warning 5.2–5.6 V and 6.4–6.8 V, ok 5.6–6.4 V; current warning from 6 A, fault from 9 A. The current bands are the limits themselves; the voltage warning margin is the one value the limits do not give, and the user chose this one (below).
 
 **One fixture.** `test/golden/supply_bands.txt`, hand-written as `gamepad_mapping.txt` is: `limits <brownout> <min> <max> <sustained> <trip>` lines followed by `voltage <mV> <band>` and `current <mA> <band>` cases, including each boundary and unordered limits (`unknown`). `test/test_supply_band` runs the C++ rule over it, the handheld's `internal/supplyband` test the Go copy; `SPOODER_SUPPLY_BANDS_GOLDEN` names another copy.
 
@@ -59,40 +58,38 @@ With the example limits: voltage fault ≤ 5.2 V or ≥ 6.8 V, warning 5.2–5.6
 
 **Where.** Handheld: the robot panel's SUPPLY and CURRENT figures and the driving view's SUPPLY cell. Bridge: the drive page's voltage and current, and the power page's newest voltage and current and its window's lowest voltage and highest current. On the bridge's drive page the held-extreme warning keeps its meaning: the tone is the band's, raised to the warning tone while `peak_hold` warns and the band is ok.
 
-### D4. Audio feedback (proposal, not implemented)
+### D4. Sound feedback
 
-**What the pak can play.** gabagool initialises SDL with `SDL_INIT_AUDIO` (`pkg/gabagool/internal/sdl.go` in v2.26.6), and go-sdl2 v0.4.40 binds SDL's core audio API (`sdl.OpenAudioDevice`, `sdl.QueueAudio`, `sdl.PauseAudioDevice`). That is enough to play short PCM buffers with no new dependency: SDL_mixer is neither in the device build image nor on NextUI's base image as far as the pak's build shows, and would be a new pinned package. The audio driver SDL selects on the tg5040 (ALSA, through NextUI's audio server or directly) has not been checked on the device.
+**What the pak can play.** gabagool initialises SDL with `SDL_INIT_AUDIO` (`pkg/gabagool/internal/sdl.go` in v2.26.6), and go-sdl2 v0.4.40 binds SDL's core audio API (`sdl.OpenAudioDevice`, `sdl.QueueAudio`, `sdl.ClearQueuedAudio`). That plays short PCM buffers with no new dependency; SDL_mixer is not in the device build image and would be a new pinned package. The audio driver SDL selects on the tg5040 has not been checked on the device.
 
-**Events**, the same as the bridge's rumble so both controllers tell the driver the same things, plus the pak's own:
+**Events**, the bridge's rumble events (`core/gamepad_mapping/rumble`) with its rules, so both controllers tell the driver the same things, plus two of the pak's own:
 
-| Event | Sound |
-|---|---|
-| E-stop set | a falling two-tone, loud |
-| E-stop released | a rising two-tone, soft |
-| Fault latched (new fault bit in fresh telemetry, the e-stop's excepted) | three short low beeps |
-| Link lost (telemetry stale) / regained | a low tone / a high tone |
-| Gesture refused (not playing 600 ms after the request, rumble's rule) | a short low buzz |
-| Gesture accepted (telemetry reports the requested gesture) | a short high blip |
-| Leaving (Menu or Power pressed while driving) | a falling tone |
+| Event | Tone | Priority |
+|---|---|---|
+| Fault latched (a new fault bit in fresh telemetry, the e-stop's excepted) | three 90 ms beeps at 330 Hz, 60 ms apart | 5 |
+| E-stop set | 880 Hz 120 ms, then 440 Hz 200 ms | 4 |
+| Link lost (telemetry stale) | 300 Hz 250 ms | 3 |
+| Leaving (a leave starts: Menu or Power) | 660, 440, 330 Hz | 3 |
+| Gesture refused (not playing 600 ms after the request, rumble's rule) | 200 Hz square, 150 ms | 2 |
+| E-stop released | 440 Hz 80 ms, then 880 Hz 80 ms | 1 |
+| Link regained | 1200 Hz 80 ms | 1 |
+| Gesture accepted (telemetry reports the requested gesture playing, after a moment it did not) | 1500 Hz 50 ms | 1 |
 
-The same event never sounds twice within 1 s (rumble's `REPEAT_MS`); a louder event replaces a softer one in progress.
+As in rumble: the first update only takes what is already so (latched faults, the e-stop, the gesture counter) as known; after a link gap the faults reported are the new baseline; a gesture request pending when the link is lost sounds only the loss; one event sounds at most once per second (`RepeatAfter`, rumble's `REPEAT_MS`) and an event that cannot sound within a second of happening is dropped; a higher priority replaces a lower one still playing, and a lower one waits for a higher one to end.
 
-**How.** Generated tones: sine or square bursts with short attack and release ramps (no clicks), synthesised once at start into 16-bit mono buffers at 48 kHz and queued on one SDL audio device opened at start (no device: no sound, never an error that stops driving). No bundled samples: no asset licences, nothing to pin, a few hundred bytes of code. The event detection is a Go port of `rumble`'s event logic, kept in step with the C++ through a golden file of steps, as `padmap` is.
+**How.** `desktop/handheld/internal/feedback` (no SDL): the detector over the screen model (`FromScreen`: the fault bits, the pak's e-stop and gesture request, the gesture playing, freshness, the leave), the tone table, `Render` (sine or square segments with 5 ms ramps, 16-bit mono at 48 kHz, peak 0.25 of full scale, about -12 dBFS), rendered once at start, and a `Player` interface. `cmd/spooder-handheld/sound.go` implements it on one SDL audio device opened after gabagool's start (none: the pak drives silently and says so on stderr), a new tone replacing what is queued; it updates at each redraw (every 50 ms) and lets a queued tone finish, for at most 500 ms, before closing at exit. The detector is not kept in step with rumble by a fixture: the pak's inputs differ (its own e-stop and counters, staleness at 500 ms, the leave) and the tests pin its rules.
 
-**Volume and mute.** A fixed level well below full scale (about −12 dBFS), scaled by the system volume, which on NextUI the volume buttons set for every program's output; muting the device or volume 0 then silences the pak with no code of its own. Whether NextUI's mute reaches an SDL program's output this way has to be confirmed on the device.
+**Sound on/off.** `Select` + `B` toggles the sound in the handheld layer (`padmap.Handheld`, masked like `Select` + `X`, so the stick mode does not change), shown as a `SOUND OFF` header chip while off. The choice is kept between runs as an empty file `sound-off` beside the binary (the pak's folder). With the sound off, events are still judged, so switching it on does not play old ones. The device's volume sets the level; whether NextUI's mute reaches SDL output is checked on the device (task 7.2).
 
-**Open questions (for the user):**
-1. Which events sound: all of the table, or a subset (for example only the safety ones: e-stop, fault, link)?
-2. Generated tones (proposed) or bundled samples?
-3. Should the pak have its own sound on/off (a control, or a file on the SD card) beyond the device's volume and mute?
-4. Gesture accepted: a sound, or silence for success with sounds only for problems?
+### Decisions taken by the user (2026-11-06)
 
-### Open question for D3
-
-The protection limits give the current's warning level (the sustained current) but no warning level for the voltage. Proposed: a margin equal to the gap between the brown-out and undervoltage limits (`minMv − brownoutMv`, 0.4 V with the example limits), on both sides. Alternatives: a fixed margin (such as 0.2 V), or a low-side warning only. This design follows the proposal until the user decides.
+- D3: the voltage warning margin is `minMv − brownoutMv` on both sides, as proposed; fault colour is the orange (bf-accent-on-dark), warning bf-warn, ok bf-ok, no new red token.
+- D4: every event in the table sounds, accepted gestures included; generated tones at about -12 dBFS with the 1 s repeat guard and no new dependency; a sound on/off setting in the pak, since NextUI's mute reaching SDL output is unverified.
 
 ## Risks / Trade-offs
 
 - [Bands absent until diagnostics arrive] → the value keeps today's tone for the first 100 ms or so; with a robot firmware too old to send diagnostics the bands never show. Acceptable: protocol version 3 has always carried diagnostics.
 - [The bridge's drive page shows green almost always] → that is the point of the band; the held-extreme warning still raises it to amber on a new dip.
-- [Voltage band without a limits-derived warning level] → the open question; the margin is one constant in each implementation and the fixture.
+- [Voltage band without a limits-derived warning level] → the margin is derived from two limits and was chosen by the user; it is one expression in each implementation, pinned by the fixture.
+- [NextUI's mute may not reach the pak's tones] → `Select` + `B` silences them whatever the device does; the on-device check (task 7.2) settles it.
+- [A tone at exit cut short] → close waits for the queued tone, at most 500 ms; a suspend or power-off may still cut the leaving tone.

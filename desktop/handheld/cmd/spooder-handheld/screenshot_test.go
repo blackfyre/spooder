@@ -56,6 +56,7 @@ var screenshotCases = []struct {
 		Requested: app.Requested{Mode: "Walk", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 40 * time.Millisecond, SignalKnown: true, SignalDBm: -33, Sent: 18250},
 		State:     app.Driving,
+		SoundOn:   true,
 		Held:      padmap.HandUp,
 	}, 0},
 	{"fault", app.Screen{
@@ -63,6 +64,7 @@ var screenshotCases = []struct {
 		Requested: app.Requested{Mode: "Sleep", Height: 0, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer", EStop: true},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, Lost: 3, HaveFrame: true, SinceLast: 60 * time.Millisecond, SignalKnown: true, SignalDBm: -71, Sent: 402},
 		State:     app.Driving,
+		SoundOn:   true,
 		Held:      padmap.HandSelect | padmap.HandY,
 		Clearing:  0.6,
 	}, 0},
@@ -72,12 +74,15 @@ var screenshotCases = []struct {
 		Link:      app.LinkView{HaveFrame: true, SinceLast: 2300 * time.Millisecond, Sent: 9120, SendErrors: 4},
 		State:     app.Driving,
 		Notice:    "send: network is unreachable",
+		// Select + B switched the sound off.
+		SoundOn: false,
 	}, 0},
 	{"leaving", app.Screen{
 		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, VoltageMv: 6020, CurrentMa: 2900, Source: "bridge", SupplyLimits: exampleLimits},
 		Requested: app.Requested{Mode: "Sleep", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 20 * time.Millisecond, SignalKnown: true, SignalDBm: -40, Sent: 30111},
 		State:     app.Leaving,
+		SoundOn:   true,
 		Leave:     app.ActionExit,
 	}, 0},
 	{"driveview", app.Screen{
@@ -86,12 +91,14 @@ var screenshotCases = []struct {
 		Requested: app.Requested{Mode: "Walk", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 40 * time.Millisecond, SignalKnown: true, SignalDBm: -33, Sent: 18250},
 		State:     app.Driving,
+		SoundOn:   true,
 		Held:      padmap.HandSelect | padmap.HandX,
 		DriveView: true,
 	}, 0},
 	{"driveview-nopose", app.Screen{
 		Requested: app.Requested{Mode: "Sleep", Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		State:     app.Driving,
+		SoundOn:   true,
 		DriveView: true,
 	}, 0},
 	{"simulation", app.Screen{
@@ -100,16 +107,19 @@ var screenshotCases = []struct {
 		Requested: app.Requested{Mode: "Walk", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 40 * time.Millisecond, SignalKnown: true, SignalDBm: -33, Sent: 18250},
 		State:     app.Driving,
+		SoundOn:   true,
 	}, 0},
 	{"waiting", app.Screen{
 		Requested: app.Requested{Mode: "Sleep", Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		State:     app.Driving,
+		SoundOn:   true,
 	}, 0},
 	{"gestures", app.Screen{
 		Robot:     app.Robot{Have: true, Body: "Perform", Gait: "Tripod", OutputsOn: true, Gesture: "wiggle", GestureID: 2, VoltageMv: 6010, CurrentMa: 2300, Source: "bridge", SupplyLimits: exampleLimits},
 		Requested: app.Requested{Mode: "Stand", Height: 0, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer", Gesture: 2, GestureSeq: 3},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 30 * time.Millisecond, SignalKnown: true, SignalDBm: -48, Sent: 12040},
 		State:     app.Driving,
+		SoundOn:   true,
 		Held:      padmap.HandL2,
 	}, 650 * time.Millisecond},
 	{"gestures-stand-first", app.Screen{
@@ -118,6 +128,7 @@ var screenshotCases = []struct {
 		Requested: app.Requested{Mode: "Sleep", Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 30 * time.Millisecond, SignalKnown: true, SignalDBm: -48, Sent: 2040},
 		State:     app.Driving,
+		SoundOn:   true,
 		Held:      padmap.HandL2 | padmap.HandA,
 		DriveView: true,
 	}, 1200 * time.Millisecond},

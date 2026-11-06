@@ -136,6 +136,41 @@ func TestEmergencyStopToggle(t *testing.T) {
 	r.want(ModeStand, 2)
 }
 
+// Select + B switches the sound and leaves the stick mode alone, however
+// the buttons are released; B alone still toggles the stick mode.
+func TestSoundToggle(t *testing.T) {
+	r := newRig(t)
+	if !r.h.SoundOn() {
+		t.Fatal("sound off at the start")
+	}
+	stick := r.last.StickMode
+	r.down(HandSelect)
+	r.down(HandB)
+	if r.h.SoundOn() {
+		t.Fatal("Select + B did not switch the sound off")
+	}
+	r.up(HandSelect) // released while B is still held
+	r.hold(100)
+	r.up(HandB)
+	if r.last.StickMode != stick || r.h.SoundOn() {
+		t.Fatalf("stick mode %d (was %d), sound %v", r.last.StickMode, stick, r.h.SoundOn())
+	}
+	r.down(HandSelect)
+	r.tap(HandB)
+	r.up(HandSelect)
+	if !r.h.SoundOn() || r.last.StickMode != stick {
+		t.Fatalf("second Select + B: sound %v, stick mode %d", r.h.SoundOn(), r.last.StickMode)
+	}
+	r.tap(HandB)
+	if r.last.StickMode == stick {
+		t.Fatal("B alone did not toggle the stick mode")
+	}
+	r.h.SetSoundOn(false)
+	if r.h.SoundOn() {
+		t.Fatal("SetSoundOn(false) left the sound on")
+	}
+}
+
 // Select + X switches the page and leaves the stride alone, however the
 // buttons are released; X alone still toggles the stride.
 func TestDriveViewToggle(t *testing.T) {

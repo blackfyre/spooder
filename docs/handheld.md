@@ -35,6 +35,21 @@ Faults are named chips, the emergency stop in orange. Holding `Select` + `Y` fil
 
 ![The panels page with the emergency stop and undervoltage faults, the e-stop chip set in the header and the fault clear's hold part way](images/handheld-fault.png)
 
+## Sound
+
+The pak plays short generated tones, at about -12 dBFS, so the driver hears what happens without looking at the screen. They are the bridge's rumble events, and two more:
+
+| Event | Tone |
+|---|---|
+| A protection fault latched (the e-stop's excepted) | three short low beeps |
+| E-stop set / released | a falling / a rising two-tone |
+| Link lost (no telemetry for 500 ms) / regained | one low / one high tone |
+| Gesture refused (not playing 600 ms after the request) | a short low buzz |
+| Gesture accepted (telemetry reports it playing) | a short high blip |
+| Leaving (Menu or Power) | a falling three-tone |
+
+One event sounds at most once a second, and a safety tone cuts a confirmation short. The device's volume buttons set the level. `Select` + `B` switches the sound off (a `SOUND OFF` chip shows in the header) and on again; the choice is kept in the pak's folder as the file `sound-off`. Whether NextUI's mute silences the pak has not been checked on the device yet; `Select` + `B` always does. Without an audio device the pak drives silently.
+
 ## Gestures
 
 While `L2` is held beyond half travel, on either page, the gesture overlay covers the drive screen, and it closes when `L2` is released. It only shows the layer: the controls and the command frames are the same with it open. Its five tiles sit as their buttons do on the TrimUI, `A`, `B`, `X` and `Y` as a diamond with `R2` beside it, each with the gesture's name and its keycap, which presses down while the button is held.

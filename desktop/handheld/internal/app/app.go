@@ -151,6 +151,14 @@ func (a *App) SetControls(c padmap.Controls) {
 	a.mu.Unlock()
 }
 
+// SetSoundOn sets the pak's sound toggle (Select + B), as kept from an
+// earlier run.
+func (a *App) SetSoundOn(on bool) {
+	a.mu.Lock()
+	a.hand.SetSoundOn(on)
+	a.mu.Unlock()
+}
+
 // Press starts a leave with act (Menu: ActionExit; Power: ActionSuspend or
 // ActionPowerOff). It requests Sleep at once and makes the mapping see a
 // neutral pad; a press while a leave is in progress is ignored.

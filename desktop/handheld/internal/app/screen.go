@@ -18,6 +18,7 @@ type Robot struct {
 	Gait      string
 	OutputsOn bool
 	Faults    []string // by name; empty when none
+	FaultBits uint16   // the same, as protection's fault bits
 	Gesture   string
 	GestureID uint8 // the gesture being played (protocol.Gesture*), 0 when none
 	VoltageMv uint16
@@ -84,6 +85,8 @@ type Screen struct {
 	Clearing float64
 	// DriveView shows the driving view in place of the panels (Select + X).
 	DriveView bool
+	// SoundOn is the pak's sound feedback toggle (Select + B).
+	SoundOn bool
 }
 
 func strideName(s padmap.StrideMode) string {
@@ -105,7 +108,7 @@ func (a *App) Screen(now time.Time) Screen {
 	st := a.link.Status(now)
 	a.mu.Lock()
 	d, estop := a.desired, a.hand.EmergencyStop()
-	sc := Screen{State: a.state, Notice: a.notice, Held: a.hand.Held(), DriveView: a.hand.DriveView()}
+	sc := Screen{State: a.state, Notice: a.notice, Held: a.hand.Held(), DriveView: a.hand.DriveView(), SoundOn: a.hand.SoundOn()}
 	if a.begun {
 		sc.Clearing = a.hand.ClearProgress(a.ms(now))
 	}
@@ -136,6 +139,7 @@ func (a *App) Screen(now time.Time) Screen {
 		sc.Robot.Gait = session.GaitName(t.Gait)
 		sc.Robot.OutputsOn = t.OutputsOn
 		sc.Robot.Faults = session.FaultNames(t.Faults)
+		sc.Robot.FaultBits = t.Faults
 		sc.Robot.Gesture = session.GestureName(t.Gesture)
 		sc.Robot.GestureID = t.Gesture
 		sc.Robot.VoltageMv, sc.Robot.CurrentMa = t.VoltageMv, t.CurrentMa

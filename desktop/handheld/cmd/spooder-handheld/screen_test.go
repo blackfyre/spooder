@@ -140,7 +140,7 @@ func TestLayoutFitsTheDevice(t *testing.T) {
 	}
 
 	// The header's chips and the title share the width.
-	chips := s.chipWidth("SIM", false) + s.chipWidth("LINK STALE", true) + s.chipWidth("-100 DBM", true) + s.chipWidth("E-STOP OFF", false) + 3*l.gap(10)
+	chips := s.chipWidth("SOUND OFF", false) + s.chipWidth("SIM", false) + s.chipWidth("LINK STALE", true) + s.chipWidth("-100 DBM", true) + s.chipWidth("E-STOP OFF", false) + 4*l.gap(10)
 	if title := textWidth(f.title, "Spooder."); l.left+title+l.gap(20) > l.w-l.gap(margin)-chips {
 		t.Errorf("the title (%d) and the chips (%d) overlap", title, chips)
 	}
@@ -261,7 +261,7 @@ func TestHintKeysPressWhileHeld(t *testing.T) {
 		{padmap.HandY, padmap.HandSelect | padmap.HandY, false},
 		{padmap.HandStart, padmap.HandSelect | padmap.HandStart, false},
 		{padmap.HandX, padmap.HandSelect | padmap.HandX, false},
-		{padmap.HandB, padmap.HandSelect | padmap.HandB, true},
+		{padmap.HandB, padmap.HandSelect | padmap.HandB, false},
 		{padmap.HandUp, padmap.HandSelect | padmap.HandUp, true},
 		{padmap.HandB, padmap.HandL2 | padmap.HandB, false},
 		{padmap.HandX, padmap.HandL2 | padmap.HandX, false},
