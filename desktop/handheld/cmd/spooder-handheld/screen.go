@@ -22,8 +22,8 @@ import (
 // with the window's width: a header (the title and the status chips), the
 // robot's panel on the left, what the pak requests and the link's quality
 // on the right, and the controls as keycaps along the bottom (the leave
-// banner in their place while leaving). Select + X shows the top view in
-// the panels' place (topview.go).
+// banner in their place while leaving). Select + X shows the driving view in
+// the panels' place (driveview.go).
 const (
 	layoutWidth = 1280
 	margin      = 28
@@ -89,7 +89,7 @@ type key struct {
 
 // The controls along the bottom: keycaps, then what they do. clear marks the
 // fault clear, whose hold fills its text; onView is what the page toggle
-// does while the top view shows.
+// does while the driving view shows.
 var helpKeys = []struct {
 	keys   []key
 	does   string
@@ -514,8 +514,8 @@ func (s *screen) draw(sc app.Screen) {
 	l := s.l
 	s.fill(0, 0, l.w, l.h, 0, colWindow)
 	s.header(sc)
-	if sc.TopView {
-		s.topView(sc)
+	if sc.DriveView {
+		s.driveView(sc)
 	} else {
 		s.robot(sc.Robot, sc.Notice)
 		s.requested(sc.Requested)
@@ -524,7 +524,7 @@ func (s *screen) draw(sc app.Screen) {
 	if sc.State == app.Leaving || sc.State == app.Acting {
 		s.leaveBanner(sc)
 	} else {
-		s.footer(sc.Held, sc.Clearing, sc.TopView)
+		s.footer(sc.Held, sc.Clearing, sc.DriveView)
 	}
 	s.endFrame()
 	s.win.Present()
@@ -563,6 +563,10 @@ func (s *screen) header(sc app.Screen) {
 		signal = fmt.Sprintf("%d DBM", sc.Link.SignalDBm)
 	}
 	chips := []chipSpec{linkChip, {signal, colChip, colText, nil}, estop}
+	if sc.Robot.Have && sc.Robot.Simulated {
+		// Bench simulation, on both pages: no servo moves.
+		chips = append([]chipSpec{{"SIM", colWarn, colOnStatus, nil}}, chips...)
+	}
 	x := l.w - l.gap(margin)
 	for i := len(chips) - 1; i >= 0; i-- {
 		c := chips[i]
@@ -602,6 +606,9 @@ func (s *screen) robot(rb app.Robot, notice string) {
 		out, dot := "OUTPUT OFF", colMuted
 		if rb.OutputsOn {
 			out, dot = "OUTPUT ON", colOk
+			if rb.Simulated {
+				out = "OUTPUT SIM"
+			}
 		}
 		if rb.Stale {
 			dot = colMuted
@@ -692,7 +699,7 @@ func (s *screen) link(lv app.LinkView) {
 // footer: the controls as keycaps, each pressed while its control is held;
 // the fault clear's text fills with the orange as its hold runs (clearing,
 // 0 to 1); the page toggle names the page it goes to.
-func (s *screen) footer(held padmap.Buttons, clearing float64, topView bool) {
+func (s *screen) footer(held padmap.Buttons, clearing float64, driveView bool) {
 	l := s.l
 	x, y := l.left, l.footerY
 	ty := y + (l.gap(keyHeight)-l.microH)/2
@@ -712,7 +719,7 @@ func (s *screen) footer(held padmap.Buttons, clearing float64, topView bool) {
 			fg = colText
 		}
 		does := h.does
-		if topView && h.onView != "" {
+		if driveView && h.onView != "" {
 			does = h.onView
 		}
 		tw := s.tracked(s.f.micro, does, x, ty, fg, trackLabel)

@@ -76,7 +76,7 @@ func TestPakDrivesAndLeaves(t *testing.T) {
 	if sc.Link.Lost != 0 || sc.Link.Invalid != 0 {
 		t.Errorf("lost %d, invalid %d, want 0", sc.Link.Lost, sc.Link.Invalid)
 	}
-	// The top view's pose: fresh, every leg placed, and Select + X shows it.
+	// The driving view's pose: fresh, every leg placed, and Select + X shows it.
 	if !sc.Pose.Have || sc.Pose.Stale {
 		t.Errorf("pose have %v, stale %v, want a fresh pose", sc.Pose.Have, sc.Pose.Stale)
 	}
@@ -86,8 +86,8 @@ func TestPakDrivesAndLeaves(t *testing.T) {
 		}
 	}
 	p.Tap(padmap.HandSelect | padmap.HandX)
-	if !p.S.App.Screen(time.Now()).TopView {
-		t.Error("Select + X did not show the top view")
+	if !p.S.App.Screen(time.Now()).DriveView {
+		t.Error("Select + X did not show the driving view")
 	}
 
 	pressed := time.Now()

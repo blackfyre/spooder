@@ -7,7 +7,7 @@ The handheld controller: a NextUI tool pak on a TrimUI Smart Pro that drives the
 ## ADDED Requirements
 
 ### Requirement: Input mapping
-The handheld SHALL map its controls to the same desired movement state as the bridge's gamepad mapping (gamepad-control: input mapping, stick modes and dead zone), with these handheld controls standing for the gamepad's: the sticks for the sticks, A, B, X and Y for `a`, `b`, `x` and `y`, L1 and R1 for `l1` and `r1`, L2 and R2 pressed beyond half travel for `l2` and `r2`, the D-pad for the D-pad and Start for `miscHome`. Select SHALL be a modifier with no function of its own; while it is held, Start, X and Y SHALL NOT act as `miscHome`, `x` and `y`, and a Start, X or Y pressed or held with Select SHALL NOT act until it is released, whichever button is released first. Select + Start (press) SHALL toggle the emergency stop. Select + X (press) SHALL switch the drive screen between its panels and the top view, and SHALL change nothing that is sent. Select + Y held 1 s SHALL request a fault clear, once per hold, in place of the gamepad's `thumbL` + `thumbR` hold. The handheld SHALL NOT request Calibrate. Menu and Power SHALL NOT reach the mapping. A connected controller SHALL be reported in every command frame while the handheld drives. A run, and a return from suspend, SHALL start with Sleep requested, as the bridge holds it at a session's start, so that Y leaves Sleep for Stand.
+The handheld SHALL map its controls to the same desired movement state as the bridge's gamepad mapping (gamepad-control: input mapping, stick modes and dead zone), with these handheld controls standing for the gamepad's: the sticks for the sticks, A, B, X and Y for `a`, `b`, `x` and `y`, L1 and R1 for `l1` and `r1`, L2 and R2 pressed beyond half travel for `l2` and `r2`, the D-pad for the D-pad and Start for `miscHome`. Select SHALL be a modifier with no function of its own; while it is held, Start, X and Y SHALL NOT act as `miscHome`, `x` and `y`, and a Start, X or Y pressed or held with Select SHALL NOT act until it is released, whichever button is released first. Select + Start (press) SHALL toggle the emergency stop. Select + X (press) SHALL switch the drive screen between its panels and the driving view, and SHALL change nothing that is sent. Select + Y held 1 s SHALL request a fault clear, once per hold, in place of the gamepad's `thumbL` + `thumbR` hold. The handheld SHALL NOT request Calibrate. Menu and Power SHALL NOT reach the mapping. A connected controller SHALL be reported in every command frame while the handheld drives. A run, and a return from suspend, SHALL start with Sleep requested, as the bridge holds it at a session's start, so that Y leaves Sleep for Stand.
 
 #### Scenario: Same state as the gamepad
 - **WHEN** the same sequence of stick positions and presses is given to the handheld and to the bridge's gamepad mapping
@@ -29,9 +29,9 @@ The handheld SHALL map its controls to the same desired movement state as the br
 - **WHEN** Select is held and Start is pressed
 - **THEN** every following command frame signals the emergency stop until Select + Start is pressed again, and the mode does not change
 
-#### Scenario: Top view toggle
+#### Scenario: Driving view toggle
 - **WHEN** Select is held and X is pressed, and Select is released before X
-- **THEN** the drive screen shows the top view, the stride mode does not change, neither then nor when X is released, and X pressed alone afterwards toggles the stride mode
+- **THEN** the drive screen shows the driving view, the stride mode does not change, neither then nor when X is released, and X pressed alone afterwards toggles the stride mode
 
 #### Scenario: Select released first
 - **WHEN** Select + Start or Select + Y is pressed and Select is released while Start or Y is still held
@@ -72,15 +72,19 @@ The handheld SHALL accept a datagram only when it comes from the bridge's addres
 - **THEN** it is dropped and nothing on the screen changes
 
 ### Requirement: Drive screen
-The handheld SHALL show one live screen, with two pages switched by Select + X. The panels SHALL show, from the newest telemetry: the robot's body mode, gait, whether servo output is on, the faults by name, the gesture being played, the supply voltage and the current; from its own state: the requested mode, height, speed, gait, stride mode, stick mode and emergency stop. The top view SHALL show the robot from above, front up, its legs placed from the newest pose frame (a leg never set since the robot started marked at its pivot, joints near or at their servo limits marked), with the body mode, gait, output, supply voltage and faults from the newest telemetry. Both pages SHALL show the emergency stop and the link's state. It SHALL show each frame type's values from the frame of that type with the newest sequence number, not replacing them with an older one, except that a type whose last shown frame was taken more than 500 ms ago SHALL be taken again from its next frame. It SHALL redraw at least 10 times a second. When no telemetry has arrived for 500 ms it SHALL mark the robot's values as stale, and when no pose frame has arrived for 500 ms the top view as stale.
+The handheld SHALL show one live screen, with two pages switched by Select + X. The panels SHALL show, from the newest telemetry: the robot's body mode, gait, whether servo output is on, the faults by name, the gesture being played, the supply voltage and the current; from its own state: the requested mode, height, speed, gait, stride mode, stick mode and emergency stop. The driving view SHALL show the robot from a camera fixed behind it, looking forward and 45° down, in perspective, over a ground grid at the lowest foot, its legs placed from the newest pose frame (a leg never set since the robot started marked at its pivot, joints near or at their servo limits marked), with the body mode, gait, output, supply voltage and faults from the newest telemetry. Both pages SHALL show the emergency stop and the link's state, and, while the newest telemetry reports bench simulation (bench-simulation: the simulation flag), that the robot is simulated, with its output shown as simulated rather than on. It SHALL show each frame type's values from the frame of that type with the newest sequence number, not replacing them with an older one, except that a type whose last shown frame was taken more than 500 ms ago SHALL be taken again from its next frame. It SHALL redraw at least 10 times a second. When no telemetry has arrived for 500 ms it SHALL mark the robot's values as stale, and when no pose frame has arrived for 500 ms the driving view as stale.
+
+#### Scenario: Bench simulation shown
+- **WHEN** telemetry arrives with the bench simulation flag set and output on
+- **THEN** both pages show that the robot is simulated, and the output reads as simulated; after telemetry without the flag, neither does
 
 #### Scenario: Fault by name
 - **WHEN** telemetry reports the overcurrent fault
 - **THEN** the screen names the overcurrent fault
 
-#### Scenario: Top view from the pose
-- **WHEN** a pose frame arrives with leg 1's joints set and the other legs never set, and the top view is shown
-- **THEN** leg 1 is drawn from its pose and the others are marked at their pivots; 500 ms later, with no further pose frame, the top view is marked stale
+#### Scenario: Driving view from the pose
+- **WHEN** a pose frame arrives with leg 1's joints set and the other legs never set, and the driving view is shown
+- **THEN** leg 1 is drawn from its pose and the others are marked at their pivots; 500 ms later, with no further pose frame, the driving view is marked stale
 
 #### Scenario: Older telemetry after a newer frame
 - **WHEN** telemetry 10 is shown, then diagnostics 14, telemetry 13 and telemetry 9 arrive

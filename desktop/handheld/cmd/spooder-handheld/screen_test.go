@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/veandco/go-sdl2/ttf"
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/app"
+	"github.com/blackfyre/spooder/desktop/internal/legview"
 )
 
 func testFonts(t *testing.T) *fontSet {
@@ -79,7 +81,7 @@ func TestLayoutFitsTheDevice(t *testing.T) {
 
 	// The robot's panel: the hero with its chip, the well, gait and
 	// gesture, and a row of fault chips with a notice still fit.
-	heroW := textWidth(f.hero, "Calibrate.") + s.chipWidth("OUTPUT OFF", true) + l.gap(16)
+	heroW := textWidth(f.hero, "Calibrate.") + s.chipWidth("OUTPUT SIM", true) + l.gap(16)
 	if heroW > inner {
 		t.Errorf("the body mode and its chip need %d, the panel has %d", heroW, inner)
 	}
@@ -108,27 +110,27 @@ func TestLayoutFitsTheDevice(t *testing.T) {
 		t.Errorf("the controls end at %d, the screen's margin at %d", x, l.w-l.gap(margin))
 	}
 
-	// The top-view page: the well and the cells beside it share the panel,
+	// The driving-view page: the well and the cells beside it share the panel,
 	// and the cells fit their values.
 	wellH := l.bodyBottom - l.gap(panelPad) - (l.bodyY + l.gap(panelPad) + l.microH + l.gap(kickerGap))
-	wellW := l.topViewWellW(wellH)
+	wellW := l.driveViewWellW(wellH)
 	sideW := l.w - 2*l.gap(margin) - 2*l.gap(panelPad) - wellW - l.gap(28)
 	if wellW < wellH/2 || sideW < l.colW/2 {
-		t.Errorf("top view well %d×%d, cells %d wide", wellW, wellH, sideW)
+		t.Errorf("driving view well %d×%d, cells %d wide", wellW, wellH, sideW)
 	}
 	vcW := l.cellW(sideW, viewCols)
-	for _, cl := range topViewCells(app.Robot{Have: true, Body: "Calibrate", Gait: "Tripod", VoltageMv: 65535}, colText) {
+	for _, cl := range driveViewCells(app.Robot{Have: true, Body: "Calibrate", Gait: "Tripod", OutputsOn: true, Simulated: true, VoltageMv: 65535}, colText) {
 		vf := f.value
 		if cl.mono {
 			vf = f.mono
 		}
 		if w := textWidth(vf, cl.value); w > vcW {
-			t.Errorf("top view value %q is %d wide, cell %d", cl.value, w, vcW)
+			t.Errorf("driving view value %q is %d wide, cell %d", cl.value, w, vcW)
 		}
 	}
 
 	// The header's chips and the title share the width.
-	chips := s.chipWidth("LINK STALE", true) + s.chipWidth("-100 DBM", false) + s.chipWidth("E-STOP OFF", false) + 2*l.gap(10)
+	chips := s.chipWidth("SIM", false) + s.chipWidth("LINK STALE", true) + s.chipWidth("-100 DBM", false) + s.chipWidth("E-STOP OFF", false) + 3*l.gap(10)
 	if title := textWidth(f.title, "Spooder."); l.left+title+l.gap(20) > l.w-l.gap(margin)-chips {
 		t.Errorf("the title (%d) and the chips (%d) overlap", title, chips)
 	}
@@ -152,5 +154,33 @@ func TestTrackedWidthAddsTracking(t *testing.T) {
 	plain := trackedWidth(f.micro, "LINK", 0)
 	if got, want := trackedWidth(f.micro, "LINK", trackMicro), plain+3*tracking(f.micro, trackMicro); got != want {
 		t.Errorf("tracked LINK = %d, want %d", got, want)
+	}
+}
+
+// The chase camera looks at its target from behind and above: the target
+// draws at the centre, the front higher than the rear, the robot's right on
+// the right, the rear (nearer) larger than the front, and every point within
+// the legs' reach in front of the camera.
+func TestChaseCamera(t *testing.T) {
+	if q, d := chase.project(chaseTarget); math.Abs(q.X) > 1e-9 || math.Abs(q.Y) > 1e-9 || math.Abs(d-chaseDistance) > 1e-9 {
+		t.Errorf("target projects to %v at depth %.1f", q, d)
+	}
+	front, df := chase.project(legview.Point3{Y: 200})
+	rear, dr := chase.project(legview.Point3{Y: -200})
+	if front.Y <= rear.Y || df <= dr {
+		t.Errorf("front %v at %.0f, rear %v at %.0f: want the front higher and farther", front, df, rear, dr)
+	}
+	if right, _ := chase.project(legview.Point3{X: 200}); right.X <= 0 {
+		t.Errorf("the robot's right projects to %v", right)
+	}
+	lo, hi := reachBox()
+	for _, x := range []float64{lo.X, hi.X} {
+		for _, y := range []float64{lo.Y, hi.Y} {
+			for _, z := range []float64{lo.Z, hi.Z} {
+				if _, d := chase.project(legview.Point3{X: x, Y: y, Z: z}); d <= 0 {
+					t.Errorf("corner (%.0f, %.0f, %.0f) behind the camera", x, y, z)
+				}
+			}
+		}
 	}
 }

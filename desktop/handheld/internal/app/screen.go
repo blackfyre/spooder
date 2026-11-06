@@ -24,9 +24,12 @@ type Robot struct {
 	// Source is the robot's source in control (session.Source names): a
 	// fault clear counts only from it.
 	Source string
+	// Simulated is the robot's bench simulation flag: it models its servos
+	// and supply, and no servo moves.
+	Simulated bool
 }
 
-// Pose is the robot's legs from the shown pose frame, for the top view.
+// Pose is the robot's legs from the shown pose frame, for the driving view.
 type Pose struct {
 	Have  bool // a pose frame has been taken
 	Stale bool // none has arrived for StaleAfter (or none yet)
@@ -70,8 +73,8 @@ type Screen struct {
 	// hold's progress towards its fault clear (0 to 1).
 	Held     padmap.Buttons
 	Clearing float64
-	// TopView shows the top view in place of the panels (Select + X).
-	TopView bool
+	// DriveView shows the driving view in place of the panels (Select + X).
+	DriveView bool
 }
 
 func strideName(s padmap.StrideMode) string {
@@ -93,7 +96,7 @@ func (a *App) Screen(now time.Time) Screen {
 	st := a.link.Status(now)
 	a.mu.Lock()
 	d, estop := a.desired, a.hand.EmergencyStop()
-	sc := Screen{State: a.state, Notice: a.notice, Held: a.hand.Held(), TopView: a.hand.TopView()}
+	sc := Screen{State: a.state, Notice: a.notice, Held: a.hand.Held(), DriveView: a.hand.DriveView()}
 	if a.begun {
 		sc.Clearing = a.hand.ClearProgress(a.ms(now))
 	}
@@ -124,6 +127,7 @@ func (a *App) Screen(now time.Time) Screen {
 		sc.Robot.Gesture = session.GestureName(t.Gesture)
 		sc.Robot.VoltageMv, sc.Robot.CurrentMa = t.VoltageMv, t.CurrentMa
 		sc.Robot.Source = session.SourceFrom(t.Flags).String()
+		sc.Robot.Simulated = t.Flags&protocol.TelemetrySimulated != 0
 	}
 
 	pose := st.Shown[protocol.TypePose]

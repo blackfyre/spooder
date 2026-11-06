@@ -72,19 +72,26 @@ var screenshotCases = []struct {
 		State:     app.Leaving,
 		Leave:     app.ActionExit,
 	}},
-	{"topview", app.Screen{
+	{"driveview", app.Screen{
 		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, Faults: []string{"undervoltage"}, VoltageMv: 7840, CurrentMa: 3420, Source: "bridge"},
 		Pose:      walkingPose(),
 		Requested: app.Requested{Mode: "Walk", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 40 * time.Millisecond, SignalKnown: true, SignalDBm: -33, Sent: 18250},
 		State:     app.Driving,
 		Held:      padmap.HandSelect | padmap.HandX,
-		TopView:   true,
+		DriveView: true,
 	}},
-	{"topview-nopose", app.Screen{
+	{"driveview-nopose", app.Screen{
 		Requested: app.Requested{Mode: "Sleep", Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
 		State:     app.Driving,
-		TopView:   true,
+		DriveView: true,
+	}},
+	{"simulation", app.Screen{
+		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, VoltageMv: 6000, CurrentMa: 2160, Source: "bridge", Simulated: true},
+		Pose:      walkingPose(),
+		Requested: app.Requested{Mode: "Walk", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
+		Link:      app.LinkView{Telemetry: 10, Pose: 10, Diagnostics: 10, HaveFrame: true, SinceLast: 40 * time.Millisecond, SignalKnown: true, SignalDBm: -33, Sent: 18250},
+		State:     app.Driving,
 	}},
 	{"waiting", app.Screen{
 		Requested: app.Requested{Mode: "Sleep", Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},

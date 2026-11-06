@@ -10,7 +10,7 @@ Board facts the design relies on: the USER button is GPIO23 (`servo2040::USER_SW
 
 **Goals:** the smallest firmware mode that makes the real board drivable on the bench with no servo supply, with the no-pulse invariant held at the board boundary and host-tested, and the mode visible to every viewer on main.
 
-**Non-goals:** simulation in the virtual robot; persisting the mode; entering simulation from a link frame or the console; simulating sensors; a protocol version change; the handheld pak's and the setup portal's SIM indication (follow-ups below).
+**Non-goals:** simulation in the virtual robot; persisting the mode; entering simulation from a link frame or the console; simulating sensors; a protocol version change; the setup portal's SIM indication (a follow-up below); the handheld pak's is in `add-handheld-controller`.
 
 ## Decisions
 
@@ -109,7 +109,7 @@ Simulation is in both robot builds (links and `--serial`): the board boundary an
 - [A fault in the voltage sense reads 0 V with a supply connected] → Simulation could then be entered on a powered robot. The forced-off output still holds; the supply fault would not latch. Accepted: entry also needs a deliberate button edge in the first 3 s and a USB host, and `forceOff` does not depend on the sense.
 - [TinyUSB may report a host disconnect as unmount or as suspend, or a charger may enumerate] → Only the entry gate depends on it, and simulation ignores USB after entry whichever is reported; the bench check (task 7.4) records the RP2040's behaviour; a mistaken "attached" only allows entry, never pulses. The board is powered from USB in simulation, so a physical unplug powers it off and the next start is live: the bench check disconnects the host logically (deauthorising the device, suspending it) instead.
 - [The window blink on LED 5 hides the source indication for 3 s at start-up] → The source is rarely settled in the first 3 s; accepted.
-- [`outputsOn` reports on while nothing moves] → The SIM indication on both viewers on main; the handheld pak follow-up must add its own before it ships.
+- [`outputsOn` reports on while nothing moves] → The SIM indication on both viewers on main; the handheld pak shows its own (`add-handheld-controller`).
 - [Boards that boot with the button held enter BOOTSEL] → The documented gesture is press after the LEDs show the window.
 
 ## Migration Plan
@@ -139,7 +139,6 @@ Flash the robot; the bridge and desktop can follow in any order (older ones show
 
 ## Follow-ups
 
-- The handheld pak's SIM indication (`desktop/handheld`, on `deliver/add-handheld-controller`).
 - The setup portal's SIM indication and fault name (it shows `Out on` and `0x40`).
 - A simulation column in the desktop's CSV export.
 - A SIM page in `tools/bridge-screenshots`.

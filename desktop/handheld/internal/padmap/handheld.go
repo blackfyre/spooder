@@ -60,7 +60,7 @@ func ScaleAxis(v int16) int32 {
 type Handheld struct {
 	mapper     Mapper
 	estop      bool
-	topView    bool // Select + X: the drive screen's top-view page
+	driveView  bool // Select + X: the drive screen's driving-view page
 	neutral    bool
 	maskHeld   bool    // mask every control held at the next Step
 	prev       Buttons // the controls held at the last Step
@@ -112,9 +112,9 @@ func (h *Handheld) SetNeutral(on bool) {
 // EmergencyStop is the handheld's e-stop toggle (Select + Start).
 func (h *Handheld) EmergencyStop() bool { return h.estop }
 
-// TopView is the drive screen's page toggle (Select + X): the top view in
+// DriveView is the drive screen's page toggle (Select + X): the driving view in
 // place of the panels. It never reaches the mapping.
-func (h *Handheld) TopView() bool { return h.topView }
+func (h *Handheld) DriveView() bool { return h.driveView }
 
 // Held is the controls held at the last Step, the triggers beyond half
 // travel included.
@@ -161,7 +161,7 @@ func (h *Handheld) Step(c Controls, nowMs uint32) Desired {
 		h.masked |= HandStart
 	}
 	if selectHeld && pressed&HandX != 0 {
-		h.topView = !h.topView
+		h.driveView = !h.driveView
 		h.masked |= HandX
 	}
 	if selectHeld && pressed&HandY != 0 {

@@ -316,15 +316,16 @@ The pak's output goes to `Spooder.txt` in NextUI's logs folder (`$LOGS_PATH`) wh
 | `L2` beyond half travel + `A` / `B` / `X` / `Y` / `R2` | Gesture: say hi / wiggle / dance / attack / ball, from a settled Stand (dance, attack and ball are not scripted yet) |
 | `Select` + `Start` | Toggle the emergency stop (no mode change) |
 | `Select` + `Y` held 1 s | Clear faults (once per hold) |
+| `Select` + `X` | Switch the drive screen between its panels and the driving view (nothing sent changes) |
 | `Menu` | Leave the pak |
 | `Power` short / held 2 s | Suspend / power off, after the Sleep request and wait below |
 
-- `Select` alone does nothing. A `Start` or `Y` pressed with `Select` does nothing more until it is released, whichever button is released first. There is no Calibrate.
+- `Select` alone does nothing. A `Start`, `X` or `Y` pressed with `Select` does nothing more until it is released, whichever button is released first. There is no Calibrate.
 - The e-stop toggles like the bridge's GPIO35 button: releasing it leaves the emergency-stop fault latched; hold `Select` + `Y` for 1 s to clear it, then make a new mode request.
 
 **Leaving:** `Menu`, a short `Power` press or a 2 s hold first request Sleep, keep sending, and show `Leaving (...)` on the drive screen until two newer telemetry frames in a row report Sleep or output off, or 3 s pass; only then does the pak exit, suspend or power off. While it waits, only `Select` + `Start` changes what it sends, and a second press is ignored. After a resume it is back on the drive screen with Sleep requested. If the pak dies without leaving, the bridge's 150 ms lapse makes the robot sleep.
 
-**Drive screen:** left, the robot from its telemetry (body, gait, output, faults by name, gesture, supply voltage and current; `ROBOT (stale)` after 500 ms without telemetry) and the leave banner or a notice; right, what the pak requests (mode, height and speed, gait, stride, stick mode, e-stop) and the link: the signal on `wlan0`, telemetry, pose and diagnostics frames per second, invalid datagrams, lost and late frames by the robot's sequence numbers, and the time since the last frame. There is no round-trip time: the bridge echoes nothing.
+**Drive screen:** left, the robot from its telemetry (body, gait, output, faults by name, gesture, supply voltage and current; `ROBOT (stale)` after 500 ms without telemetry) and the leave banner or a notice; right, what the pak requests (mode, height and speed, gait, stride, stick mode, e-stop) and the link: the signal on `wlan0`, telemetry, pose and diagnostics frames per second, invalid datagrams, lost and late frames by the robot's sequence numbers, and the time since the last frame. There is no round-trip time: the bridge echoes nothing. `Select` + `X` shows the driving view in the panels' place: the robot from its pose frames as a chase camera behind it sees it, 45° down in perspective over a ground grid at the lowest foot (muted when output is off or the pose is stale, `DRIVING VIEW · STALE` after 500 ms without a pose frame), with the body, gait, output, supply and faults beside it. In bench simulation a `SIM` chip leads the header on both pages and the output reads `OUTPUT SIM` (`On (sim)` beside the driving view).
 
 **On-device checks** (task 7.1 of `add-handheld-controller`): bridge in WiFi drive, robot board on USB power with no servos.
 

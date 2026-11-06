@@ -416,7 +416,21 @@ func TestScreenStaleAndFaults(t *testing.T) {
 	}
 }
 
-// The top view's legs come from the shown pose frame: a leg with a pulse
+// The robot's bench simulation flag reaches the screen, and only when set.
+func TestScreenSimulated(t *testing.T) {
+	r := newRig(t)
+	for i, flags := range []uint8{protocol.TelemetrySimulated | protocol.TelemetryBridgeInControl, protocol.TelemetryBridgeInControl} {
+		b := protocol.EncodeTelemetry(protocol.Telemetry{BodyMode: uint8(session.BodyWalk), OutputsOn: true, Flags: flags}, uint8(3+i))
+		if _, ok := r.link.rx.Datagram(b, r.now); !ok {
+			t.Fatal("telemetry refused")
+		}
+		if sc := r.a.Screen(r.now); sc.Robot.Simulated != (i == 0) {
+			t.Fatalf("flags 0x%02x: simulated %v", flags, sc.Robot.Simulated)
+		}
+	}
+}
+
+// The driving view's legs come from the shown pose frame: a leg with a pulse
 // set is placed, one never set is not, and the pose goes stale as telemetry
 // does.
 func TestScreenPose(t *testing.T) {
