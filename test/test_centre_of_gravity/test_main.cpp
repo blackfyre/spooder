@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "movement/body.h"
+#include "movement/body_geometry.h"
 #include "movement/centre_of_gravity.h"
 #include "movement/kinematics.h"
 
@@ -135,6 +136,34 @@ void test_hull_drops_inner_feet_and_signs_the_margin()
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 100, margin);
   TEST_ASSERT_TRUE(supportMargin(feet, Vector3(130, 0, 0), margin));
   TEST_ASSERT_FLOAT_WITHIN(0.001f, -30, margin);
+}
+
+// The underside is grounded once no foot lies more than UNDERSIDE_CONTACT_MM
+// below it: standing feet carry the body, folded ones leave it on the frame.
+void test_underside_is_grounded_only_when_no_foot_lies_below_it()
+{
+  const float U = body_geometry::UNDERSIDE_Z;
+  Vector3 feet[LEG_COUNT];
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+    feet[leg] = Vector3(150, 0, -60); // standing at body height 0
+  TEST_ASSERT_FALSE(undersideGrounded(feet));
+  // Lowered until the underside is 3 mm above the ground: still on the feet.
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+    feet[leg].z = U - 3;
+  TEST_ASSERT_FALSE(undersideGrounded(feet));
+  // One foot still down holds the underside off the ground.
+  for (int leg = 1; leg < LEG_COUNT; leg++)
+    feet[leg].z = U + 40;
+  feet[0].z = U - UNDERSIDE_CONTACT_MM - 0.1f;
+  TEST_ASSERT_FALSE(undersideGrounded(feet));
+  // Within the contact tolerance, and level with it: on the frame.
+  feet[0].z = U - UNDERSIDE_CONTACT_MM + 0.1f;
+  TEST_ASSERT_TRUE(undersideGrounded(feet));
+  feet[0].z = U;
+  TEST_ASSERT_TRUE(undersideGrounded(feet));
+  // Every foot folded up above it.
+  feet[0].z = U + 40;
+  TEST_ASSERT_TRUE(undersideGrounded(feet));
 }
 
 // --- golden vectors -----------------------------------------------------------
@@ -267,6 +296,7 @@ int main()
   RUN_TEST(test_battery_adds_its_mass_towards_its_position);
   RUN_TEST(test_fewer_than_three_feet_give_no_margin);
   RUN_TEST(test_hull_drops_inner_feet_and_signs_the_margin);
+  RUN_TEST(test_underside_is_grounded_only_when_no_foot_lies_below_it);
   RUN_TEST(test_golden_vectors);
   return UNITY_END();
 }

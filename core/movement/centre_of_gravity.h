@@ -35,6 +35,10 @@ const Vector3 BATTERY_AT(0, 0, 0);
 // A foot higher than this above the lowest foot is off the ground.
 constexpr float CONTACT_MM = 10;
 
+// The underside (body_geometry::UNDERSIDE_Z) is on the ground when it lies no
+// higher than this above the lowest foot.
+constexpr float UNDERSIDE_CONTACT_MM = 1;
+
 // A leg's joints in the body frame: coxa pivot, coxa end (femur joint), knee
 // and foot.
 struct LegPoints
@@ -77,6 +81,14 @@ bool supportMargin(const Vector3 feet[LEG_COUNT], Vector3 point, float &margin);
  * @return its corner count; 0 with fewer than three feet on the ground.
  */
 int supportHull(const Vector3 feet[LEG_COUNT], Vector2 hull[LEG_COUNT]);
+
+/**
+ * @brief Whether the level body rests on its underside: no foot (body frame)
+ * lies more than UNDERSIDE_CONTACT_MM below body_geometry::UNDERSIDE_Z, so
+ * the frame, not the feet, carries the body (add-gestures design D3). The
+ * frame touches the ground under the coxa pivots (body_geometry::PIVOTS).
+ */
+bool undersideGrounded(const Vector3 feet[LEG_COUNT]);
 
 } // namespace centre_of_gravity
 

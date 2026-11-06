@@ -207,18 +207,33 @@ var bodyGeometryPath = filepath.Join("..", "..", "..", "test", "golden", "body_g
 
 // The mounts are the C++ body geometry's: the pivots to the golden file's
 // hundredth of a millimetre (z = 0, the body frame's pivot plane) and the
-// angles to its ten-thousandth of a degree, the same angle modulo 360°.
+// angles to its ten-thousandth of a degree, the same angle modulo 360°; the
+// file's underside line parses.
 func TestMountsMatchTheBodyGeometry(t *testing.T) {
 	data, err := os.ReadFile(bodyGeometryPath)
 	if err != nil {
 		t.Fatalf("golden body geometry: %v", err)
 	}
 	seen := 0
+	underside := false
 	for line, text := range strings.Split(string(data), "\n") {
 		if text == "" || strings.HasPrefix(text, "#") {
 			continue
 		}
 		parts := strings.Split(text, " ")
+		if parts[0] == "underside" {
+			// The body's underside (body_geometry::UNDERSIDE_Z): nothing
+			// draws it yet; it must be one value below the pivots' plane.
+			if len(parts) != 2 || underside {
+				t.Fatalf("line %d: %q", line+1, text)
+			}
+			z, err := strconv.ParseFloat(parts[1], 64)
+			if err != nil || !(z < 0) {
+				t.Fatalf("line %d: underside %q, want a height below the pivots", line+1, parts[1])
+			}
+			underside = true
+			continue
+		}
 		if len(parts) != 5 {
 			t.Fatalf("line %d: %q", line+1, text)
 		}
@@ -243,5 +258,8 @@ func TestMountsMatchTheBodyGeometry(t *testing.T) {
 	}
 	if seen != Legs {
 		t.Fatalf("%d legs in the golden file, want %d", seen, Legs)
+	}
+	if !underside {
+		t.Fatal("no underside in the golden file")
 	}
 }

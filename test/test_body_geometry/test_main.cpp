@@ -1,5 +1,6 @@
-// The body geometry: each leg's coxa pivot and mount angle, compared with
-// test/golden/body_geometry.txt, which the Go leg view tests read
+// The body geometry: each leg's coxa pivot and mount angle, and the body's
+// underside, compared with test/golden/body_geometry.txt, which the Go leg
+// view tests read
 // (desktop/internal/legview). After a deliberate geometry change, regenerate
 // the file with `SPOODER_WRITE_GOLDEN=1 mise run test` and review the diff.
 #include <unity.h>
@@ -27,6 +28,9 @@ static const char *const HEADER = "# Spooder body geometry: golden values.\n"
                                   "# The coxa pivot is in the body frame (x right, y forward, z up, millimetres,\n"
                                   "# origin at the frame's centre); the mount angle is the leg frame's x axis,\n"
                                   "# in degrees anticlockwise from +x.\n"
+                                  "# Then one line for the body's underside, its lowest point (body frame z,\n"
+                                  "# millimetres, below the pivots' z = 0):\n"
+                                  "#   underside <z>\n"
                                   "# Lines starting with # are comments.\n";
 
 struct Text
@@ -71,6 +75,14 @@ void test_pivots_lie_on_their_mount_angles()
   }
 }
 
+// The underside lies below the pivots, and below Frame Bottom's underside
+// (15.75 mm), since the coxa links under the pivots reach lower.
+void test_underside_lies_below_the_frame_bottom()
+{
+  TEST_ASSERT_TRUE(body_geometry::UNDERSIDE_Z < -15.75f);
+  TEST_ASSERT_TRUE(body_geometry::UNDERSIDE_Z > -60); // above the feet at body height 0
+}
+
 void test_golden_values()
 {
   static Text t;
@@ -78,6 +90,7 @@ void test_golden_values()
   add(t, "%s", HEADER);
   for (int leg = 0; leg < LEG_COUNT; leg++)
     add(t, "%d %.2f %.2f %.2f %.4f\n", leg, PIVOTS[leg].x, PIVOTS[leg].y, PIVOTS[leg].z, gait::mountAngleDeg(leg));
+  add(t, "underside %.2f\n", body_geometry::UNDERSIDE_Z);
 
   char path[512];
   goldenPath(path, sizeof(path));
@@ -103,6 +116,7 @@ int main()
 {
   UNITY_BEGIN();
   RUN_TEST(test_pivots_lie_on_their_mount_angles);
+  RUN_TEST(test_underside_lies_below_the_frame_bottom);
   RUN_TEST(test_golden_values);
   return UNITY_END();
 }

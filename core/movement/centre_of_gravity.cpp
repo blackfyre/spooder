@@ -132,4 +132,12 @@ bool supportMargin(const Vector3 feet[LEG_COUNT], Vector3 point, float &margin)
   return true;
 }
 
+bool undersideGrounded(const Vector3 feet[LEG_COUNT])
+{
+  float lowest = feet[0].z;
+  for (int i = 1; i < LEG_COUNT; i++)
+    lowest = fminf(lowest, feet[i].z);
+  return body_geometry::UNDERSIDE_Z <= lowest + UNDERSIDE_CONTACT_MM;
+}
+
 } // namespace centre_of_gravity
