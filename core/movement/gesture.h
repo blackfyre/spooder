@@ -69,7 +69,7 @@ struct Script
   int count;
   // A holding script stays at its last keyframe, in Perform, until another
   // request; that request first plays the unfold script, which ends at the
-  // stand pose (task 2.4, D1). Not used until then.
+  // stand pose (D1).
   bool holds = false;
   const Keyframe *unfold = nullptr;
   int unfoldCount = 0;
@@ -107,6 +107,8 @@ constexpr uint32_t RETURN_MS = 400; // each step of a stopped gesture's return
 enum class Stage : uint8_t
 {
   Keyframes, // the script, keyframe `index`
+  Holding,   // last keyframe, waiting for a stop request
+  Unfold,    // holding script: safe return through its unfold keyframes
   Plant,     // stopped: lifted feet down onto their planted spots, body as it is
   Straighten // stopped: the body back over its standing feet
 };
@@ -144,7 +146,9 @@ void start(Player &p, Gesture g, const Script &sequence, const Vector3 *feet, Ve
  * @brief Advances by @p dtMs, carrying time over segment boundaries, and
  * writes every leg's foot target to @p out. After a stop request, the
  * keyframe in progress completes, lifted feet come down, then the body
- * straightens over its standing feet. Sets done at the end.
+ * straightens over its standing feet. A holding script instead plays its
+ * unfold from the completed keyframe, including stops before the hold.
+ * Sets done only after the return; the hold itself never finishes.
  */
 void advance(Player &p, uint32_t dtMs, Vector3 standing, Vector3 *out);
 

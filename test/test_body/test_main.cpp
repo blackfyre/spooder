@@ -1248,9 +1248,102 @@ void test_height_change_during_a_gesture_waits_for_stand()
   TEST_ASSERT_FLOAT_WITHIN(1, groundForHeight(100), s.feet[0].z);
 }
 
+static MovementCommand holdBall(float height = 0)
+{
+  bootToStand();
+  MovementCommand c = command(RequestedMode::Stand);
+  c.height = height;
+  run(c, 6000);
+  c.gesture = (uint8_t)gesture::Gesture::Ball;
+  c.gestureSeq = 1;
+  run(c, 8000);
+  TEST_ASSERT_TRUE(s.mode == Mode::Perform);
+  TEST_ASSERT_TRUE(s.perform.stage == gesture::Stage::Holding);
+  Vector3 held = s.feet[0];
+  run(c, 500);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0, held.distanceTo(s.feet[0]));
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)gesture::Gesture::Ball, playingGesture(s));
+  return c;
+}
+
+void test_leaving_ball_unfolds_before_walk_stand_or_gesture()
+{
+  for (int request = 0; request < 3; request++)
+  {
+    MovementCommand c = holdBall();
+    if (request == 0)
+      c.mode = RequestedMode::Walk;
+    else if (request == 1)
+      c.modeRequestSeq++;
+    else
+    {
+      c.gesture = (uint8_t)gesture::Gesture::SayHi;
+      c.gestureSeq++;
+    }
+    run(c, 20);
+    TEST_ASSERT_TRUE(s.mode == Mode::Perform);
+    TEST_ASSERT_TRUE(s.perform.stage == gesture::Stage::Unfold);
+    for (int n = 0; n < 500 && s.mode == Mode::Perform; n++)
+    {
+      TEST_ASSERT_EQUAL_UINT8((uint8_t)gesture::Gesture::Ball, playingGesture(s));
+      run(c, 20);
+    }
+    run(c, 100);
+    TEST_ASSERT_TRUE(s.perform.done);
+    TEST_ASSERT_TRUE(s.mode == (request == 0 ? Mode::Walk : Mode::Stand));
+    TEST_ASSERT_EQUAL_UINT8(0, playingGesture(s));
+  }
+}
+
+void test_sleep_and_stale_preempt_ball_without_unfolding()
+{
+  for (float height : {0.0f, 100.0f})
+    for (bool stale : {false, true})
+    {
+      MovementCommand c = holdBall(height);
+      // Sleep follows the straight segment to REST_POSE with exponential
+      // easing. Check that entire raw path, before solveLegInRange can fit it.
+      for (int leg = 0; leg < LEG_COUNT; leg++)
+        for (int sample = 0; sample <= 1000; sample++)
+        {
+          Vector3 target = interpolate(s.feet[leg], REST_POSE, sample / 1000.0f);
+          JointAngles raw;
+          TEST_ASSERT_TRUE(kinematics::isValidTarget(target));
+          TEST_ASSERT_TRUE(kinematics::solveLeg(target, s.offsets[leg], raw));
+          TEST_ASSERT_TRUE(inTravel(raw));
+        }
+      if (!stale)
+        c.mode = RequestedMode::Sleep;
+      else
+        c.issuedAtMs = now - COMMAND_TIMEOUT_MS - 1;
+      for (int n = 0; n < 1500 && s.outputsEnabled; n++)
+      {
+        now += 5;
+        if (!stale)
+          c.issuedAtMs = now;
+        step(s, c, now);
+        if (n >= 3)
+          TEST_ASSERT_TRUE(s.mode == Mode::Sleep);
+        TEST_ASSERT_TRUE(s.perform.stage == gesture::Stage::Holding);
+        for (int leg = 0; leg < LEG_COUNT; leg++)
+        {
+          TEST_ASSERT_FALSE(s.rejected[leg]);
+          TEST_ASSERT_TRUE(kinematics::isValidTarget(s.feet[leg]));
+          JointAngles raw;
+          TEST_ASSERT_TRUE(kinematics::solveLeg(s.feet[leg], s.offsets[leg], raw));
+          TEST_ASSERT_TRUE(inTravel(raw));
+        }
+      }
+      TEST_ASSERT_FALSE(s.outputsEnabled);
+      TEST_ASSERT_EQUAL_UINT8(0, playingGesture(s));
+    }
+}
+
 int main()
 {
   UNITY_BEGIN();
+  RUN_TEST(test_leaving_ball_unfolds_before_walk_stand_or_gesture);
+  RUN_TEST(test_sleep_and_stale_preempt_ball_without_unfolding);
   RUN_TEST(test_clamp_command_ranges);
   RUN_TEST(test_clamp_command_non_finite_values);
   RUN_TEST(test_boot_initialises_then_stands);
