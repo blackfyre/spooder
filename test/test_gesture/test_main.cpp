@@ -1,5 +1,6 @@
 #include <unity.h>
 #include <math.h>
+#include <stdio.h>
 #include "movement/body_geometry.h"
 #include "movement/centre_of_gravity.h"
 #include "movement/gait.h"
@@ -12,7 +13,7 @@ using namespace gesture;
 void setUp() {}
 void tearDown() {}
 
-static const gesture::Gesture AVAILABLE[] = {Gesture::SayHi, Gesture::Wiggle};
+static const gesture::Gesture AVAILABLE[] = {Gesture::SayHi, Gesture::Wiggle, Gesture::Attack};
 // Feet at body height 0 and 100 (body::groundForHeight).
 static const float GROUNDS[] = {-60, -230};
 
@@ -79,9 +80,9 @@ void test_only_scripted_gestures_are_available()
   TEST_ASSERT_FALSE(available(0));
   TEST_ASSERT_TRUE(available((uint8_t)Gesture::SayHi));
   TEST_ASSERT_TRUE(available((uint8_t)Gesture::Wiggle));
-  // Part two: they need the measured body geometry.
+  // Dance does not have a script yet.
   TEST_ASSERT_FALSE(available((uint8_t)Gesture::Dance));
-  TEST_ASSERT_FALSE(available((uint8_t)Gesture::Attack));
+  TEST_ASSERT_TRUE(available((uint8_t)Gesture::Attack));
   TEST_ASSERT_TRUE(available((uint8_t)Gesture::Ball));
   TEST_ASSERT_FALSE(available(GESTURE_ID_COUNT));
   TEST_ASSERT_FALSE(available(255));
@@ -120,7 +121,10 @@ void test_every_pose_is_reachable_and_within_servo_range()
         for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
         {
           TEST_ASSERT_TRUE_MESSAGE(kinematics::isValidTarget(feet[leg]), "unreachable gesture target");
-          TEST_ASSERT_TRUE_MESSAGE(withinServoRange(leg, feet[leg]), "joint outside its servo range");
+          char detail[160];
+          snprintf(detail, sizeof(detail), "gesture %d ground %.0f frame %d leg %d foot %.2f %.2f %.2f outside travel",
+                   (int)g, (double)ground, p.index, leg, (double)feet[leg].x, (double)feet[leg].y, (double)feet[leg].z);
+          TEST_ASSERT_TRUE_MESSAGE(withinServoRange(leg, feet[leg]), detail);
         }
       }
       TEST_ASSERT_TRUE(p.done);
@@ -179,6 +183,8 @@ void test_lifted_legs_keep_the_body_over_its_support()
     for (float ground : GROUNDS)
       for (uint32_t stopAt : STOPS)
       {
+        if (g == Gesture::Attack)
+          continue; // pitched support is checked in world coordinates below
         Vector3 standing = standingAt(ground);
         Vector3 feet[kinematics::LEG_COUNT];
         for (int i = 0; i < kinematics::LEG_COUNT; i++)
@@ -214,13 +220,18 @@ static uint32_t playChecked(Gesture g, float ground, uint32_t stepMs, uint32_t s
       p.stopRequested = true;
     for (int i = 0; i < kinematics::LEG_COUNT; i++)
       before[i] = feet[i];
+    float limit = MAX_FOOT_SPEED_MM_S;
+    if (p.stage == Stage::Keyframes)
+      limit = fmaxf(limit, p.sequence.frames[p.index].maxFootSpeedMmS);
     advance(p, stepMs, standing, feet);
+    if (!p.done && p.stage == Stage::Keyframes)
+      limit = fmaxf(limit, p.sequence.frames[p.index].maxFootSpeedMmS);
     t += stepMs;
     for (int i = 0; i < kinematics::LEG_COUNT; i++)
     {
       float speed = feet[i].distanceTo(before[i]) / (stepMs / 1000.0f);
       // A step that crosses a segment end sees a little more than the peak.
-      TEST_ASSERT_TRUE_MESSAGE(speed <= MAX_FOOT_SPEED_MM_S * 1.1f, "foot faster than the gesture limit");
+      TEST_ASSERT_TRUE_MESSAGE(speed <= limit * 1.1f, "foot faster than the gesture limit");
     }
   }
   TEST_ASSERT_TRUE(p.done);
@@ -359,6 +370,70 @@ static Vector3 worldFoot(int leg, Vector3 foot, const Pose &pose)
   v = Vector3(v.x, cosf(p) * v.y - sinf(p) * v.z, sinf(p) * v.y + cosf(p) * v.z);
   v = Vector3(cosf(y) * v.x - sinf(y) * v.y, sinf(y) * v.x + cosf(y) * v.y, v.z);
   return v + pose.translation;
+}
+
+// Check support in the world frame: pitching makes planted leg-frame z
+// coordinates differ, so selecting contacts there would discard planted feet.
+void test_attack_keeps_four_feet_planted_and_supports_body_and_gravity()
+{
+  Script attack = script(Gesture::Attack);
+  for (float ground : GROUNDS)
+    for (int stopFrame = -1; stopFrame < attack.count; stopFrame++)
+    {
+      Vector3 standing = standingAt(ground), feet[LEG_COUNT];
+      for (auto &foot : feet)
+        foot = standing;
+      Player p;
+      start(p, Gesture::Attack, feet, standing);
+      bool fourContacts = false;
+      for (int n = 0; n < 12000 && !p.done; n++)
+      {
+        if (p.stage == Stage::Keyframes && p.index == stopFrame)
+          p.stopRequested = true;
+        advance(p, 5, standing, feet);
+        Pose end = p.done                        ? Pose{}
+                   : p.stage == Stage::Keyframes ? attack.frames[p.index].pose
+                   : p.stage == Stage::Plant     ? p.pose
+                                                 : Pose{};
+        float t = p.done ? 1 : ease((float)p.elapsedMs / p.durationMs);
+        Pose pose = {interpolate(p.pose.translation, end.translation, t), 0,
+                     p.pose.pitchDeg + (end.pitchDeg - p.pose.pitchDeg) * t, 0};
+        Vector3 world[LEG_COUNT];
+        kinematics::JointAngles angles[LEG_COUNT];
+        int contacts = 0;
+        for (int leg = 0; leg < LEG_COUNT; leg++)
+        {
+          TEST_ASSERT_TRUE(kinematics::isValidTarget(feet[leg]));
+          TEST_ASSERT_TRUE(withinServoRange(leg, feet[leg]));
+          world[leg] = worldFoot(leg, feet[leg], pose);
+          contacts += world[leg].z <= ground + centre_of_gravity::CONTACT_MM;
+          if (leg != 0 && leg != 5)
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 0, world[leg].distanceTo(worldFoot(leg, standing, {})));
+          TEST_ASSERT_TRUE(kinematics::solveLeg(feet[leg], {}, angles[leg]));
+        }
+        fourContacts |= contacts == 4;
+        // Transform a body-frame point with the same independent forward
+        // transform as worldFoot (undo its leg-to-body part first).
+        auto inWorld = [&](Vector3 point)
+        {
+          Vector2 x = legX(0), y = legY(0);
+          Vector3 v = point - body_geometry::PIVOTS[0];
+          return worldFoot(0, Vector3(v.x * x.x + v.y * x.y, v.x * y.x + v.y * y.y, v.z), pose);
+        };
+        float margin;
+        TEST_ASSERT_TRUE(centre_of_gravity::supportMargin(world, inWorld({}), margin));
+        TEST_ASSERT_TRUE_MESSAGE(margin >= 20, "attack body support margin below 20 mm");
+        for (int battery = 0; battery < 2; battery++)
+        {
+          TEST_ASSERT_TRUE(centre_of_gravity::supportMargin(
+              world, inWorld(centre_of_gravity::estimate(angles, battery).centre), margin));
+          TEST_ASSERT_TRUE_MESSAGE(margin >= 20, "attack gravity support margin below 20 mm");
+        }
+      }
+      TEST_ASSERT_TRUE(p.done);
+      if (stopFrame == -1)
+        TEST_ASSERT_TRUE(fourContacts);
+    }
 }
 
 void test_pose_keeps_planted_feet_fixed_through_rotation_and_stop()
@@ -503,6 +578,7 @@ void test_rotation_rate_limit_uses_the_path_and_keyframe_speed()
 int main()
 {
   UNITY_BEGIN();
+  RUN_TEST(test_attack_keeps_four_feet_planted_and_supports_body_and_gravity);
   RUN_TEST(test_pose_keeps_planted_feet_fixed_through_rotation_and_stop);
   RUN_TEST(test_explicit_foot_targets_follow_straight_segments);
   RUN_TEST(test_zero_rotation_matches_translation_for_every_leg);

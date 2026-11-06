@@ -985,6 +985,47 @@ void test_transitions_and_gestures_stay_within_the_budget()
   }
 }
 
+void test_attack_strikes_stay_within_the_selected_joint_budget()
+{
+  for (float height : {0.0f, 100.0f})
+  {
+    bootToStand();
+    s.jointBudgetDegPerS = servo_profile::SELECTED.budgetDegPerS();
+    MovementCommand c = command(RequestedMode::Stand);
+    c.height = height;
+    run(c, 6000);
+    c.gesture = (uint8_t)gesture::Gesture::Attack;
+    c.gestureSeq = 1;
+    uint32_t strikeStarted = 0, strikes = 0;
+    bool started = false;
+    for (int n = 0; n < 3000; n++)
+    {
+      bool striking = s.mode == Mode::Perform && s.perform.stage == gesture::Stage::Keyframes &&
+                      s.perform.sequence.frames[s.perform.index].maxFootSpeedMmS > gesture::MAX_FOOT_SPEED_MM_S;
+      if (striking && strikeStarted == 0)
+        strikeStarted = now;
+      TEST_ASSERT_TRUE(fastestJoint(c, 20) <= s.jointBudgetDegPerS * BUDGET_TOLERANCE);
+      bool stillStriking = s.mode == Mode::Perform && s.perform.stage == gesture::Stage::Keyframes &&
+                           s.perform.sequence.frames[s.perform.index].maxFootSpeedMmS > gesture::MAX_FOOT_SPEED_MM_S;
+      if (strikeStarted && !stillStriking)
+      {
+        char message[120];
+        snprintf(message, sizeof(message), "Attack strike %lu at height %.0f: %lu ms under %.1f deg/s budget",
+                 (unsigned long)++strikes, (double)height, (unsigned long)(now - strikeStarted),
+                 (double)s.jointBudgetDegPerS);
+        TEST_MESSAGE(message);
+        strikeStarted = 0;
+      }
+      started |= s.mode == Mode::Perform;
+      if (started && s.mode == Mode::Stand)
+        break;
+    }
+    TEST_ASSERT_TRUE(started);
+    TEST_ASSERT_TRUE(s.mode == Mode::Stand);
+    TEST_ASSERT_EQUAL_UINT32(2, strikes);
+  }
+}
+
 void test_a_tick_without_a_whole_piece_moves_nothing()
 {
   // 10 ms ticks under the budget: every other tick has no whole 20 ms piece.
@@ -1363,6 +1404,7 @@ int main()
   RUN_TEST(test_initialise_is_not_slowed);
   RUN_TEST(test_paths_are_kept_under_the_budget);
   RUN_TEST(test_transitions_and_gestures_stay_within_the_budget);
+  RUN_TEST(test_attack_strikes_stay_within_the_selected_joint_budget);
   RUN_TEST(test_every_pose_stays_within_servo_travel);
   RUN_TEST(test_sleep_folds_with_the_rest_pose_out_of_travel);
   RUN_TEST(test_a_tick_without_a_whole_piece_moves_nothing);

@@ -38,6 +38,20 @@ static const Keyframe WIGGLE[] = {
     {400, {Vector3()}, {}},
 };
 
+// Attack: brace on the middle and rear four, raise the front pair near
+// the right femur's travel, strike forward and down twice, then plant.
+// The strike's foot limit is raised; body::step still governs joint speed.
+static const Pose ATTACK_BRACE = {Vector3(0, -40, -15), 0, 4, 0};
+static const Keyframe ATTACK[] = {
+    {450, ATTACK_BRACE, {}},
+    {450, ATTACK_BRACE, {{0, Vector3(210, 0, 75)}, {5, Vector3(210, 0, 75)}}},
+    {180, ATTACK_BRACE, {{0, Vector3(240, 35, -30)}, {5, Vector3(240, -35, -30)}}, 900},
+    {400, ATTACK_BRACE, {{0, Vector3(210, 0, 75)}, {5, Vector3(210, 0, 75)}}},
+    {180, ATTACK_BRACE, {{0, Vector3(240, 35, -30)}, {5, Vector3(240, -35, -30)}}, 900},
+    {450, ATTACK_BRACE, {}},
+    {450, {}, {}},
+};
+
 // Provisional lowering only: task 2.5 replaces this with the underside-derived
 // ground clearance. All rotations stay zero while task 2.2 runs separately.
 constexpr float BALL_PROVISIONAL_LOWERING_MM = 10;
@@ -63,11 +77,11 @@ Script script(Gesture g)
     return {SAY_HI, (int)(sizeof(SAY_HI) / sizeof(SAY_HI[0]))};
   case Gesture::Wiggle:
     return {WIGGLE, (int)(sizeof(WIGGLE) / sizeof(WIGGLE[0]))};
+  case Gesture::Attack:
+    return {ATTACK, (int)(sizeof(ATTACK) / sizeof(ATTACK[0]))};
   case Gesture::Ball:
     return {BALL, 2, true, BALL_UNFOLD, 2};
   default:
-    // Dance and attack need the measured body geometry
-    // (add-gestures part two).
     return {nullptr, 0};
   }
 }
