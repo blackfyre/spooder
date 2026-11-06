@@ -4,14 +4,14 @@
 
 > A shameless iteration over [Aecert's Hexapod V1](https://github.com/Ryan-Mirch/Aecerts_Hexapod_V1).
 
-Spooder is the firmware and tooling for a six-legged, eighteen-servo walking robot. The movement code (inverse kinematics, Bézier foot paths, the gait table) comes from Aecert's design. The rest is new: other boards, a power-protection layer, a gamepad bridge, live calibration, and a desktop calibrator that rehearses everything against a virtual robot before the real one is powered.
+Spooder is the firmware and tooling for a six-legged, eighteen-servo walking robot. The movement code (inverse kinematics, Bézier foot paths, the gait table) comes from Aecert's design. The rest is new: other boards, a power-protection layer, a gamepad bridge, a WiFi handheld, live calibration, and a desktop calibrator that rehearses everything against a virtual robot before the real one is powered.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/images/calibrator-light.png">
   <img alt="The desktop calibrator in Calibrate: the joint table, with coxa offsets shown from the servo centre, and the legs pane drawing leg 1 and all six legs from above" src="docs/images/calibrator-dark.png">
 </picture>
 
-*The desktop calibrator, connected to the virtual robot.*
+*The desktop calibrator, connected to the virtual robot. More in [Screenshots](docs/screenshots.md).*
 
 ## How it fits together
 
@@ -30,7 +30,7 @@ flowchart LR
 - **The gamepad bridge**: a LilyGO TTGO T-Display v1.1 (ESP32), on ESP-IDF, Arduino and Bluepad32. It pairs a Bluetooth gamepad, sends commands to the robot every 20 ms, and shows the robot's status on its screen.
   - A latching switch from GPIO32 to ground selects the drive mode at boot: open (or not fitted) is **Bluetooth drive**, closed is **WiFi drive**, in which the bridge runs a WiFi access point (`spooder-drive-XXXX`) instead of Bluetooth and one handheld drives the robot with link-protocol command frames over UDP. The bridge keeps the link's safety rules for the handheld (150 ms liveness, its own fault-clear and request counters, one sender at a time) and relays the robot's frames back to it. `spooder-wifi-probe` on a laptop stands in for the handheld in the bench checks.
   - Hold the left button during the boot logo to enter **setup mode**, from either drive mode. The bridge then starts a WiFi access point (joined via a QR code on the screen) and a captive portal, through which a phone calibrates the robot. Bluetooth and WiFi never run together.
-- **The handheld controller**: a TrimUI Smart Pro running NextUI, with the tool pak `Spooder.pak` (Go, gabagool and SDL2, in `desktop/handheld/`). It drives the robot through WiFi drive with the gamepad's mapping, and shows the robot's state and the WiFi link's quality on its 1280×720 screen. Before it exits, suspends or powers off it requests Sleep and waits up to 3 s for telemetry to report Sleep or output off; if the pak stops sending without that, the bridge's 150 ms lapse makes the robot sleep.
+- **The handheld controller**: a TrimUI Smart Pro running NextUI, with the tool pak `Spooder.pak` (Go, gabagool and SDL2, in `desktop/handheld/`). It drives the robot through WiFi drive with the gamepad's mapping, and shows the robot's state, a chase-camera driving view and the WiFi link's quality on its 1280×720 screen. See [the handheld controller](docs/handheld.md).
 - **The desktop calibrator**: Go with a Gio UI, in the Blackfyre look. It speaks the same link protocol on the robot's USB port, to monitor, drive and calibrate it without the bridge.
 - **The virtual robot**: the robot's own control tick, compiled natively, behind a pseudo-terminal that behaves like the board's USB port. It runs the calibrator and the end-to-end tests without hardware.
 
@@ -38,174 +38,48 @@ flowchart LR
 
 - **Gaits**: tri, wave, ripple, bi, quad and hop, from the upstream gait table, with dynamic or fixed stride and adjustable height and speed.
 - **Power protection**: overcurrent, overload, brown-out, low and high voltage, and an emergency stop. Faults latch, and clearing one never restarts motion by itself: a new mode request must follow.
-- **Link protocol v3**: CRC-16 framed messages for commands (with gesture requests), telemetry, calibration sets and reports, the pose and the diagnostics; the robot sends the pose and the diagnostics on both links, and the bridge ignores them for now. It is pinned by golden vectors that the C++ and Go implementations both test against.
+- **Link protocol v3**: CRC-16 framed messages for commands (with gesture requests), telemetry, calibration sets and reports, the pose and the diagnostics; the robot sends the pose and the diagnostics on both links, and the bridge relays them to the handheld in WiFi drive. It is pinned by golden vectors that the C++ and Go implementations both test against.
 - **Live joint calibration**: per joint, an offset, the pulses for 0° and 180°, and the direction.
   - Changes are guarded (Calibrate only, offset within ±30° of the default, pulses 400–2600 µs) and rate-limited to 60°/s.
   - They are held in RAM, confirmed by the robot's reports, and exported as the compiled defaults.
   - Coxa offsets are shown from the servo centre.
-- **Bench simulation**: the real robot board driven end to end on USB alone, with no servo supply. Press the USER button while LED 6 blinks white in the first 3 s after start-up; the robot then runs gait, kinematics, telemetry and protection on a modelled supply and servos while its servo output stays forced off until restart. Telemetry flags it, and the calibrator and the bridge screen show `SIM`.
+- **Bench simulation**: the real robot board driven end to end on USB alone, with no servo supply, its servo output forced off until restart. The calibrator, the bridge screen and the handheld show `SIM`. See [Getting started](docs/getting-started.md#bench-simulation).
 - **Source arbitration**: the bridge or USB, whichever reports a connected controller. If both do, the robot sleeps.
 - **Rumble feedback**: the gamepad rumbles when a fault latches, the bridge's e-stop switches, the robot link drops or returns, or a gesture is refused.
 - **Gestures**: say hi and wiggle, from Stand: scripted, rate-limited moves that any other request, the e-stop or a fault interrupts. Dance, attack and ball follow once the body geometry is measured.
 - **Legs pane**: forward kinematics of the reported pose, each joint's pulse, rings at the servo limits, and a top view of all six legs.
 - **Four-view window**: the whole robot from the top, front, left and isometrically, from the same pose.
 - **Charts**: ten minutes of supply, current, link counters and robot internals (motion share, backstop, tick time), with CSV export.
-- **Handheld driving**: the gamepad's controls on a TrimUI Smart Pro over WiFi, with an e-stop and fault clear on Select combinations and a drive screen with the link's signal, frame rates, lost and late frames.
+- **Handheld driving**: the gamepad's controls on a TrimUI Smart Pro over WiFi, with an e-stop and fault clear on Select combinations, a drive screen with the link's signal, frame rates, lost and late frames, and a driving view of the robot from behind.
 - **Keyboard driving**: walk, steer, step aside and change gait, speed, height and stride from the calibrator.
 
-## Screenshots
+<img alt="The handheld's driving view: the robot mid-stride seen from a chase camera behind it, 45° down, over a ground grid, with its state and faults beside it" src="docs/images/handheld-driveview.png" width="640">
 
-All taken against the virtual robot, in the calibrator's dark or light look (following your system's).
+*The handheld's driving view, rendered on the host by the pak's own drawing code.*
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/walking-legs-light.png">
-  <img alt="The calibrator in control, walking forward in the tri gait from the keyboard: the status strip, the key hints and the legs pane drawing leg 1 mid-stride" src="docs/images/walking-legs-dark.png">
-</picture>
-
-*Driving from the keyboard: walking forward in the tri gait, the legs pane following the reported pose.*
-
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/four-views-light.png">
-  <img alt="The four-view window: the robot mid-stride from the top, isometrically from the front left, from the front and from the left, with the selected leg 1 highlighted and the ground line at the feet" src="docs/images/four-views-dark.png">
-</picture>
-
-*The four-view window (**4 views** in the top bar): top, isometric, front and left, from the same pose.*
-
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/charts-light.png">
-  <img alt="The charts tab: supply voltage with its limits and held low, servo current with the trip and sustained limits and held peak, and the frames accepted and rejected on each link" src="docs/images/charts-dark.png">
-</picture>
-
-*The charts tab: ten minutes of supply, current, link and robot-internal history, with the recent peak current and low voltage held for 3 s, and CSV export.*
-
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/estop-light.png">
-  <img alt="The calibrator after an emergency stop: the red banner, the fault in the status strip, output off, and the debug log showing the fault latching and movement stopping" src="docs/images/estop-dark.png">
-</picture>
-
-*An emergency stop: the fault latches, output turns off, and the debug log records why.*
-
-### The bridge screen
-
-The gamepad bridge's 240×135 screen, rendered on the host by its own drawing code (`mise run bridge-screenshots`). A short press of the left button cycles the pages; the status strip at the bottom shows the e-stop, faults and link state on every page. White ticks hold the recent peak current and lowest voltage for 3 s; a value turns amber when it sets a new high or a deeper sag.
-
-| Drive | Stand surge | Power | Link |
-| --- | --- | --- | --- |
-| ![The drive page: walking in the tri gait, 6.08 V and 1.84 A with bars, ticks holding the recent 4.3 A peak and 5.54 V low, height 60 and speed 44, dynamic stride and steer, output on, no faults](docs/images/bridge-drive.png) | ![The drive page at a stand surge: 5.54 V and 4.30 A in amber, each a new extreme beyond its held tick](docs/images/bridge-surge.png) | ![The power page: the last minute of supply voltage and current as traces, with the sag and surge of a stand, the lowest voltage and the highest current](docs/images/bridge-power.png) | ![The link page: 50 frames per second accepted by the robot and 10 by the bridge, none rejected, telemetry 40 ms old, the bridge as the source, the pad at 80 %](docs/images/bridge-link.png) |
-
-| Fault | Emergency stop | Link lost |
-| --- | --- | --- |
-| ![The drive page after a brown-out: low V and brown-out in the orange status strip, output off](docs/images/bridge-fault.png) | ![The power page with the emergency stop in the orange status strip](docs/images/bridge-estop.png) | ![The drive page with the link lost: no robot values, LINK LOST in the strip](docs/images/bridge-lost.png) |
-
-| WiFi drive | WiFi drive link |
-| --- | --- |
-| ![The drive page in WiFi drive: WF CTRL, the handheld in control, in the header, and the stride mode without a stick mode](docs/images/bridge-wifi-drive.png) | ![The link page in WiFi drive before a handheld joins: the rates, the network name and the password, and HANDHELD NONE in place of the pad](docs/images/bridge-wifi-link.png) |
-
-## Getting started
-
-[mise](https://mise.jdx.dev) provides every toolchain. The SDKs are pinned git submodules.
+## Quick start
 
 ```sh
-mise install          # Python, PlatformIO, CMake, Ninja, Arm GNU toolchain, Go
-mise run setup        # fetch the pinned submodules
+mise install          # the toolchains
+mise run setup        # the pinned submodules
+mise run desktop-sim  # the virtual robot and the calibrator, no hardware needed
 ```
 
-The robot firmware needs power limits chosen for your servos and supply. Copy `firmware/servo2040/src/power_limits.example.h` to `power_limits.h` and adjust it. The servo model sets how fast the joints may turn: `SPOODER_SERVO_PROFILE` names it (default `MG996R`; the table is in `core/movement/servo_profile.h`).
+[Getting started](docs/getting-started.md) covers the power limits, flashing the boards, bench simulation and wiring the link; [Controls](docs/controls.md) lists the gamepad's and the handheld's.
 
-### Try it without hardware
+## Documentation
 
-```sh
-mise run desktop-sim
-```
-
-This builds the virtual robot and the calibrator, runs the robot in your terminal and opens the calibrator on its port. Click **Connect**, then **Calibrate**. In the terminal, `supply 7.5`, `estop on`, `load 5`, `unplug` or `bridge gamepad` exercise the faults and the arbitration. `quit` or closing the window ends both.
-
-The calibrator needs cgo and the Wayland, X11 and EGL development packages on Linux. `mise run desktop-deps` names any that are missing. `mise run desktop-install` adds it to your desktop's launcher with its icon.
-
-### Flash the boards
-
-```sh
-mise run build && mise run upload      # robot: copy the .uf2 to the Servo 2040 in BOOTSEL mode
-mise run build-bridge                  # bridge: build...
-mise run upload-bridge                 # ...and flash (BRIDGE_PORT, default /dev/ttyUSB0)
-mise run monitor                       # the robot's USB console; --frames decodes the link
-```
-
-To drive the real board without its servo supply, use bench simulation: start it on USB from a computer with the servo supply removed (and drained for about 6 s), and press USER once while LED 6 blinks white. A refusal shows on LED 6 for 3 s (red and amber: a supply was measured; red and blue: no USB host). Restart to leave. The `spooder-hardware-check` skill has the details.
-
-Flash both boards together when the link protocol changes. A mismatched pair fails safe: each side discards the other's frames, and the robot sleeps.
-
-### Wiring the link
-
-| TTGO T-Display | Servo 2040 (J6) |
-|---|---|
-| GPIO27 (TX) | J6 pin 13, GPIO21 (RX) |
-| GPIO26 (RX) | J6 pin 14, GPIO20 (TX) |
-| GND | J6 pin 16 (logic GND) |
-
-3.3 V logic only, and no 5 V on these pins. The bridge's right button (GPIO35) toggles the emergency stop. For WiFi drive, wire a latching switch between the bridge's GPIO32 and GND (no resistor: the bridge enables the pull-up); the [hardware check](.claude/skills/spooder-hardware-check/SKILL.md) covers joining the network and the probe's checks.
-
-## Gamepad controls
-
-| Input | Effect |
-|---|---|
-| Left stick (steer mode, default) | Y walks forward or back, X steers like a car (mirrored when reversing) |
-| Left stick (crab mode) | Walk in any direction, strafing too |
-| `B` | Toggle steer / crab |
-| Right stick X | Turn, added to the steering in both modes |
-| `Home` | Toggle Stand / Walk |
-| `Y` | Toggle Sleep |
-| `Back` + `Home` held 1 s | Toggle Calibrate |
-| `R1` / `L1` | Next / previous gait |
-| D-pad up / down | Body height |
-| D-pad right / left | Speed |
-| `X` | Toggle stride: dynamic / fixed |
-| Both stick buttons held 1 s | Clear faults |
-| `L2` held + `A` / `B` | Gesture: say hi / wiggle (from Stand) |
-
-## Handheld controller
-
-`mise run handheld-package` builds `build/handheld/Spooder.pak.zip` for the TrimUI Smart Pro (arm64, under rootless Podman). Unzip it into `Tools/tg5040/` on the SD card, join the bridge's `spooder-drive-XXXX` network in NextUI's WiFi settings (the password is on the bridge's link page), and start **Spooder** from Tools. The controls are the gamepad's, by the TrimUI's labels, with `Start` for `Home`, and:
-
-| Input | Effect |
-|---|---|
-| `Select` + `Start` | Toggle the emergency stop |
-| `Select` + `Y` held 1 s | Clear faults |
-| `L2` beyond half travel + a face button | Gesture |
-| `Menu` | Leave: Sleep first, confirmed by telemetry (Sleep or output off) or after 3 s |
-| `Power` short / held 2 s | Suspend / power off, after the same Sleep request and wait |
-
-The pak starts in Sleep: `Y` stands the robot, `Start` walks it. There is no Calibrate; calibration stays on the bridge's portal. Without the board, `build/virtual-robot/virtual-robot --wifi-bridge` runs a virtual bridge, and `mise run handheld-build` gives a desktop build to drive it with `--addr 127.0.0.1:52040`. Installing, joining and the on-device checks are in the [hardware check](.claude/skills/spooder-hardware-check/SKILL.md).
-
-## Verification
-
-```sh
-mise run test            # host-side Unity tests of core/, and the bridge build script's tests
-mise run build           # robot firmware (also with --serial: USB keys instead of the link)
-mise run build-bridge    # bridge firmware, with its image-size check
-mise run desktop-test    # gofmt, go vet, go test
-mise run e2e             # the calibrator's link and session, and the handheld's run loop, against the virtual robot
-mise run handheld-test   # the handheld's Go checks (SDL2 development packages)
-mise run handheld-package  # the handheld's device build and Spooder.pak.zip
-```
-
-Hardware behaviour (timing, wiring, power) can only be confirmed on the boards. The staged bring-up is in [`.claude/skills/spooder-hardware-check`](.claude/skills/spooder-hardware-check/SKILL.md).
-
-## Layout
-
-| Path | What |
-|---|---|
-| `core/` | Hardware-free C++ shared by both firmwares, the virtual robot and the host tests: movement, protection, protocol, the control tick, gamepad mapping, status, setup mode, WiFi drive |
-| `firmware/servo2040/` | The robot: pico-sdk CMake project |
-| `firmware/bridge/` | The bridge: ESP-IDF PlatformIO project, including the portal page |
-| `desktop/` | The desktop calibrator, the console monitor and the WiFi drive probe, a separate Go module; `desktop/handheld/`, the handheld's pak, a nested one |
-| `tools/virtual-robot/` | The virtual robot |
-| `test/` | Unity host tests; `test/golden/` holds the fixtures other implementations test against |
-| `openspec/` | Specifications and changes: the source of truth for intended behaviour |
+- [Getting started](docs/getting-started.md)
+- [Controls](docs/controls.md)
+- [The handheld controller](docs/handheld.md)
+- [Screenshots](docs/screenshots.md)
+- [Development](docs/development.md): the verification gates, the layout and regenerating the screenshots
+- The hardware bring-up: [`spooder-hardware-check`](.claude/skills/spooder-hardware-check/SKILL.md)
+- Specifications: [`openspec/`](openspec/), the source of truth for intended behaviour
 
 ## Status
 
-The firmwares, the calibrator, the handheld's pak and the virtual robot are built and tested on the host; the pak is not yet checked on the TrimUI. Bring-up on the rebuilt robot is in progress. I²C body sensing (VL6180X range, LSM6DSO IMU) is specified but suspended.
+The firmwares, the calibrator, the handheld's pak and the virtual robot are built and tested on the host. On the bench, the robot board and the bridge run in WiFi drive with the pak on the TrimUI, driving the board in bench simulation; the rest of the on-device checks are still open. The robot itself is being rebuilt and is not yet assembled. I²C body sensing (VL6180X range, LSM6DSO IMU) is specified but suspended.
 
 ## Credits
 

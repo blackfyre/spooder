@@ -84,6 +84,7 @@ mise run clean
     - `lilygo-t-display/`: the bridge board's STEP model, case shell, schematic and KiCad/Eagle libraries;
     - `pimoroni-servo2040/`: the robot board's schematic and mechanical drawing, with its key dimensions;
     - `mg996r/`: the servo's STEP model (MIT).
+- `docs/`: the user documentation (getting started, controls, the handheld, screenshots, development) and its images; `Readme.md` keeps the overview and links to it.
 - `openspec/`: specifications (`specs/`) and changes (`changes/`). This is the source of truth for intended behaviour.
 
 ## Rules
