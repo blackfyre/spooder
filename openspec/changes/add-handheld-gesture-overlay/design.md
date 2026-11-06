@@ -72,6 +72,8 @@ Input is read on the same thread as the draw (`drive` in `main.go`: poll every 5
 - The animation shows the script itself, not the return the robot plays when a gesture is stopped early.
 - `STAND FIRST` is not shown in Perform (D4), reading the brief's "not Stand" as "cannot start a gesture".
 - The highlight lasts 400 ms and the loop holds its last frame for 600 ms; both are local constants, tuned on the device if needed.
+- The golden file names each gesture by one lower-case token (`say_hi`, `wiggle`, `dance`, `attack`, `ball`), since its fields are separated by single spaces; the overlay's display names are its own.
+- The t = 0 sample is the player's first output (`advance` by 0 ms after `start`), the standing pose itself.
 - The brief's parts form one coherent feature (the golden file is what the tiles draw); it is delivered whole.
 
 ## Risks / Trade-offs

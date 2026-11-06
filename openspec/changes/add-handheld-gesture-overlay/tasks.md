@@ -2,7 +2,7 @@
 
 ## 1. The gesture golden file
 
-- [ ] 1.1 Add `test/test_gesture_golden` (design D1: `gesture::Player` from the standing point at height 0, sampled every 50 ms until done or failing at the 10 s cap, solved with `kinematics::solveLegInRange` and the default calibration's offsets; `SPOODER_WRITE_GOLDEN=1` writes, `SPOODER_GESTURES_GOLDEN` names another copy) and generate `test/golden/gestures.txt`; add it to the golden files in `test/CLAUDE.md`. Verify `mise run test` passes; that ids 1 and 2 read `scripted` with pose lines and ids 3 to 5 `none` without; that a second `SPOODER_WRITE_GOLDEN=1 mise run test` writes the same bytes (`cmp` against a scratch copy of the first run's file); and that the test fails with `SPOODER_GESTURES_GOLDEN` naming a scratch copy with one angle changed.
+- [x] 1.1 Add `test/test_gesture_golden` (design D1: `gesture::Player` from the standing point at height 0, sampled every 50 ms until done or failing at the 10 s cap, solved with `kinematics::solveLegInRange` and the default calibration's offsets; `SPOODER_WRITE_GOLDEN=1` writes, `SPOODER_GESTURES_GOLDEN` names another copy) and generate `test/golden/gestures.txt`; add it to the golden files in `test/CLAUDE.md`. Verify `mise run test` passes; that ids 1 and 2 read `scripted` with pose lines and ids 3 to 5 `none` without; that a second `SPOODER_WRITE_GOLDEN=1 mise run test` writes the same bytes (`cmp` against a scratch copy of the first run's file); and that the test fails with `SPOODER_GESTURES_GOLDEN` naming a scratch copy with one angle changed.
 
 ## 2. The handheld's gesture table
 
