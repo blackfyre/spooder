@@ -20,7 +20,7 @@
 
 ## 5. Gates
 
-- [ ] 5.1 Run every gate from the worktree, one at a time: `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e`, `mise run handheld-test`, `mise run handheld-build` and `mise run handheld-package`. Verify all pass.
+- [x] 5.1 Run every gate from the worktree, one at a time: `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e`, `mise run handheld-test`, `mise run handheld-build` and `mise run handheld-package`. Verify all pass.
 
 ## 6. On the handheld
 
