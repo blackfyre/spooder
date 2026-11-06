@@ -118,8 +118,9 @@ func TestOverlayState(t *testing.T) {
 	if st := o.tileStates(sc, at)[1]; st.frame != wiggle.Frames[3] || !st.scripted {
 		t.Errorf("wiggle tile at 3 steps: frame %v, want %v", st.frame, wiggle.Frames[3])
 	}
-	if st := o.tileStates(sc, at)[2]; st.scripted || st.frame != standingFrame() {
-		t.Errorf("dance tile: scripted %v, frame %v, want the standing frame", st.scripted, st.frame)
+	dance, _ := preview(3)
+	if st := o.tileStates(sc, at)[2]; !st.scripted || st.frame != dance.Frames[3] {
+		t.Errorf("dance tile: scripted %v, frame %v, want %v", st.scripted, st.frame, dance.Frames[3])
 	}
 
 	// Releasing L2 closes it; pressing it again restarts the animations.

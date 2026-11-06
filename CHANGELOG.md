@@ -6,6 +6,8 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 
 ### Added
 
+- **Dance gesture.** An eight-beat routine at 120 BPM rolls, nods, twists and bounces over planted feet, then taps a front foot and straightens; the handheld preview follows the same script.
+
 - **Gesture body poses.** The player keeps planted feet fixed through eased yaw, pitch and roll, with path-based foot speed limits and per-keyframe speed overrides.
 - **Ball hold and unfold.** A provisional ball script lowers and folds all six legs, holds in Perform, then unfolds before another mode or gesture request. Sleep and safety interruptions still pre-empt at once; final ground clearance remains part of the ball choreography.
 

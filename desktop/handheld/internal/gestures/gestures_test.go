@@ -39,7 +39,7 @@ func TestTableScripts(t *testing.T) {
 	if len(Table) != protocol.GestureCount-1 {
 		t.Fatalf("%d gestures, want %d", len(Table), protocol.GestureCount-1)
 	}
-	scripted := map[uint8]bool{protocol.GestureSayHi: true, protocol.GestureWiggle: true, protocol.GestureBall: true}
+	scripted := map[uint8]bool{protocol.GestureSayHi: true, protocol.GestureWiggle: true, protocol.GestureDance: true, protocol.GestureBall: true}
 	for i, g := range Table {
 		if g.ID != uint8(i+1) || g.StepMs != StepMs {
 			t.Errorf("Table[%d]: id %d step %d", i, g.ID, g.StepMs)

@@ -36,8 +36,9 @@ constexpr int MAX_LIFTED_LEGS = LEG_COUNT;
 
 struct Lift
 {
-  int8_t leg = -1; // -1 when unused
-  Vector3 foot;    // target in the leg frame
+  int8_t leg = -1;                 // -1 when unused
+  Vector3 foot;                    // target in the leg frame
+  bool relativeToStanding = false; // foot is an offset from standing (height-independent taps)
 };
 
 // The body over its planted feet, in the body frame (x right, y forward,
