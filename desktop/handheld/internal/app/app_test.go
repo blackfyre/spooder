@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -36,6 +37,7 @@ func (l *fakeLink) Rebaseline()                         { l.rebaselines++; l.rx.
 type fakeRunner struct {
 	mu    sync.Mutex
 	calls []string
+	link  string // iw dev wlan0 link's output
 }
 
 func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -43,8 +45,13 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte
 	f.mu.Lock()
 	f.calls = append(f.calls, cmd)
 	f.mu.Unlock()
-	if cmd == "iw dev wlan0 get power_save" {
+	switch cmd {
+	case "iw dev wlan0 get power_save":
 		return []byte("Power save: on\n"), nil
+	case "iw dev wlan0 link":
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return []byte(f.link), nil
 	}
 	return nil, nil
 }
@@ -565,6 +572,42 @@ func TestStartOnDevice(t *testing.T) {
 	want := "iw dev wlan0 get power_save\niw dev wlan0 set power_save off\niw dev wlan0 set power_save on"
 	if got := run.log(); got != want {
 		t.Fatalf("ran\n%s\nwant\n%s", got, want)
+	}
+}
+
+// On the TrimUI there is no /proc/net/wireless: the signal level comes
+// from iw, sampled at the start and every SignalPeriod while running.
+func TestSignalFromIwOnDevice(t *testing.T) {
+	run := &fakeRunner{link: "Connected to 02:00:00:00:00:00 (on wlan0)\n\tsignal: -61 dBm\n"}
+	sys := System{
+		Runner:   run,
+		Addrs:    func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("192.168.4.2")}, nil },
+		ReadFile: func(string) ([]byte, error) { return nil, os.ErrNotExist },
+	}
+	s, err := Start(context.Background(), Config{Device: true, Addr: "127.0.0.1:9"}, sys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if sc := s.App.Screen(time.Now()); !sc.Link.SignalKnown || sc.Link.SignalDBm != -61 {
+		t.Fatalf("signal %+v at the start, want -61 dBm", sc.Link)
+	}
+	run.mu.Lock()
+	run.link = "Not connected.\n"
+	run.mu.Unlock()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx) }()
+	deadline := time.Now().Add(3 * SignalPeriod)
+	for s.App.Screen(time.Now()).Link.SignalKnown {
+		if time.Now().After(deadline) {
+			t.Fatal("the signal level was not sampled again while running")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	cancel()
+	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
 	}
 }
 

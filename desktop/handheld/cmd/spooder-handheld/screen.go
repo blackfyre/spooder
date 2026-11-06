@@ -562,7 +562,8 @@ func (s *screen) header(sc app.Screen) {
 	if sc.Link.SignalKnown {
 		signal = fmt.Sprintf("%d DBM", sc.Link.SignalDBm)
 	}
-	chips := []chipSpec{linkChip, {signal, colChip, colText, nil}, estop}
+	sigDot := signalTone(sc.Link.SignalKnown, sc.Link.SignalDBm)
+	chips := []chipSpec{linkChip, {signal, colChip, colText, &sigDot}, estop}
 	if sc.Robot.Have && sc.Robot.Simulated {
 		// Bench simulation, on both pages: no servo moves.
 		chips = append([]chipSpec{{"SIM", colWarn, colOnStatus, nil}}, chips...)
@@ -573,6 +574,28 @@ func (s *screen) header(sc app.Screen) {
 		x -= s.chipWidth(c.text, c.dot != nil)
 		s.chip(x, cy, c.text, c.face, c.fg, c.dot)
 		x -= l.gap(10)
+	}
+}
+
+// The signal levels the header's signal dot changes tone at, in dBm: from
+// signalGood up the link is strong, from signalWeak up usable, below it weak.
+const (
+	signalGood = -67
+	signalWeak = -80
+)
+
+// signalTone is the tone of the header's signal dot: ok when strong, the
+// warning tone when usable, orange when weak, muted when unknown.
+func signalTone(known bool, dbm int) sdl.Color {
+	switch {
+	case !known:
+		return colMuted
+	case dbm >= signalGood:
+		return colOk
+	case dbm >= signalWeak:
+		return colWarn
+	default:
+		return colAccent
 	}
 }
 

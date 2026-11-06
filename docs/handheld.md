@@ -19,7 +19,7 @@ If the TrimUI is on another network, the pak renews its address once and then na
 
 ## The drive screen
 
-The panels page shows the robot (body mode, output, supply voltage and current, gait, gesture, the source in control and the faults by name), what the pak requests, with small keys naming the controls that change each value, and the link's quality: the signal, frames per type and second, invalid datagrams, lost and late frames, and the time since the last frame. The keycaps along the bottom press down while their control is held; the fault clear's fills as its hold runs.
+The panels page shows the robot (body mode, output, supply voltage and current, gait, gesture, the source in control and the faults by name), what the pak requests, with small keys naming the controls that change each value, and the link's quality: the signal (also in the header, its dot green from -67 dBm, amber from -80 dBm, orange below), frames per type and second, invalid datagrams, lost and late frames, and the time since the last frame. The keycaps along the bottom press down while their control is held; the fault clear's fills as its hold runs.
 
 ![The handheld's panels page while walking: the robot in Walk with output on, 7.84 V and 3.42 A, the requested mode, gait, stride, height, speed and stick mode with their keys, and the link at 10 frames per second per type](images/handheld-driving.png)
 

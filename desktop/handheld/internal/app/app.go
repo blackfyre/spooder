@@ -109,11 +109,36 @@ type App struct {
 	leave    leave
 	done     Action
 	notice   string
+	// The signal level from the last sample (SampleSignal), off the screen's
+	// redraw: reading it may run iw.
+	signalKnown bool
+	signalDBm   int
 }
 
 // New returns an app driving through link. power and readFile may be nil.
 func New(link Link, run wlan.Runner, power PowerSave, readFile func(string) ([]byte, error)) *App {
 	return &App{link: link, run: run, power: power, readFile: readFile, hand: padmap.NewHandheld()}
+}
+
+// SignalPeriod is how often the run samples the signal level.
+const SignalPeriod = time.Second
+
+// signalTimeout bounds one sample's iw.
+const signalTimeout = 500 * time.Millisecond
+
+// SampleSignal reads wlan0's signal level for the screen (wlan.Signal: the
+// kernel's statistics, or iw where there are none). Off the device it does
+// nothing; a failed read makes the level unknown.
+func (a *App) SampleSignal(ctx context.Context) {
+	if a.readFile == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, signalTimeout)
+	defer cancel()
+	dbm, err := wlan.Signal(ctx, a.run, a.readFile)
+	a.mu.Lock()
+	a.signalKnown, a.signalDBm = err == nil, dbm
+	a.mu.Unlock()
 }
 
 // ms is the mapping's clock: milliseconds since the run's first step.

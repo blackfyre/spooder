@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/padmap"
-	"github.com/blackfyre/spooder/desktop/handheld/internal/wlan"
 	"github.com/blackfyre/spooder/desktop/internal/legview"
 	"github.com/blackfyre/spooder/desktop/internal/protocol"
 	"github.com/blackfyre/spooder/desktop/internal/session"
@@ -151,10 +150,6 @@ func (a *App) Screen(now time.Time) Screen {
 		HaveFrame:         st.HaveFrame,
 		SinceLast:         st.SinceLast(now),
 	}
-	if a.readFile != nil {
-		if dbm, err := wlan.Signal(a.readFile); err == nil {
-			sc.Link.SignalKnown, sc.Link.SignalDBm = true, dbm
-		}
-	}
+	sc.Link.SignalKnown, sc.Link.SignalDBm = a.signalKnown, a.signalDBm
 	return sc
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/veandco/go-sdl2/sdl"
 	"github.com/veandco/go-sdl2/ttf"
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/app"
@@ -130,9 +131,28 @@ func TestLayoutFitsTheDevice(t *testing.T) {
 	}
 
 	// The header's chips and the title share the width.
-	chips := s.chipWidth("SIM", false) + s.chipWidth("LINK STALE", true) + s.chipWidth("-100 DBM", false) + s.chipWidth("E-STOP OFF", false) + 3*l.gap(10)
+	chips := s.chipWidth("SIM", false) + s.chipWidth("LINK STALE", true) + s.chipWidth("-100 DBM", true) + s.chipWidth("E-STOP OFF", false) + 3*l.gap(10)
 	if title := textWidth(f.title, "Spooder."); l.left+title+l.gap(20) > l.w-l.gap(margin)-chips {
 		t.Errorf("the title (%d) and the chips (%d) overlap", title, chips)
+	}
+}
+
+func TestSignalTone(t *testing.T) {
+	for _, c := range []struct {
+		known bool
+		dbm   int
+		want  sdl.Color
+	}{
+		{false, -40, colMuted},
+		{true, -40, colOk},
+		{true, signalGood, colOk},
+		{true, signalGood - 1, colWarn},
+		{true, signalWeak, colWarn},
+		{true, signalWeak - 1, colAccent},
+	} {
+		if got := signalTone(c.known, c.dbm); got != c.want {
+			t.Errorf("signalTone(%v, %d) = %v, want %v", c.known, c.dbm, got, c.want)
+		}
 	}
 }
 

@@ -163,6 +163,13 @@ const wireless = `Inter-| sta-|   Quality        |   Discarded packets          
  wlan0: 0000   70.  -40.  -256        0      0      0      0      0        0
 `
 
+const iwLink = `Connected to 02:00:00:00:00:00 (on wlan0)
+	SSID: spooder-drive-1A2B
+	freq: 2412
+	signal: -47 dBm
+	rx bitrate: 72.2 MBit/s
+`
+
 func TestSignal(t *testing.T) {
 	read := func(content string, err error) func(string) ([]byte, error) {
 		return func(path string) ([]byte, error) {
@@ -172,14 +179,34 @@ func TestSignal(t *testing.T) {
 			return []byte(content), err
 		}
 	}
-	if dbm, err := Signal(read(wireless, nil)); err != nil || dbm != -40 {
+	link := "iw dev wlan0 link"
+	ctx := context.Background()
+
+	// The kernel's statistics first, without running iw.
+	run := &fakeRunner{answers: map[string]string{link: iwLink}}
+	if dbm, err := Signal(ctx, run, read(wireless, nil)); err != nil || dbm != -40 {
 		t.Fatalf("signal %d, %v; want -40 dBm", dbm, err)
 	}
-	noLine := strings.Join(strings.Split(wireless, "\n")[:2], "\n")
-	if _, err := Signal(read(noLine, nil)); !errors.Is(err, ErrNoSignal) {
-		t.Fatalf("no wlan0 line: %v, want unknown", err)
+	if run.count(link) != 0 {
+		t.Fatal("ran iw with the statistics present")
 	}
-	if _, err := Signal(read("", os.ErrNotExist)); !errors.Is(err, ErrNoSignal) {
-		t.Fatalf("no file: %v, want unknown", err)
+	// No file (the TrimUI) or no wlan0 line: iw's link.
+	noLine := strings.Join(strings.Split(wireless, "\n")[:2], "\n")
+	for _, c := range []struct {
+		content string
+		err     error
+	}{{"", os.ErrNotExist}, {noLine, nil}} {
+		if dbm, err := Signal(ctx, run, read(c.content, c.err)); err != nil || dbm != -47 {
+			t.Fatalf("from iw: signal %d, %v; want -47 dBm", dbm, err)
+		}
+	}
+	// Neither: not connected, or iw failing.
+	notConnected := &fakeRunner{answers: map[string]string{link: "Not connected.\n"}}
+	if _, err := Signal(ctx, notConnected, read("", os.ErrNotExist)); !errors.Is(err, ErrNoSignal) {
+		t.Fatalf("not connected: %v, want unknown", err)
+	}
+	failing := &fakeRunner{fail: map[string]bool{link: true}}
+	if _, err := Signal(ctx, failing, read("", os.ErrNotExist)); !errors.Is(err, ErrNoSignal) {
+		t.Fatalf("iw failing: %v, want unknown", err)
 	}
 }

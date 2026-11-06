@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/blackfyre/spooder/desktop/handheld/internal/udplink"
 	"github.com/blackfyre/spooder/desktop/handheld/internal/wlan"
@@ -116,15 +117,36 @@ func Start(ctx context.Context, cfg Config, sys System) (*Session, error) {
 	}
 	s.Link = link
 	s.App = New(link, sys.Runner, power, readFile)
+	s.App.SampleSignal(ctx)
 	if s.Notice != "" {
 		s.App.setNotice("%s", s.Notice)
 	}
 	return s, nil
 }
 
-// Run sends until ctx ends or a leave ends the run.
+// Run sends until ctx ends or a leave ends the run, sampling the signal
+// level every SignalPeriod meanwhile.
 func (s *Session) Run(ctx context.Context) error {
-	return s.Link.Run(ctx, s.App.Step)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	sampled := make(chan struct{})
+	go func() {
+		defer close(sampled)
+		t := time.NewTicker(SignalPeriod)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				s.App.SampleSignal(ctx)
+			}
+		}
+	}()
+	err := s.Link.Run(ctx, s.App.Step)
+	cancel()
+	<-sampled
+	return err
 }
 
 // Close closes the link and restores the WiFi power-saving setting read at

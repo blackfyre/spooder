@@ -195,12 +195,47 @@ func ParseSignal(b []byte) (int, error) {
 	return 0, ErrNoSignal
 }
 
-// Signal reads wlan0's signal level through readFile; a missing file or
-// line reads as ErrNoSignal.
-func Signal(readFile func(string) ([]byte, error)) (int, error) {
-	b, err := readFile(WirelessPath)
+// ParseLinkSignal reads the signal level in dBm from the output of
+// `iw dev wlan0 link`, as in
+//
+//	Connected to 02:00:00:00:00:00 (on wlan0)
+//		SSID: spooder-drive-1A2B
+//		signal: -40 dBm
+//
+// Not connected (no signal line) reads as ErrNoSignal.
+func ParseLinkSignal(b []byte) (int, error) {
+	for _, line := range strings.Split(string(b), "\n") {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), "signal:")
+		if !ok {
+			continue
+		}
+		fields := strings.Fields(rest)
+		if len(fields) == 0 {
+			return 0, ErrNoSignal
+		}
+		level, err := strconv.Atoi(fields[0])
+		if err != nil {
+			return 0, ErrNoSignal
+		}
+		return level, nil
+	}
+	return 0, ErrNoSignal
+}
+
+// Signal reads wlan0's signal level: from the kernel's wireless statistics
+// through readFile, or, when they have no wlan0 line (cfg80211 drivers
+// without wireless extensions, as on the TrimUI Smart Pro, have no file at
+// all), from `iw dev wlan0 link` through run. Neither giving one reads as
+// ErrNoSignal.
+func Signal(ctx context.Context, run Runner, readFile func(string) ([]byte, error)) (int, error) {
+	if b, err := readFile(WirelessPath); err == nil {
+		if dbm, err := ParseSignal(b); err == nil {
+			return dbm, nil
+		}
+	}
+	out, err := run.Run(ctx, "iw", "dev", Interface, "link")
 	if err != nil {
 		return 0, ErrNoSignal
 	}
-	return ParseSignal(b)
+	return ParseLinkSignal(out)
 }
