@@ -14,6 +14,7 @@ static const Rgb BLUE = {0, 64, 255};
 static const Rgb WHITE = {255, 255, 255};
 static const Rgb CYAN = {0, 255, 255};
 static const Rgb MAGENTA = {255, 0, 255};
+static const Rgb VIOLET = {160, 0, 255};
 static const Rgb OFF = {0, 0, 0};
 
 struct FaultIndication
@@ -23,13 +24,13 @@ struct FaultIndication
 };
 // The first matching entry wins when several faults latch. Emergency stop
 // alternates red with red: steady red.
+// The simulation supply fault comes first: a real supply on a robot whose
+// operator thinks nothing can move.
 static const FaultIndication FAULT_COLOURS[] = {
-    {protection::EMERGENCY_STOP, RED},
-    {protection::OVERCURRENT, WHITE},
-    {protection::BROWNOUT, MAGENTA},
-    {protection::OVERVOLTAGE, BLUE},
-    {protection::SUSTAINED_CURRENT, {255, 96, 0}}, // orange
-    {protection::UNDERVOLTAGE, {255, 255, 0}},     // yellow
+    {protection::SIMULATION_SUPPLY, CYAN},     {protection::EMERGENCY_STOP, RED},
+    {protection::OVERCURRENT, WHITE},          {protection::BROWNOUT, MAGENTA},
+    {protection::OVERVOLTAGE, BLUE},           {protection::SUSTAINED_CURRENT, {255, 96, 0}}, // orange
+    {protection::UNDERVOLTAGE, {255, 255, 0}},                                                // yellow
 };
 
 // One hue per gait: Tri, Wave, Ripple, Bi, Quad, Hop.
@@ -49,6 +50,8 @@ constexpr uint32_t STOPPED_BREATH_MS = 3000;
 constexpr uint32_t NO_GAMEPAD_BLINK_MS = 1000;
 constexpr uint32_t STALE_BLINK_MS = 250;
 constexpr uint32_t CONFLICT_BLINK_MS = 250;
+constexpr uint32_t BENCH_BLINK_MS = 250; // the window and the refusals
+constexpr uint32_t SIMULATING_PERIOD_MS = 1000;
 constexpr float INPUT_SERIAL_LEVEL = 0.4f; // dim white
 
 static Rgb scaled(Rgb c, float level)
@@ -113,6 +116,30 @@ static Rgb inputIndicator(Input input, uint32_t nowMs)
   return OFF;
 }
 
+// LED 5 under the bench simulation's overlay: @p normal is what it shows
+// otherwise.
+static Rgb benchIndicator(const State &s, Rgb normal)
+{
+  bool first = blinkOn(s.nowMs, BENCH_BLINK_MS);
+  switch (s.bench)
+  {
+  case Bench::None:
+    return normal;
+  case Bench::Available:
+    return first ? WHITE : OFF;
+  case Bench::RefusedSupply:
+    return first ? RED : AMBER;
+  case Bench::RefusedUsb:
+    return first ? RED : BLUE;
+  case Bench::Simulating:
+    // The simulation supply fault replaces the overlay: all six show it.
+    if (s.faults & protection::SIMULATION_SUPPLY)
+      return normal;
+    return blinkOn(s.nowMs, SIMULATING_PERIOD_MS) ? VIOLET : normal;
+  }
+  return normal;
+}
+
 static void fill(Rgb out[LED_COUNT], int from, int to, Rgb c)
 {
   for (int i = from; i < to; i++)
@@ -142,6 +169,7 @@ void compute(const State &s, Rgb out[LED_COUNT])
     }
     bool phase = (s.nowMs / FAULT_FLASH_MS) % 2 == 0;
     fill(out, 0, LED_COUNT, phase ? c : RED);
+    out[INPUT_LED] = benchIndicator(s, out[INPUT_LED]);
     applyBrightness(out, FAULT_BRIGHTNESS);
     return;
   }
@@ -149,6 +177,7 @@ void compute(const State &s, Rgb out[LED_COUNT])
   if (!s.supplyAccepted)
   {
     fill(out, 0, LED_COUNT, scaled(AMBER, triangle(s.nowMs, SUPPLY_PULSE_MS, 0.2f)));
+    out[INPUT_LED] = benchIndicator(s, out[INPUT_LED]);
     applyBrightness(out, NORMAL_BRIGHTNESS);
     return;
   }
@@ -176,7 +205,7 @@ void compute(const State &s, Rgb out[LED_COUNT])
     fill(out, 0, (int)s.mode + 1, GREEN);
   }
 
-  out[INPUT_LED] = inputIndicator(s.input, s.nowMs);
+  out[INPUT_LED] = benchIndicator(s, inputIndicator(s.input, s.nowMs));
   applyBrightness(out, NORMAL_BRIGHTNESS);
 }
 

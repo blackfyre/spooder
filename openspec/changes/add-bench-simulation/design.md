@@ -129,6 +129,11 @@ Flash the robot; the bridge and desktop can follow in any order (older ones show
 - The move of the model into `core/robot/bench_model` (D1) keeps its behaviour; `core/`'s lint asks for two textual edits: `Servos::apply`'s declared parameter is named `released`, as in its definition, and the powered-servo count is converted to `float` explicitly (it is at most 18).
 - The golden vector `telemetry_bench_simulation` is a walk in simulation with the supply fault latched: seq 40, Walk, gait 1, output on, 6.00 V, 2.16 A, link counts 812/3 and bridge counts 1207/1, flags 32 and faults 64 only. Existing desktop console fixtures (`console_test.go`'s expected lines, `testdata/transcript.txt`) gain its line as an older receiver formats it (`faults fault bit 6`, no SIM) until task 4.2 names both.
 - The tick's working time in diagnostics includes `bench_sim::step` and the model's reading, so the existing diagnostics frame measures the whole of the new per-tick work; the acceptance limit is a longest working time below 20 ms.
+- Entering simulation arms the supervisor's resume gate like a latched fault: a request held from before the entry (a front-end repeating Stand while the supply was absent) does not start the body once the modelled supply settles; a new request made after the entry does. This is how the core reads "the body starts on the next new request".
+- The 250 ms of the window and refusal patterns is the blink period (on for the first 125 ms), as for the existing 250 ms LED 5 blinks; the simulation overlay is violet for the first 500 ms of each second.
+- The window and refusal overlays replace LED 5 in every state, as the window does; all LED 5 overlays take the brightness of the state they are drawn in (fault brightness during a fault).
+- With the simulation supply fault first in the fault list, the firmware's servo-output failure indication, which showed every fault bit (0xFFFF) and so the emergency stop's steady red, now names the emergency stop alone, to keep that steady red.
+- `bench_sim::step` reports each entry or refusal once, as `robot_tick::BenchEvent` on the tick of the press; robot_tick logs it then (`bench simulation: entered`, `bench simulation refused: servo supply present`, `bench simulation refused: no USB host`), and names the new fault `simulation supply` in `fault latched:` lines.
 
 ## Follow-ups
 

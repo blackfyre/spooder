@@ -17,6 +17,9 @@
 //   four ticks later the diagnostics, on both links; calibration reports when
 //   due
 //   once a second (or on request in --serial builds): the status line
+// Bench simulation (Inputs::bench) sets the telemetry flag, feeds protection's
+// simulation supply fault, overlays LED 5, names itself on the status line and
+// logs its entry or refusal; on entry, the body waits for a new request.
 // Before all of it, on the first tick and on each tick that sees a USB host
 // connect: the build banner, `spooder robot: build <identity>`.
 //
@@ -77,6 +80,26 @@ struct SerialInput
   bool printReadings;
 };
 
+// A bench simulation transition, reported once by bench_sim on the tick it
+// happens; the tick logs it.
+enum class BenchEvent : uint8_t
+{
+  None,
+  Entered,
+  RefusedSupply, // a servo supply was measured since start-up
+  RefusedUsb,    // no USB host enumerated the board, or it suspended it
+};
+
+// The bench simulation's state for one tick (core/robot/bench_sim); all zero
+// outside it (the virtual robot, live mode).
+struct BenchInputs
+{
+  bool simulated;   // TELEMETRY_SIMULATED in every telemetry frame
+  bool supplyFault; // a real servo supply measured in simulation: latches SIMULATION_SUPPLY
+  led_pattern::Bench indication;
+  BenchEvent event;
+};
+
 struct Inputs
 {
   // InputMode::Links: the bytes each link received since the previous tick,
@@ -92,6 +115,8 @@ struct Inputs
   // A host has the USB console open (sampled once per tick): the build
   // banner is logged again on each tick that sees it connect.
   bool usbConnected;
+  // Bench simulation; in simulation, power is the modelled supply's reading.
+  BenchInputs bench;
 };
 
 // What the tick drives. Every call happens from inside tick().

@@ -13,6 +13,14 @@
 //                      gait's colour; segments past the sustained limit are red
 //   other modes        green, LED count = mode (1 Initialise ... 5 Calibrate)
 // LED 5 shows the command source (except during faults and supply waiting).
+// Bench simulation (core/robot/bench_sim) overlays LED 5, in every state:
+//   simulation offered   white blinking (250 ms), for the 3 s window
+//   refused: supply      red alternating with amber (250 ms), for 3 s
+//   refused: no USB host red alternating with blue (250 ms), for 3 s
+//   simulating           violet for half of each second, LED 5's own content
+//                        for the other half; not while the simulation supply
+//                        fault (cyan with red on all six, first fault) is
+//                        latched
 #include <stdint.h>
 
 namespace led_pattern
@@ -30,6 +38,16 @@ enum class Input : uint8_t
   LinkStale,      // no valid frames from the bridge
   UsbConnected,   // a USB host with a connected controller in control
   SourceConflict, // the bridge and a USB host both claim control: asleep
+};
+
+// The bench simulation's indication on LED 5 (see above).
+enum class Bench : uint8_t
+{
+  None,
+  Available,     // the 3 s window is open
+  RefusedSupply, // entry refused: a servo supply was measured
+  RefusedUsb,    // entry refused: no USB host attached
+  Simulating,
 };
 
 enum class BodyMode : uint8_t // mirrors body::Mode order
@@ -54,6 +72,7 @@ struct State
   float tripCurrentA;
   float sustainedCurrentA;
   Input input;
+  Bench bench;
 };
 
 struct Rgb

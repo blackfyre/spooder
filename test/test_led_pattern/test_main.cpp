@@ -1,4 +1,5 @@
 #include <unity.h>
+#include <vector>
 #include "status/led_pattern.h"
 #include "protection/protection.h"
 
@@ -59,9 +60,10 @@ void test_fault_overrides_everything_and_is_brighter()
 void test_each_fault_has_a_distinct_colour()
 {
   const uint16_t faults[] = {protection::OVERCURRENT,       protection::BROWNOUT,     protection::OVERVOLTAGE,
-                             protection::SUSTAINED_CURRENT, protection::UNDERVOLTAGE, protection::EMERGENCY_STOP};
-  Rgb seen[6];
-  for (int i = 0; i < 6; i++)
+                             protection::SUSTAINED_CURRENT, protection::UNDERVOLTAGE, protection::EMERGENCY_STOP,
+                             protection::SIMULATION_SUPPLY};
+  Rgb seen[7];
+  for (int i = 0; i < 7; i++)
   {
     State s = healthy(BodyMode::Stand);
     s.faults = faults[i];
@@ -222,6 +224,173 @@ void test_normal_brightness_is_dim()
   TEST_ASSERT_EQUAL_UINT8((uint8_t)(255 * NORMAL_BRIGHTNESS), out[0].g);
 }
 
+// --- bench simulation on LED 5 -------------------------------------------------------
+
+static Rgb led5(State s, uint32_t t)
+{
+  s.nowMs = t;
+  compute(s, out);
+  return out[INPUT_LED];
+}
+
+static Rgb full(Rgb c, float brightness)
+{
+  return Rgb{(uint8_t)((float)c.r * brightness), (uint8_t)((float)c.g * brightness),
+             (uint8_t)((float)c.b * brightness)};
+}
+
+static const Rgb WHITE_FULL = {255, 255, 255};
+static const Rgb RED_FULL = {255, 0, 0};
+static const Rgb AMBER_FULL = {255, 128, 0};
+static const Rgb BLUE_FULL = {0, 64, 255};
+static const Rgb CYAN_FULL = {0, 255, 255};
+static const Rgb VIOLET_FULL = {160, 0, 255};
+
+void test_bench_patterns_at_both_phases()
+{
+  State s = healthy(BodyMode::Stand);
+  s.input = Input::UsbConnected;
+  s.bench = Bench::Available;
+  TEST_ASSERT_TRUE(led5(s, 0) == full(WHITE_FULL, NORMAL_BRIGHTNESS));
+  TEST_ASSERT_FALSE(lit(led5(s, 125)));
+  s.bench = Bench::RefusedSupply;
+  TEST_ASSERT_TRUE(led5(s, 0) == full(RED_FULL, NORMAL_BRIGHTNESS));
+  TEST_ASSERT_TRUE(led5(s, 125) == full(AMBER_FULL, NORMAL_BRIGHTNESS));
+  s.bench = Bench::RefusedUsb;
+  TEST_ASSERT_TRUE(led5(s, 0) == full(RED_FULL, NORMAL_BRIGHTNESS));
+  TEST_ASSERT_TRUE(led5(s, 125) == full(BLUE_FULL, NORMAL_BRIGHTNESS));
+  s.bench = Bench::Simulating;
+  TEST_ASSERT_TRUE(led5(s, 0) == full(VIOLET_FULL, NORMAL_BRIGHTNESS));
+  TEST_ASSERT_TRUE(led5(s, 499) == full(VIOLET_FULL, NORMAL_BRIGHTNESS));
+  // The other half: LED 5's normal content, the source.
+  State plain = s;
+  plain.bench = Bench::None;
+  TEST_ASSERT_TRUE(led5(s, 500) == led5(plain, 500));
+  TEST_ASSERT_TRUE(led5(s, 500) == full(BLUE_FULL, NORMAL_BRIGHTNESS));
+  // The main LEDs are unchanged by every overlay.
+  const Bench all[] = {Bench::Available, Bench::RefusedSupply, Bench::RefusedUsb, Bench::Simulating};
+  for (Bench b : all)
+  {
+    for (uint32_t t = 0; t < 1000; t += 125)
+    {
+      plain.nowMs = t;
+      compute(plain, out);
+      Rgb main[MAIN_LEDS];
+      for (int i = 0; i < MAIN_LEDS; i++)
+        main[i] = out[i];
+      State o = plain;
+      o.bench = b;
+      compute(o, out);
+      for (int i = 0; i < MAIN_LEDS; i++)
+        TEST_ASSERT_TRUE(main[i] == out[i]);
+    }
+  }
+}
+
+void test_window_pattern_over_a_fault_and_the_supply_wait()
+{
+  State s = healthy(BodyMode::Walk);
+  s.faults = protection::OVERCURRENT;
+  s.bench = Bench::Available;
+  TEST_ASSERT_TRUE(led5(s, 0) == full(WHITE_FULL, FAULT_BRIGHTNESS));
+  TEST_ASSERT_FALSE(lit(led5(s, 625))); // the fault's red phase, the window's off phase
+  TEST_ASSERT_TRUE(isRedOnly(out[0]));  // the fault still on the others
+
+  s = healthy(BodyMode::Initialise);
+  s.supplyAccepted = false;
+  s.bodyRunning = false;
+  s.bench = Bench::Available;
+  TEST_ASSERT_TRUE(led5(s, 0) == full(WHITE_FULL, NORMAL_BRIGHTNESS));
+  TEST_ASSERT_TRUE(out[0].r > out[0].g && out[0].b == 0); // amber on the others
+  TEST_ASSERT_FALSE(lit(led5(s, 125)));
+}
+
+void test_simulation_overlay_over_a_fault_keeps_the_fault_in_the_other_half()
+{
+  State s = healthy(BodyMode::Stand);
+  s.faults = protection::EMERGENCY_STOP;
+  s.bench = Bench::Simulating;
+  TEST_ASSERT_TRUE(led5(s, 0) == full(VIOLET_FULL, FAULT_BRIGHTNESS));
+  TEST_ASSERT_TRUE(isRedOnly(led5(s, 500)));
+}
+
+void test_simulation_supply_fault_is_cyan_first_and_replaces_the_overlay()
+{
+  State s = healthy(BodyMode::Walk);
+  s.faults = protection::SIMULATION_SUPPLY | protection::EMERGENCY_STOP | protection::OVERCURRENT;
+  s.bench = Bench::Simulating;
+  for (uint32_t t : {0u, 250u})
+  {
+    led5(s, t); // the fault's cyan phase, the overlay's violet half
+    for (int i = 0; i < LED_COUNT; i++)
+      TEST_ASSERT_TRUE(out[i] == full(CYAN_FULL, FAULT_BRIGHTNESS));
+  }
+  for (uint32_t t : {500u, 750u})
+  {
+    led5(s, t); // red phase
+    for (int i = 0; i < LED_COUNT; i++)
+      TEST_ASSERT_TRUE(isRedOnly(out[i]));
+  }
+}
+
+// LED 5 over 2 s, every 125 ms: the pattern as seen.
+static void sequence(State s, Rgb seq[16])
+{
+  for (int k = 0; k < 16; k++)
+    seq[k] = led5(s, (uint32_t)k * 125);
+}
+
+static bool sameSequence(const Rgb a[16], const Rgb b[16])
+{
+  for (int k = 0; k < 16; k++)
+    if (!(a[k] == b[k]))
+      return false;
+  return true;
+}
+
+void test_bench_patterns_are_distinct_from_every_other_led5_pattern()
+{
+  const Input inputs[] = {Input::Serial,    Input::LinkConnected, Input::LinkNoGamepad,
+                          Input::LinkStale, Input::UsbConnected,  Input::SourceConflict};
+  const Bench benches[] = {Bench::Available, Bench::RefusedSupply, Bench::RefusedUsb, Bench::Simulating};
+  std::vector<std::vector<Rgb>> existing;
+  for (Input in : inputs)
+  {
+    State s = healthy(BodyMode::Stand);
+    s.input = in;
+    Rgb seq[16];
+    sequence(s, seq);
+    existing.emplace_back(seq, seq + 16);
+  }
+  // The supply wait's amber pulse on LED 5.
+  {
+    State s = healthy(BodyMode::Stand);
+    s.supplyAccepted = false;
+    Rgb seq[16];
+    sequence(s, seq);
+    existing.emplace_back(seq, seq + 16);
+  }
+  std::vector<std::vector<Rgb>> added;
+  for (Bench b : benches)
+  {
+    for (Input in : inputs)
+    {
+      State s = healthy(BodyMode::Stand);
+      s.input = in;
+      s.bench = b;
+      Rgb seq[16];
+      sequence(s, seq);
+      for (const std::vector<Rgb> &e : existing)
+        TEST_ASSERT_FALSE(sameSequence(seq, e.data()));
+      if (in == Input::UsbConnected)
+        added.emplace_back(seq, seq + 16);
+    }
+  }
+  for (size_t i = 0; i < added.size(); i++)
+    for (size_t j = 0; j < i; j++)
+      TEST_ASSERT_FALSE(sameSequence(added[i].data(), added[j].data()));
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -237,5 +406,10 @@ int main()
   RUN_TEST(test_input_indicator_states);
   RUN_TEST(test_normal_brightness_is_dim);
   RUN_TEST(test_perform_shows_the_load_bar_like_walking);
+  RUN_TEST(test_bench_patterns_at_both_phases);
+  RUN_TEST(test_window_pattern_over_a_fault_and_the_supply_wait);
+  RUN_TEST(test_simulation_overlay_over_a_fault_keeps_the_fault_in_the_other_half);
+  RUN_TEST(test_simulation_supply_fault_is_cyan_first_and_replaces_the_overlay);
+  RUN_TEST(test_bench_patterns_are_distinct_from_every_other_led5_pattern);
   return UNITY_END();
 }

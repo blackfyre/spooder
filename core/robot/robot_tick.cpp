@@ -252,7 +252,7 @@ static void sendTelemetry(RobotState &s, const protection::Reading &r, const pro
 }
 
 static led_pattern::State ledState(const RobotState &s, uint32_t now, const protection::Result &prot, bool bodyRunning,
-                                   float currentA, led_pattern::Input source)
+                                   float currentA, led_pattern::Input source, led_pattern::Bench bench)
 {
   led_pattern::State l;
   l.nowMs = now;
@@ -265,6 +265,7 @@ static led_pattern::State ledState(const RobotState &s, uint32_t now, const prot
   l.tripCurrentA = s.tripCurrentA;
   l.sustainedCurrentA = s.sustainedCurrentA;
   l.input = source;
+  l.bench = bench;
   return l;
 }
 
@@ -284,6 +285,8 @@ static const char *faultName(uint16_t fault)
     return "overvoltage";
   case protection::EMERGENCY_STOP:
     return "emergency stop";
+  case protection::SIMULATION_SUPPLY:
+    return "simulation supply";
   default:
     return "unknown";
   }
@@ -297,11 +300,29 @@ static void reportFaults(uint16_t faults, const protection::Reading &r, Hardware
 }
 
 static void reportStatus(const RobotState &s, const protection::Reading &r, const protection::Result &p, bool outputsOn,
-                         bool bodyRunning, Hardware &hw)
+                         bool bodyRunning, bool simulated, Hardware &hw)
 {
-  logf(hw, "supply %.2f A (avg %.2f A), %.2f V%s; output %s; body %s, mode %d; faults 0x%02x\n", r.currentA,
+  logf(hw, "supply %.2f A (avg %.2f A), %.2f V%s; output %s; body %s, mode %d; faults 0x%02x%s\n", r.currentA,
        p.averageCurrentA, r.voltageV, p.supplyValid ? "" : " (out of range or absent)", outputsOn ? "on" : "off",
-       bodyRunning ? "running" : "stopped", (int)s.body.mode, p.faults);
+       bodyRunning ? "running" : "stopped", (int)s.body.mode, p.faults, simulated ? "; SIMULATION" : "");
+}
+
+static void reportBench(BenchEvent event, Hardware &hw)
+{
+  switch (event)
+  {
+  case BenchEvent::None:
+    break;
+  case BenchEvent::Entered:
+    hw.log("bench simulation: entered\n");
+    break;
+  case BenchEvent::RefusedSupply:
+    hw.log("bench simulation refused: servo supply present\n");
+    break;
+  case BenchEvent::RefusedUsb:
+    hw.log("bench simulation refused: no USB host\n");
+    break;
+  }
 }
 
 // The body state handed to the servos: the body's, with each joint's angle
@@ -446,6 +467,7 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
     s.profileAnnounced = true;
     logf(hw, "servo profile %s: joint speed budget %.0f deg/s\n", servo_profile::SELECTED.name, s.jointBudgetDegPerS);
   }
+  reportBench(in.bench.event, hw);
   if (s.previousMotionShare < s.windowMotionShare)
     s.windowMotionShare = s.previousMotionShare;
   s.previousMotionShare = 1;
@@ -467,9 +489,17 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
   TickInput input = readInput(s, in, now, hw);
   // Movement tells a new explicit mode request from a continuing one.
   input.command.modeRequestSeq = input.requestSeq;
+  // Entering simulation is no request to move: the body (re)starts only on a
+  // request made after it, as after a fault.
+  if (in.bench.event == BenchEvent::Entered)
+  {
+    s.supervisor.gate.waiting = true;
+    s.supervisor.gate.requestSeqAtLatch = input.requestSeq;
+  }
 
   const protection::Reading &reading = in.power;
-  protection::Result prot = protection::step(s.protection, reading, now, input.clearFaults, input.emergencyStop);
+  protection::Result prot = protection::step(s.protection, reading, now, input.clearFaults, input.emergencyStop,
+                                             in.bench.supplyFault);
   hw.setInhibited(!prot.allowOutput);
   if (prot.newlyLatched)
     reportFaults(prot.newlyLatched, reading, hw);
@@ -532,15 +562,15 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
     hw.applyServos(limitOutput(s, elapsedMs), s.applied, s.legsOn);
   }
 
-  hw.showLeds(ledState(s, now, prot, run.runBody, reading.currentA, input.source));
+  hw.showLeds(ledState(s, now, prot, run.runBody, reading.currentA, input.source, in.bench.indication));
 
   if (links)
   {
     if (++s.telemetryTick >= TELEMETRY_EVERY_TICKS)
     {
       s.telemetryTick = 0;
-      sendTelemetry(s, reading, prot, hw.servosOn(), input.telemetryFlags,
-                    run.runBody ? body::playingGesture(s.body) : 0, hw);
+      uint8_t flags = input.telemetryFlags | (in.bench.simulated ? protocol::TELEMETRY_SIMULATED : 0);
+      sendTelemetry(s, reading, prot, hw.servosOn(), flags, run.runBody ? body::playingGesture(s.body) : 0, hw);
     }
     if (s.telemetryTick == POSE_TICK)
       sendPose(s, link_receiver::makePose(s.body, hw.servoPulses(), hw.servosOn()), hw);
@@ -560,7 +590,7 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
 
   if (input.printReadings || now - s.lastStatusMs >= STATUS_PERIOD_MS)
   {
-    reportStatus(s, reading, prot, hw.servosOn(), run.runBody, hw);
+    reportStatus(s, reading, prot, hw.servosOn(), run.runBody, in.bench.simulated, hw);
     reportBackstop(s, hw);
     s.lastStatusMs = now;
   }

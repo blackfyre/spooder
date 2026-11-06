@@ -75,7 +75,7 @@ int main()
       printf("servo output failed to initialise\n");
       led_pattern::State failed = {};
       failed.nowMs = nowMs();
-      failed.faults = 0xFFFF; // shown as a fault: nothing may move
+      failed.faults = protection::EMERGENCY_STOP; // steady red, as a fault: nothing may move
       status_leds::show(failed);
       sleep_ms(robot_tick::STATUS_PERIOD_MS);
     }

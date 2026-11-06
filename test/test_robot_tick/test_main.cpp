@@ -3,6 +3,7 @@
 #include <unity.h>
 #include <string>
 #include <vector>
+#include "robot/bench_sim.h"
 #include "robot/robot_tick.h"
 #include <math.h>
 #include <stdio.h>
@@ -19,7 +20,9 @@ struct SentFrame
   protocol::Frame frame;
 };
 
-class FakeBoard final : public Hardware
+// The servo calls go through bench_sim::BenchBoard, as on the board: the
+// hooks below are the real port, and after enterSimulation() the model.
+class FakeBoard final : public bench_sim::BenchBoard
 {
 public:
   int tickNo = 0;
@@ -33,19 +36,26 @@ public:
   protocol::Decoder decoders[LINK_COUNT];
   led_pattern::State leds = {};
 
-  void setInhibited(bool v) override
+  int forceOffs = 0;
+  void realForceOff() override
+  {
+    on = false;
+    forceOffs++;
+    events.push_back("forceOff");
+  }
+  void realSetInhibited(bool v) override
   {
     inhibited = v;
     events.push_back(v ? "inhibit" : "allow");
   }
-  void stopServos() override
+  void realStop() override
   {
     on = false;
     events.push_back("stop");
   }
   kinematics::JointAngles out[kinematics::LEG_COUNT] = {}; // the angles last handed over
   int legsOn = 0;                                          // the release count last handed over
-  void applyServos(const body::BodyState &b, const joint_calibration::Table &, int released) override
+  void realApply(const body::BodyState &b, const joint_calibration::Table &, int released) override
   {
     for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
       if (b.legUpdated[leg] && leg < released)
@@ -55,9 +65,9 @@ public:
     applies++;
     events.push_back("apply");
   }
-  bool servosOn() override { return on; }
+  bool realOn() override { return on; }
   uint16_t pulses[joint_calibration::JOINT_COUNT] = {};
-  const uint16_t *servoPulses() override { return pulses; }
+  const uint16_t *realPulses() override { return pulses; }
   void showLeds(const led_pattern::State &s) override
   {
     leds = s;
@@ -114,8 +124,9 @@ static FakeBoard board;
 static Frontend fe[LINK_COUNT];
 static uint32_t now;
 static protection::Reading supply;
-static uint32_t tickUs; // the previous tick's working time each tick reports
-static bool usbHost;    // a host has the USB console open
+static uint32_t tickUs;               // the previous tick's working time each tick reports
+static bool usbHost;                  // a host has the USB console open
+static robot_tick::BenchInputs bench; // this tick's bench simulation input (event: once)
 
 void setUp()
 {
@@ -127,6 +138,7 @@ void setUp()
   supply = {0.5f, 6.0f};
   tickUs = 0;
   usbHost = false;
+  bench = {};
   init(state, InputMode::Links, LIMITS, now);
 }
 void tearDown() {}
@@ -173,9 +185,12 @@ static void tick()
     in.bytes[l] = bytes[l].data();
     in.byteCount[l] = (int)bytes[l].size();
   }
-  in.power = supply;
+  // In simulation the firmware feeds the model's reading.
+  in.power = bench.simulated ? bench_model::Supply().read(board.model()) : supply;
   in.previousTickUs = tickUs;
   in.usbConnected = usbHost;
+  in.bench = bench;
+  bench.event = BenchEvent::None;
   board.events.clear();
   board.tickNo++;
   now += LOOP_PERIOD_MS;
@@ -1109,6 +1124,196 @@ void test_usb_telemetry_reports_the_bridge_link()
                                 (protocol::TELEMETRY_BRIDGE_LINK_UP | protocol::TELEMETRY_BRIDGE_GAMEPAD));
 }
 
+// --- bench simulation ----------------------------------------------------------------
+
+static const protection::Reading USB_ONLY = {0, 0.05f};
+
+// Enters simulation as the firmware does: the board first, then the tick sees
+// the entry (reported once) and the modelled supply from then on.
+static void enterSimulation()
+{
+  board.enterSimulation();
+  bench.simulated = true;
+  bench.indication = led_pattern::Bench::Simulating;
+  bench.event = BenchEvent::Entered;
+}
+
+static bool printable(const std::string &line)
+{
+  for (size_t i = 0; i < line.size(); i++)
+  {
+    unsigned char c = (unsigned char)line[i];
+    if (!((c >= 0x20 && c < 0x7f) || c == '\t' || c == '\r' || c == '\n'))
+      return false;
+  }
+  return true;
+}
+
+// USB holds Stand on a robot with no servo supply; then simulation is entered.
+static void simulateWithStandHeld()
+{
+  supply = USB_ONLY;
+  usb().active = true;
+  usb().connected = true;
+  tick();
+  request(usb(), RequestedMode::Stand);
+  ticks(20);
+  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  enterSimulation();
+}
+
+static void standInSimulation()
+{
+  simulateWithStandHeld();
+  ticks(30);
+  request(usb(), RequestedMode::Stand);
+  ticks(100);
+  TEST_ASSERT_TRUE(state.supervisor.bodyRunning);
+  TEST_ASSERT_EQUAL((int)body::Mode::Stand, (int)state.body.mode);
+}
+
+void test_simulation_flag_clear_with_bench_zero_and_set_in_simulation()
+{
+  supply = USB_ONLY;
+  usb().active = true;
+  ticks(10);
+  const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_NOT_NULL(t);
+  TEST_ASSERT_EQUAL_HEX8(0, t->telemetry.flags & protocol::TELEMETRY_SIMULATED);
+  enterSimulation();
+  board.frames[(int)Link::Usb].clear();
+  board.frames[(int)Link::Bridge].clear();
+  ticks(20);
+  for (int l = 0; l < LINK_COUNT; l++)
+  {
+    int telemetry = 0;
+    for (const SentFrame &f : board.frames[l])
+      if (f.frame.type == protocol::FrameType::Telemetry)
+      {
+        telemetry++;
+        TEST_ASSERT_EQUAL_HEX8(protocol::TELEMETRY_SIMULATED, f.frame.telemetry.flags & protocol::TELEMETRY_SIMULATED);
+      }
+    TEST_ASSERT_EQUAL(4, telemetry);
+  }
+}
+
+void test_simulation_accepts_the_modelled_supply_after_500_ms_and_waits_for_a_request()
+{
+  simulateWithStandHeld();
+  tick(); // the entry tick: the modelled 6 V from here
+  for (uint32_t waited = LOOP_PERIOD_MS; waited < protection::SUPPLY_SETTLE_MS; waited += LOOP_PERIOD_MS)
+  {
+    tick();
+    TEST_ASSERT_FALSE(board.leds.supplyAccepted);
+  }
+  tick(); // 500 ms after entry
+  TEST_ASSERT_TRUE(board.leds.supplyAccepted);
+  // The Stand held from before the entry starts nothing.
+  ticks(20);
+  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  request(usb(), RequestedMode::Stand);
+  tick();
+  TEST_ASSERT_TRUE(state.supervisor.bodyRunning);
+  TEST_ASSERT_TRUE(has(board.logs, "output allowed: starting movement"));
+  ticks(100);
+  TEST_ASSERT_EQUAL((int)body::Mode::Stand, (int)state.body.mode);
+  TEST_ASSERT_FALSE(board.on); // the real port never switched on
+  TEST_ASSERT_EQUAL(1, board.forceOffs);
+}
+
+void test_simulation_telemetry_reports_the_modelled_reading_and_output_on()
+{
+  standInSimulation();
+  ticks(5);
+  const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_NOT_NULL(t);
+  TEST_ASSERT_TRUE(t->telemetry.outputsOn);
+  TEST_ASSERT_EQUAL_UINT16(6000, t->telemetry.voltageMv);
+  // Standing still: the idle draw of 18 powered servos.
+  TEST_ASSERT_UINT16_WITHIN(1, (uint16_t)lroundf(18 * bench_model::IDLE_A_PER_SERVO * 1000), t->telemetry.currentMa);
+  const protocol::Frame *p = lastOf(Link::Usb, protocol::FrameType::Pose);
+  TEST_ASSERT_NOT_NULL(p);
+  TEST_ASSERT_TRUE(p->pose.flags & protocol::POSE_OUTPUTS_ON);
+  TEST_ASSERT_EQUAL_UINT16(board.model().desiredUs[0], p->pose.joints[0].pulseUs);
+  TEST_ASSERT_FALSE(board.on);
+}
+
+void test_simulation_supply_fault_latches_stops_the_body_and_survives_a_clear()
+{
+  standInSimulation();
+  request(usb(), RequestedMode::Walk);
+  usb().translateY = 100;
+  ticks(50);
+  bench.supplyFault = true; // a real supply measured
+  tick();
+  TEST_ASSERT_TRUE(state.protection.faults & protection::SIMULATION_SUPPLY);
+  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  TEST_ASSERT_TRUE(has(board.logs, "fault latched: simulation supply"));
+  TEST_ASSERT_TRUE(has(board.logs, "movement stopped"));
+  TEST_ASSERT_FALSE(board.model().on);
+  TEST_ASSERT_EQUAL_HEX16(protection::SIMULATION_SUPPLY, board.leds.faults & protection::SIMULATION_SUPPLY);
+  usb().clearCounter++;
+  ticks(5);
+  request(usb(), RequestedMode::Stand);
+  ticks(50);
+  TEST_ASSERT_TRUE(state.protection.faults & protection::SIMULATION_SUPPLY);
+  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_EQUAL_HEX16(protection::SIMULATION_SUPPLY, t->telemetry.faults & protection::SIMULATION_SUPPLY);
+  TEST_ASSERT_FALSE(t->telemetry.outputsOn);
+  TEST_ASSERT_FALSE(board.on);
+}
+
+void test_simulation_status_line_and_log_lines()
+{
+  supply = USB_ONLY;
+  ticks(STATUS_PERIOD_MS / LOOP_PERIOD_MS + 1);
+  for (const std::string &l : board.logs)
+    if (l.compare(0, 7, "supply ") == 0)
+      TEST_ASSERT_TRUE(l.find("SIMULATION") == std::string::npos);
+  enterSimulation();
+  board.logs.clear();
+  ticks(STATUS_PERIOD_MS / LOOP_PERIOD_MS + 1);
+  int entered = 0, status = 0;
+  for (const std::string &l : board.logs)
+  {
+    TEST_ASSERT_TRUE(printable(l));
+    entered += l == "bench simulation: entered\n";
+    if (l.compare(0, 7, "supply ") == 0)
+    {
+      status++;
+      TEST_ASSERT_TRUE(l.find("; SIMULATION\n") != std::string::npos);
+      TEST_ASSERT_TRUE(l.find("6.00 V") != std::string::npos); // the modelled reading
+    }
+  }
+  TEST_ASSERT_EQUAL(1, entered);
+  TEST_ASSERT_TRUE(status >= 1);
+}
+
+void test_simulation_refusals_are_logged_once()
+{
+  const BenchEvent events[] = {BenchEvent::RefusedSupply, BenchEvent::RefusedUsb};
+  const char *const lines[] = {"bench simulation refused: servo supply present\n",
+                               "bench simulation refused: no USB host\n"};
+  for (int i = 0; i < 2; i++)
+  {
+    board.logs.clear();
+    bench.event = events[i];
+    bench.indication = i == 0 ? led_pattern::Bench::RefusedSupply : led_pattern::Bench::RefusedUsb;
+    tick();
+    TEST_ASSERT_EQUAL((int)bench.indication, (int)board.leds.bench);
+    ticks(10);
+    int n = 0;
+    for (const std::string &l : board.logs)
+    {
+      TEST_ASSERT_TRUE(printable(l));
+      n += l == lines[i];
+    }
+    TEST_ASSERT_EQUAL(1, n);
+  }
+  TEST_ASSERT_FALSE(board.simulated());
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -1154,5 +1359,11 @@ int main()
   RUN_TEST(test_fault_mid_gesture_stops_reporting_the_gesture);
   RUN_TEST(test_gesture_from_the_idle_bridge_is_ignored);
   RUN_TEST(test_usb_telemetry_reports_the_bridge_link);
+  RUN_TEST(test_simulation_flag_clear_with_bench_zero_and_set_in_simulation);
+  RUN_TEST(test_simulation_accepts_the_modelled_supply_after_500_ms_and_waits_for_a_request);
+  RUN_TEST(test_simulation_telemetry_reports_the_modelled_reading_and_output_on);
+  RUN_TEST(test_simulation_supply_fault_latches_stops_the_body_and_survives_a_clear);
+  RUN_TEST(test_simulation_status_line_and_log_lines);
+  RUN_TEST(test_simulation_refusals_are_logged_once);
   return UNITY_END();
 }
