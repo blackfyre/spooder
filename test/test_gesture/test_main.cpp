@@ -1,6 +1,7 @@
 #include <unity.h>
 #include <math.h>
 #include <stdio.h>
+#include "movement/body.h"
 #include "movement/body_geometry.h"
 #include "movement/centre_of_gravity.h"
 #include "movement/gait.h"
@@ -354,6 +355,62 @@ void test_ball_rests_on_its_frame_with_its_feet_folded_above_the_floor()
           sqrtf(feet[leg].x * feet[leg].x + feet[leg].y * feet[leg].y) <= gait::STANCE_DISTANCE - 10, "foot drawn in");
     }
   }
+}
+
+// Whether every target of ball with its fold @p deeperMm deeper than
+// scripted is reachable and within servo travel at both height extremes: the
+// whole gesture, its unfold from every keyframe, and Sleep's straight line
+// from the hold to its rest pose.
+static bool ballFoldFits(float deeperMm)
+{
+  Script ball = script(Gesture::Ball);
+  Keyframe frames[8];
+  TEST_ASSERT_TRUE(ball.count <= 8);
+  for (int k = 0; k < ball.count; k++)
+  {
+    frames[k] = ball.frames[k];
+    for (Lift &lift : frames[k].lifts)
+      if (lift.leg >= 0 && k == ball.count - 1)
+        lift.foot.x -= deeperMm;
+  }
+  Script deeper = ball;
+  deeper.frames = frames;
+  for (float ground : GROUNDS)
+    for (int stopFrame = 0; stopFrame <= deeper.count; stopFrame++)
+    {
+      Vector3 standing = standingAt(ground), feet[LEG_COUNT];
+      for (Vector3 &foot : feet)
+        foot = standing;
+      Player p;
+      start(p, Gesture::Ball, deeper, feet, standing);
+      for (int n = 0; n < 10000 && !p.done; n++)
+      {
+        if (p.stage == Stage::Keyframes && p.index == stopFrame)
+          p.stopRequested = true;
+        if (p.stage == Stage::Holding)
+        {
+          for (int leg = 0; leg < LEG_COUNT; leg++)
+            for (int sample = 0; sample <= 100; sample++)
+              if (!withinServoRange(leg, interpolate(feet[leg], body::REST_POSE, sample / 100.0f)))
+                return false;
+          p.stopRequested = true;
+        }
+        advance(p, 5, standing, feet);
+        for (int leg = 0; leg < LEG_COUNT; leg++)
+          if (!kinematics::isValidTarget(feet[leg]) || !withinServoRange(leg, feet[leg]))
+            return false;
+      }
+    }
+  return true;
+}
+
+// The fold stops BALL_FOLD_MARGIN_MM short of the first depth that leaves a
+// servo's travel with the default calibration.
+void test_ball_fold_keeps_its_margin_to_servo_travel()
+{
+  const float BALL_FOLD_MARGIN_MM = 6;
+  TEST_ASSERT_TRUE(ballFoldFits(BALL_FOLD_MARGIN_MM - 1));
+  TEST_ASSERT_FALSE(ballFoldFits(BALL_FOLD_MARGIN_MM));
 }
 
 void test_lifted_legs_keep_the_body_over_its_support()
@@ -855,6 +912,7 @@ int main()
   RUN_TEST(test_every_pose_is_reachable_and_within_servo_range);
   RUN_TEST(test_a_body_on_its_underside_is_supported_by_the_frame);
   RUN_TEST(test_support_rejects_the_provisional_ball);
+  RUN_TEST(test_ball_fold_keeps_its_margin_to_servo_travel);
   RUN_TEST(test_ball_rests_on_its_frame_with_its_feet_folded_above_the_floor);
   RUN_TEST(test_lifted_legs_keep_the_body_over_its_support);
   RUN_TEST(test_gesture_keeps_the_speed_limit_and_ends_standing);
