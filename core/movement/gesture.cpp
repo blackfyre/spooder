@@ -63,22 +63,58 @@ static const Keyframe DANCE[] = {
     {150, {Vector3(0, 0, -4)}, {}},           {200, {}, {}},
 };
 
-// Provisional lowering only: task 2.5 replaces this with the underside-derived
-// ground clearance. All rotations stay zero while task 2.2 runs separately.
-constexpr float BALL_PROVISIONAL_LOWERING_MM = 10;
-static const Pose BALL_LOW = {Vector3(0, 0, -BALL_PROVISIONAL_LOWERING_MM)};
+// Ball (D6): lower the body until its underside is a few millimetres above
+// the ground, let it rest on its frame as the feet lift off, fold the feet in
+// towards the body and hold. Its heights are the underside's above the ground
+// (zAboveGround) and the feet's offsets from where that pose plants them, so
+// they hold at every body height. The fold is as deep as the femur's travel
+// allows with the default calibration: near the ground, a foot drawn further
+// in needs the femur raised past it (test_gesture checks every target). The
+// unfold reverses it: spread the feet, put them down, then stand up.
+constexpr float BALL_CLEARANCE_MM = 3;      // the underside above the ground before it rests
+constexpr float BALL_FOOT_CLEARANCE_MM = 8; // the feet above the ground while the frame carries the body
+constexpr float BALL_FOLD_MM = 18;          // the feet drawn in towards the body
+static const Pose BALL_LOWERED = {Vector3(0, 0, BALL_CLEARANCE_MM)};
+static const Pose BALL_RESTING = {Vector3(0, 0, 0)};
+static const Vector3 BALL_LIFT(0, 0, BALL_FOOT_CLEARANCE_MM);
+static const Vector3 BALL_FOLD(-BALL_FOLD_MM, 0, BALL_FOOT_CLEARANCE_MM);
 static const Keyframe BALL[] = {
-    {600, BALL_LOW, {}},
-    {800,
-     BALL_LOW,
-     {{0, Vector3(160, 0, -80)},
-      {1, Vector3(160, 0, -80)},
-      {2, Vector3(160, 0, -80)},
-      {3, Vector3(160, 0, -80)},
-      {4, Vector3(160, 0, -80)},
-      {5, Vector3(160, 0, -80)}}},
+    {1200, BALL_LOWERED, {}, 0, true},
+    {400,
+     BALL_RESTING,
+     {{0, BALL_LIFT, false, true},
+      {1, BALL_LIFT, false, true},
+      {2, BALL_LIFT, false, true},
+      {3, BALL_LIFT, false, true},
+      {4, BALL_LIFT, false, true},
+      {5, BALL_LIFT, false, true}},
+     0,
+     true},
+    {500,
+     BALL_RESTING,
+     {{0, BALL_FOLD, false, true},
+      {1, BALL_FOLD, false, true},
+      {2, BALL_FOLD, false, true},
+      {3, BALL_FOLD, false, true},
+      {4, BALL_FOLD, false, true},
+      {5, BALL_FOLD, false, true}},
+     0,
+     true},
 };
-static const Keyframe BALL_UNFOLD[] = {{800, BALL_LOW, {}}, {600, {Vector3()}, {}}};
+static const Keyframe BALL_UNFOLD[] = {
+    {500,
+     BALL_RESTING,
+     {{0, BALL_LIFT, false, true},
+      {1, BALL_LIFT, false, true},
+      {2, BALL_LIFT, false, true},
+      {3, BALL_LIFT, false, true},
+      {4, BALL_LIFT, false, true},
+      {5, BALL_LIFT, false, true}},
+     0,
+     true},
+    {400, BALL_RESTING, {}, 0, true},
+    {1200, {}, {}},
+};
 
 Script script(Gesture g)
 {
@@ -93,7 +129,8 @@ Script script(Gesture g)
   case Gesture::Dance:
     return {DANCE, (int)(sizeof(DANCE) / sizeof(DANCE[0]))};
   case Gesture::Ball:
-    return {BALL, 2, true, BALL_UNFOLD, 2};
+    return {BALL, (int)(sizeof(BALL) / sizeof(BALL[0])), true, BALL_UNFOLD,
+            (int)(sizeof(BALL_UNFOLD) / sizeof(BALL_UNFOLD[0]))};
   default:
     return {nullptr, 0};
   }
@@ -129,12 +166,27 @@ Vector3 plantedFoot(int leg, Vector3 standing, const Pose &pose)
   return Vector3(v.x * ex + v.y * ey, v.x * yx + v.y * yy, v.z);
 }
 
+Pose keyframePose(const Keyframe &k, Vector3 standing)
+{
+  Pose pose = k.pose;
+  // The underside is UNDERSIDE_Z - (standing.z - shift) above the ground.
+  if (k.zAboveGround)
+    pose.translation.z = k.pose.translation.z - body_geometry::UNDERSIDE_Z + standing.z;
+  return pose;
+}
+
 Vector3 keyframeFoot(const Keyframe &k, int leg, Vector3 standing)
 {
+  Pose pose = keyframePose(k, standing);
   for (int j = 0; j < MAX_LIFTED_LEGS; j++)
     if (k.lifts[j].leg == leg)
-      return k.lifts[j].relativeToStanding ? standing + k.lifts[j].foot : k.lifts[j].foot;
-  return plantedFoot(leg, standing, k.pose);
+    {
+      const Lift &lift = k.lifts[j];
+      if (lift.relativeToPlanted)
+        return plantedFoot(leg, standing, pose) + lift.foot;
+      return lift.relativeToStanding ? standing + lift.foot : lift.foot;
+    }
+  return plantedFoot(leg, standing, pose);
 }
 
 float ease(float t)
@@ -165,13 +217,13 @@ static const Keyframe *segmentFrame(const Player &p)
   return nullptr;
 }
 
-static Pose segmentPose(const Player &p, float t)
+static Pose segmentPose(const Player &p, Vector3 standing, float t)
 {
   // Planting and holding keep the pose; straightening ends at none.
   const Keyframe *k = segmentFrame(p);
   Pose end;
   if (k)
-    end = k->pose;
+    end = keyframePose(*k, standing);
   else if (p.stage == Stage::Plant || p.stage == Stage::Holding)
     end = p.pose;
   return {interpolate(p.pose.translation, end.translation, t), p.pose.yawDeg + (end.yawDeg - p.pose.yawDeg) * t,
@@ -231,7 +283,7 @@ static void beginSegment(Player &p, Vector3 standing)
   for (int sample = 1; sample <= 8; sample++)
   {
     float t = (float)sample / 8;
-    Pose pose = segmentPose(p, t);
+    Pose pose = segmentPose(p, standing, t);
     for (int i = 0; i < LEG_COUNT; i++)
     {
       Vector3 foot = segmentFoot(p, i, standing, pose, t);
@@ -259,7 +311,7 @@ static void nextSegment(Player &p, Vector3 standing)
   switch (p.stage)
   {
   case Stage::Keyframes:
-    p.pose = s.frames[p.index].pose;
+    p.pose = keyframePose(s.frames[p.index], standing);
     p.index++;
     if (s.holds && p.stopRequested)
     {
@@ -287,7 +339,7 @@ static void nextSegment(Player &p, Vector3 standing)
     p.index = 0;
     break;
   case Stage::Unfold:
-    p.pose = s.unfold[p.index].pose;
+    p.pose = keyframePose(s.unfold[p.index], standing);
     if (++p.index >= s.unfoldCount)
     {
       p.done = true;
@@ -337,7 +389,7 @@ void advance(Player &p, uint32_t dtMs, Vector3 standing, Vector3 *out)
     {
       p.elapsedMs += remaining;
       float t = ease((float)p.elapsedMs / (float)p.durationMs);
-      Pose pose = segmentPose(p, t);
+      Pose pose = segmentPose(p, standing, t);
       for (int i = 0; i < LEG_COUNT; i++)
         out[i] = segmentFoot(p, i, standing, pose, t);
       return;

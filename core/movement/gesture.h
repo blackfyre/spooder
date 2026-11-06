@@ -39,6 +39,7 @@ struct Lift
   int8_t leg = -1;                 // -1 when unused
   Vector3 foot;                    // target in the leg frame
   bool relativeToStanding = false; // foot is an offset from standing (height-independent taps)
+  bool relativeToPlanted = false;  // foot is an offset from where the keyframe's pose plants it (ball's fold)
 };
 
 // The body over its planted feet, in the body frame (x right, y forward,
@@ -62,6 +63,11 @@ struct Keyframe
   Lift lifts[MAX_LIFTED_LEGS]; // legs with a target of their own; the rest stay planted
   float maxFootSpeedMmS =
       0; // 0: MAX_FOOT_SPEED_MM_S; a higher value for this keyframe only, still under the joint budget (D2)
+  // When set, pose.translation.z is not a shift but the height of the body's
+  // underside (body_geometry::UNDERSIDE_Z) above the ground, resolved from
+  // the standing height by keyframePose: ball lowers onto its frame at every
+  // body height.
+  bool zAboveGround = false;
 };
 
 struct Script
@@ -92,6 +98,12 @@ bool available(uint8_t id);
  * at @p pose over a foot standing at @p standing.
  */
 Vector3 plantedFoot(int leg, Vector3 standing, const Pose &pose);
+
+/**
+ * @brief Keyframe @p k's body pose, standing at @p standing: its pose, with
+ * an underside height above the ground (zAboveGround) turned into a shift.
+ */
+Pose keyframePose(const Keyframe &k, Vector3 standing);
 
 /**
  * @brief Foot target of @p leg at keyframe @p k's end, standing at @p standing.

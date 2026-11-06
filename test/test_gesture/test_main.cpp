@@ -13,7 +13,8 @@ using namespace gesture;
 void setUp() {}
 void tearDown() {}
 
-static const gesture::Gesture AVAILABLE[] = {Gesture::SayHi, Gesture::Wiggle, Gesture::Dance, Gesture::Attack};
+static const gesture::Gesture AVAILABLE[] = {Gesture::SayHi, Gesture::Wiggle, Gesture::Dance, Gesture::Attack,
+                                             Gesture::Ball};
 // Feet at body height 0 and 100 (body::groundForHeight).
 static const float GROUNDS[] = {-60, -230};
 
@@ -116,6 +117,7 @@ void test_every_pose_is_reachable_and_within_servo_range()
       // Every 5 ms through the whole gesture, eased moves included.
       for (int n = 0; n < 4000 && !p.done; n++)
       {
+        p.stopRequested |= p.stage == Stage::Holding; // ball: leave the hold at once
         advance(p, 5, standing, feet);
         for (int leg = 0; leg < kinematics::LEG_COUNT; leg++)
         {
@@ -128,28 +130,6 @@ void test_every_pose_is_reachable_and_within_servo_range()
       }
       TEST_ASSERT_TRUE(p.done);
     }
-}
-
-// Whether the body rests on its underside (centre_of_gravity::undersideGrounded),
-// the feet given in their leg frames.
-static bool groundedOnFrame(const Vector3 *feet)
-{
-  Vector3 body[kinematics::LEG_COUNT];
-  for (int i = 0; i < kinematics::LEG_COUNT; i++)
-    body[i] = centre_of_gravity::toBody(i, feet[i]);
-  return centre_of_gravity::undersideGrounded(body);
-}
-
-// How far @p p lies inside the frame's support polygon: where the underside
-// touches the ground, under the coxa pivots.
-static float frameMargin(Vector2 p)
-{
-  // Anticlockwise around the body, as in supported().
-  const int ORDER[] = {5, 0, 1, 2, 3, 4};
-  Vector2 poly[kinematics::LEG_COUNT];
-  for (int i = 0; i < kinematics::LEG_COUNT; i++)
-    poly[i] = Vector2(body_geometry::PIVOTS[ORDER[i]].x, body_geometry::PIVOTS[ORDER[i]].y);
-  return insideMargin(poly, kinematics::LEG_COUNT, p);
 }
 
 static Vector3 worldFoot(int leg, Vector3 foot, const Pose &pose);
@@ -165,55 +145,121 @@ static Vector3 worldPoint(Vector3 v, const Pose &pose)
   return v + pose.translation;
 }
 
-static Pose playerPose(const Player &p)
+// Below this, a foot or the underside is through the floor; rounding stays within it.
+static const float THROUGH_FLOOR_MM = 0.5f;
+
+// Height of the body's underside above @p floor (world frame) at @p pose: its
+// lowest point, the Coxa Horn Connectors under the pivots
+// (body_geometry::UNDERSIDE_Z).
+static float undersideAbove(const Pose &pose, float floor)
+{
+  float lowest = 1e9f;
+  for (const Vector3 &pivot : body_geometry::PIVOTS)
+    lowest = fminf(lowest, worldPoint(Vector3(pivot.x, pivot.y, body_geometry::UNDERSIDE_Z), pose).z);
+  return lowest - floor;
+}
+
+// Whether the body rests on its underside on the floor at @p floor.
+static bool groundedOnFrame(const Pose &pose, float floor)
+{
+  return undersideAbove(pose, floor) <= centre_of_gravity::UNDERSIDE_CONTACT_MM;
+}
+
+// Whether nothing (no foot, not the underside) is through the floor.
+static bool aboveFloor(const Vector3 *feet, const Pose &pose, float floor)
+{
+  if (undersideAbove(pose, floor) < -THROUGH_FLOOR_MM)
+    return false;
+  for (int i = 0; i < LEG_COUNT; i++)
+    if (worldFoot(i, feet[i], pose).z < floor - THROUGH_FLOOR_MM)
+      return false;
+  return true;
+}
+
+// How far @p p lies inside the frame's support polygon: where the underside
+// touches the ground, under the coxa pivots.
+static float frameMargin(Vector2 p)
+{
+  // Anticlockwise around the body, as in supported().
+  const int ORDER[] = {5, 0, 1, 2, 3, 4};
+  Vector2 poly[kinematics::LEG_COUNT];
+  for (int i = 0; i < kinematics::LEG_COUNT; i++)
+    poly[i] = Vector2(body_geometry::PIVOTS[ORDER[i]].x, body_geometry::PIVOTS[ORDER[i]].y);
+  return insideMargin(poly, kinematics::LEG_COUNT, p);
+}
+
+// The pose the player has reached: the segment's start eased towards its end,
+// as the player's segmentPose (the segment's keyframe in the script or its
+// unfold; planting and holding keep the pose; straightening ends at none).
+static Pose playerPose(const Player &p, Vector3 standing)
 {
   if (p.done)
     return {};
-  Pose end = p.stage == Stage::Keyframes ? p.sequence.frames[p.index].pose : p.stage == Stage::Plant ? p.pose : Pose{};
+  Pose end;
+  if (p.stage == Stage::Keyframes)
+    end = keyframePose(p.sequence.frames[p.index], standing);
+  else if (p.stage == Stage::Unfold)
+    end = keyframePose(p.sequence.unfold[p.index], standing);
+  else if (p.stage == Stage::Plant || p.stage == Stage::Holding)
+    end = p.pose;
   float t = ease((float)p.elapsedMs / p.durationMs);
   return {interpolate(p.pose.translation, end.translation, t), p.pose.yawDeg + (end.yawDeg - p.pose.yawDeg) * t,
           p.pose.pitchDeg + (end.pitchDeg - p.pose.pitchDeg) * t, p.pose.rollDeg + (end.rollDeg - p.pose.rollDeg) * t};
 }
 
-// Whether the body centre (the body frame's origin) is inside the support
-// polygon, with @p marginMm, whenever a foot is off the ground: the frame's
-// when the underside rests on the ground, else the feet's in the world frame
-// at @p pose. A foot more than 10 mm above the lowest counts as lifted.
-static bool supported(const Vector3 *feet, float marginMm, const Pose &pose)
+// The floor: where the standing feet are, in the world frame, when the
+// gesture starts.
+static float floorFor(Vector3 standing)
 {
-  if (groundedOnFrame(feet))
+  return worldFoot(0, standing, Pose{}).z;
+}
+
+// Whether the body is held up at @p pose, with @p marginMm: nothing goes
+// through the floor at @p floor, and the body centre (the body frame's
+// origin) lies inside the frame's polygon when the underside rests on the
+// floor, else inside the polygon of the feet on the floor (within
+// CONTACT_MM of it), all six on it counting as supported. With fewer than
+// three feet on the floor and the underside off it, nothing holds the body.
+static bool supported(const Vector3 *feet, float marginMm, const Pose &pose, float floor)
+{
+  if (!aboveFloor(feet, pose, floor))
+    return false;
+  if (groundedOnFrame(pose, floor))
     return frameMargin(Vector2()) >= marginMm;
-  float lowest = 1e9f;
   Vector3 world[LEG_COUNT];
   for (int i = 0; i < LEG_COUNT; i++)
-  {
     world[i] = worldFoot(i, feet[i], pose);
-    lowest = fminf(lowest, world[i].z);
-  }
   // Anticlockwise: front right, front left, middle left, rear left,
-  // rear right, middle right. Height above the floor is in the world frame.
+  // rear right, middle right.
   const int ORDER[] = {5, 0, 1, 2, 3, 4};
   Vector2 poly[LEG_COUNT];
   int n = 0;
   for (int leg : ORDER)
-    if (world[leg].z <= lowest + 10)
+    if (world[leg].z <= floor + centre_of_gravity::CONTACT_MM)
       poly[n++] = Vector2(world[leg].x, world[leg].y);
-  return n == LEG_COUNT || insideMargin(poly, n, Vector2(pose.translation.x, pose.translation.y)) >= marginMm;
+  if (n == LEG_COUNT)
+    return true;
+  return n >= 3 && insideMargin(poly, n, Vector2(pose.translation.x, pose.translation.y)) >= marginMm;
 }
 
 // The smallest support margin of the estimated centre of gravity, with and
 // without the battery: in the frame's polygon (body frame) when the underside
-// rests on the ground, else the feet's in the world frame at @p pose.
-static float gravityMargin(const Vector3 *feet, const Pose &pose)
+// rests on the floor, else the feet's in the world frame at @p pose; -1e9
+// when something is through the floor or no foot is on it.
+static float gravityMargin(const Vector3 *feet, const Pose &pose, float floor)
 {
   kinematics::JointAngles legs[kinematics::LEG_COUNT];
   Vector3 body[kinematics::LEG_COUNT];
+  float lowest = 1e9f;
   for (int i = 0; i < kinematics::LEG_COUNT; i++)
   {
     TEST_ASSERT_TRUE(kinematics::solveLeg(feet[i], Vector3(0, 0, 0), legs[i]));
     body[i] = worldFoot(i, feet[i], pose);
+    lowest = fminf(lowest, body[i].z);
   }
-  bool onFrame = groundedOnFrame(feet);
+  bool onFrame = groundedOnFrame(pose, floor);
+  if (!aboveFloor(feet, pose, floor) || (!onFrame && lowest > floor + centre_of_gravity::CONTACT_MM))
+    return -1e9f;
   float worst = 1e9f;
   for (int battery = 0; battery < 2; battery++)
   {
@@ -229,7 +275,7 @@ static float gravityMargin(const Vector3 *feet, const Pose &pose)
 }
 
 // A body resting on its underside is supported by the frame, whatever its
-// feet do: here the left feet hang just above the ground and the right ones
+// feet do: here the left feet hang just above the floor and the right ones
 // are folded, so the feet alone would leave the centre outside their polygon.
 void test_a_body_on_its_underside_is_supported_by_the_frame()
 {
@@ -237,14 +283,77 @@ void test_a_body_on_its_underside_is_supported_by_the_frame()
   Vector3 feet[kinematics::LEG_COUNT];
   for (int i = 0; i < kinematics::LEG_COUNT; i++)
     feet[i] = Vector3(120, 0, i < 3 ? U + 5 : U + 60);
-  TEST_ASSERT_TRUE(groundedOnFrame(feet));
-  TEST_ASSERT_TRUE(supported(feet, 20, Pose{}));
-  TEST_ASSERT_TRUE(gravityMargin(feet, Pose{}) >= 20);
-  // The same feet with the body 10 mm lower: the left feet carry it alone.
+  TEST_ASSERT_TRUE(groundedOnFrame(Pose{}, U));
+  TEST_ASSERT_TRUE(supported(feet, 20, Pose{}, U));
+  TEST_ASSERT_TRUE(gravityMargin(feet, Pose{}, U) >= 20);
+  // The same feet 10 mm lower: the left feet hold the body 5 mm up and carry it alone.
   for (int i = 0; i < kinematics::LEG_COUNT; i++)
     feet[i].z -= 10;
-  TEST_ASSERT_FALSE(groundedOnFrame(feet));
-  TEST_ASSERT_FALSE(supported(feet, 20, Pose{}));
+  TEST_ASSERT_FALSE(groundedOnFrame(Pose{}, U - 5));
+  TEST_ASSERT_FALSE(supported(feet, 20, Pose{}, U - 5));
+  // Or, on the old floor, the left feet go through it.
+  TEST_ASSERT_FALSE(supported(feet, 20, Pose{}, U));
+}
+
+// The provisional ball (lowered 10 mm, every foot to (160, 0, -80) in its leg
+// frame) held all six feet 140 mm above the floor at height 100, the body
+// dropping with nothing under it, and drove them 30 mm through the floor at
+// height 0. The support check knows the floor, so it rejects both.
+void test_support_rejects_the_provisional_ball()
+{
+  const Pose low = {Vector3(0, 0, -10)};
+  Keyframe frames[] = {{600, low, {}}, {800, low, {}}};
+  for (int leg = 0; leg < LEG_COUNT; leg++)
+    frames[1].lifts[leg] = {(int8_t)leg, Vector3(160, 0, -80)};
+  const Keyframe unfold[] = {{800, low, {}}, {600, {}, {}}};
+  Script provisional = {frames, 2, true, unfold, 2};
+  for (float ground : GROUNDS)
+  {
+    Vector3 standing = standingAt(ground), feet[LEG_COUNT];
+    for (Vector3 &foot : feet)
+      foot = standing;
+    float floor = floorFor(standing);
+    Player p;
+    start(p, Gesture::Ball, provisional, feet, standing);
+    for (int n = 0; n < 2000 && p.stage != Stage::Holding; n++)
+      advance(p, 5, standing, feet);
+    TEST_ASSERT_TRUE(p.stage == Stage::Holding);
+    Pose pose = playerPose(p, standing);
+    TEST_ASSERT_FALSE(supported(feet, 0, pose, floor));
+    TEST_ASSERT_TRUE(gravityMargin(feet, pose, floor) < 0);
+  }
+}
+
+// Ball (D6) at both height extremes: the body comes down until its
+// underside is a few millimetres above the floor, on all six feet; then it
+// rests on its frame with every foot lifted off the floor and drawn in.
+void test_ball_rests_on_its_frame_with_its_feet_folded_above_the_floor()
+{
+  for (float ground : GROUNDS)
+  {
+    Vector3 standing = standingAt(ground), feet[LEG_COUNT];
+    for (Vector3 &foot : feet)
+      foot = standing;
+    float floor = floorFor(standing);
+    Player p;
+    start(p, Gesture::Ball, feet, standing);
+    while (p.stage == Stage::Keyframes && p.index == 0)
+      advance(p, 5, standing, feet);
+    float lowered = undersideAbove(p.pose, floor);
+    TEST_ASSERT_TRUE_MESSAGE(lowered >= 1 && lowered <= 10, "underside a few millimetres above the floor");
+    for (int leg = 0; leg < LEG_COUNT; leg++)
+      TEST_ASSERT_FLOAT_WITHIN(THROUGH_FLOOR_MM, floor, worldFoot(leg, p.from[leg], p.pose).z);
+    for (int n = 0; n < 2000 && p.stage != Stage::Holding; n++)
+      advance(p, 5, standing, feet);
+    TEST_ASSERT_TRUE(p.stage == Stage::Holding);
+    TEST_ASSERT_FLOAT_WITHIN(THROUGH_FLOOR_MM, 0, undersideAbove(p.pose, floor));
+    for (int leg = 0; leg < LEG_COUNT; leg++)
+    {
+      TEST_ASSERT_TRUE_MESSAGE(worldFoot(leg, feet[leg], p.pose).z >= floor + 5, "foot off the floor");
+      TEST_ASSERT_TRUE_MESSAGE(
+          sqrtf(feet[leg].x * feet[leg].x + feet[leg].y * feet[leg].y) <= gait::STANCE_DISTANCE - 10, "foot drawn in");
+    }
+  }
 }
 
 void test_lifted_legs_keep_the_body_over_its_support()
@@ -265,16 +374,18 @@ void test_lifted_legs_keep_the_body_over_its_support()
         Vector3 feet[kinematics::LEG_COUNT];
         for (int i = 0; i < kinematics::LEG_COUNT; i++)
           feet[i] = standing;
+        float floor = floorFor(standing);
         Player p;
         start(p, g, feet, standing);
         for (uint32_t t = 0; !p.done && t < 60000; t += 5)
         {
-          if (stopAt && t >= stopAt)
+          if ((stopAt && t >= stopAt) || p.stage == Stage::Holding)
             p.stopRequested = true;
           advance(p, 5, standing, feet);
-          Pose pose = playerPose(p);
-          TEST_ASSERT_TRUE_MESSAGE(supported(feet, MARGIN_MM, pose), "body outside its support");
-          TEST_ASSERT_TRUE_MESSAGE(gravityMargin(feet, pose) >= MARGIN_MM, "centre of gravity outside its support");
+          Pose pose = playerPose(p, standing);
+          TEST_ASSERT_TRUE_MESSAGE(supported(feet, MARGIN_MM, pose, floor), "body outside its support");
+          TEST_ASSERT_TRUE_MESSAGE(gravityMargin(feet, pose, floor) >= MARGIN_MM,
+                                   "centre of gravity outside its support");
         }
       }
 }
@@ -293,7 +404,7 @@ static uint32_t playChecked(Gesture g, float ground, uint32_t stepMs, uint32_t s
   uint32_t t = 0;
   while (!p.done && t < 120000)
   {
-    if (stopAfterMs && t >= stopAfterMs)
+    if ((stopAfterMs && t >= stopAfterMs) || p.stage == Stage::Holding)
       p.stopRequested = true;
     for (int i = 0; i < kinematics::LEG_COUNT; i++)
       before[i] = feet[i];
@@ -339,7 +450,9 @@ void test_time_carries_over_keyframe_boundaries()
   {
     uint32_t fine = playChecked(g, -100, 1);
     uint32_t coarse = playChecked(g, -100, 23);
-    TEST_ASSERT_TRUE(coarse >= fine && coarse < fine + 23);
+    // A holding gesture also waits up to a step at its hold.
+    uint32_t steps = script(g).holds ? 2 : 1;
+    TEST_ASSERT_TRUE(coarse >= fine && coarse < fine + 23 * steps);
   }
 }
 
@@ -386,6 +499,7 @@ void test_ball_holds_and_every_interrupted_unfold_is_safe()
       for (auto &foot : feet)
         foot = standing;
       Player p;
+      float floor = floorFor(standing);
       start(p, Gesture::Ball, feet, standing);
       bool stopped = false, unfolded = false;
       int holdSteps = 0;
@@ -411,6 +525,7 @@ void test_ball_holds_and_every_interrupted_unfold_is_safe()
                                      p.from[leg].distanceTo(keyframeFoot(ball.frames[stopFrame], leg, standing)));
         unfolded |= p.stage == Stage::Unfold;
         TEST_ASSERT_TRUE(p.stage != Stage::Plant && p.stage != Stage::Straighten);
+        TEST_ASSERT_TRUE_MESSAGE(supported(feet, 20, playerPose(p, standing), floor), "ball body outside its support");
         for (int leg = 0; leg < LEG_COUNT; leg++)
         {
           TEST_ASSERT_TRUE(kinematics::isValidTarget(feet[leg]));
@@ -739,6 +854,8 @@ int main()
   RUN_TEST(test_shifting_the_body_moves_planted_feet_the_other_way);
   RUN_TEST(test_every_pose_is_reachable_and_within_servo_range);
   RUN_TEST(test_a_body_on_its_underside_is_supported_by_the_frame);
+  RUN_TEST(test_support_rejects_the_provisional_ball);
+  RUN_TEST(test_ball_rests_on_its_frame_with_its_feet_folded_above_the_floor);
   RUN_TEST(test_lifted_legs_keep_the_body_over_its_support);
   RUN_TEST(test_gesture_keeps_the_speed_limit_and_ends_standing);
   RUN_TEST(test_time_carries_over_keyframe_boundaries);
