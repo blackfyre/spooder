@@ -66,3 +66,7 @@ The TrimUI's 1280×720 drive screen, rendered on the host by the pak's own drawi
 | Bench simulation | Faults and the clear hold | Leaving |
 | --- | --- | --- |
 | ![The panels page in bench simulation, with the SIM chip](images/handheld-simulation.png) | ![The panels page with the emergency stop and undervoltage faults](images/handheld-fault.png) | ![The leave banner, waiting for Sleep](images/handheld-leaving.png) |
+
+| Gesture overlay |
+| --- |
+| ![The gesture overlay while L2 is held: five tiles as the TrimUI's buttons, wiggle playing, dance, attack and ball not scripted yet](images/handheld-gestures.png) |

@@ -35,6 +35,19 @@ Faults are named chips, the emergency stop in orange. Holding `Select` + `Y` fil
 
 ![The panels page with the emergency stop and undervoltage faults, the e-stop chip set in the header and the fault clear's hold part way](images/handheld-fault.png)
 
+## Gestures
+
+While `L2` is held beyond half travel, on either page, the gesture overlay covers the drive screen, and it closes when `L2` is released. It only shows the layer: the controls and the command frames are the same with it open. Its five tiles sit as their buttons do on the TrimUI, `A`, `B`, `X` and `Y` as a diamond with `R2` beside it, each with the gesture's name and its keycap, which presses down while the button is held.
+
+- Say hi (`A`) and wiggle (`B`) have scripts: their tiles loop the robot playing them, drawn from the joint angles of the robot's own script every 50 ms, holding the last pose briefly before starting again.
+- Dance (`X`), attack (`Y`) and ball (`R2`) have no script yet: their tiles show the standing robot muted and marked `NOT YET`, and the robot does not play them.
+- A request lights its tile for a moment, marked `REQUESTED`. While fresh telemetry reports a gesture playing, its tile stays lit, marked `PLAYING`.
+- `STAND FIRST` shows while the robot cannot start a gesture: no telemetry, telemetry stale for 500 ms, or a body mode other than Stand or Perform. The robot plays a gesture only from a settled Stand: release `L2`, then press `Y` to stand it from Sleep or `Start` to stop it walking, and wait for it to settle.
+
+![The gesture overlay over the panels page: the five tiles as the TrimUI's buttons, say hi animating, wiggle lit in orange and marked PLAYING, dance, attack and ball muted and marked NOT YET, and L2 · GESTURES beside them](images/handheld-gestures.png)
+
+Which gestures have a script, and the tiles' animations, come from `test/golden/gestures.txt`, which a host test writes from the robot's gesture player and keeps in step with it; the pak embeds a table generated from it (see [desktop/CLAUDE.md](../desktop/CLAUDE.md)).
+
 ## Leaving
 
 Menu, a short Power press (suspend) and a 2 s Power hold (power off) first request Sleep, and act once two newer telemetry frames in a row report Sleep or output off, or after 3 s. If the pak stops sending without that, the bridge's 150 ms lapse makes the robot sleep. WiFi power saving is turned off while the pak runs and restored however it exits.

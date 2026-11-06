@@ -16,7 +16,7 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 Render `docs/images/handheld-gestures.png` with `SPOODER_SCREENSHOTS`; update `docs/controls.md` and `docs/handheld.md` (the L2 layer's buttons and gestures, which are not scripted yet, the overlay and its screenshot), `docs/screenshots.md`, `desktop/CLAUDE.md` (`internal/gestures`, the generated table and how to regenerate it) and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec delta, and that `grep` finds `handheld-gestures.png` in `docs/handheld.md` and `docs/screenshots.md` and `gestures.txt` in `test/CLAUDE.md` and `desktop/CLAUDE.md`.
+- [x] 4.1 Render `docs/images/handheld-gestures.png` with `SPOODER_SCREENSHOTS`; update `docs/controls.md` and `docs/handheld.md` (the L2 layer's buttons and gestures, which are not scripted yet, the overlay and its screenshot), `docs/screenshots.md`, `desktop/CLAUDE.md` (`internal/gestures`, the generated table and how to regenerate it) and `CHANGELOG.md` under Unreleased. Verify by reading them against the spec delta, and that `grep` finds `handheld-gestures.png` in `docs/handheld.md` and `docs/screenshots.md` and `gestures.txt` in `test/CLAUDE.md` and `desktop/CLAUDE.md`.
 
 ## 5. Gates
 

@@ -18,7 +18,7 @@ Button names are Bluepad32's, in the Xbox layout.
 | D-pad right / left | Speed |
 | `X` | Toggle stride: dynamic / fixed |
 | Both stick buttons held 1 s | Clear faults |
-| `L2` held + `A` / `B` | Gesture: say hi / wiggle (from Stand) |
+| `L2` held + `A` / `B` / `X` / `Y` / `R2` | Gesture: say hi / wiggle / dance / attack / ball (from Stand; dance, attack and ball have no script yet, so the robot does not play them) |
 
 ## TrimUI handheld
 
@@ -29,7 +29,7 @@ The handheld uses the gamepad's controls, by the TrimUI's own labels, with `Star
 | `Select` + `Start` | Toggle the emergency stop |
 | `Select` + `Y` held 1 s | Clear faults |
 | `Select` + `X` | Switch the drive screen between its panels and the driving view (nothing sent changes) |
-| `L2` beyond half travel + a face button | Gesture |
+| `L2` beyond half travel + `A` / `B` / `X` / `Y` / `R2` | Gesture: say hi / wiggle / dance / attack / ball, as on the gamepad; while `L2` is held the drive screen shows the [gesture overlay](handheld.md#gestures) (nothing sent changes) |
 | `Menu` | Leave: Sleep first, confirmed by telemetry (Sleep or output off) or after 3 s |
 | `Power` short / held 2 s | Suspend / power off, after the same Sleep request and wait |
 
