@@ -77,7 +77,7 @@ void test_connected_starts_in_stand_with_defaults()
   TEST_ASSERT_TRUE(last.controllerConnected);
   TEST_ASSERT_EQUAL(0, last.height);
   TEST_ASSERT_EQUAL(44, last.speed);
-  TEST_ASSERT_EQUAL(0, last.gait);
+  TEST_ASSERT_EQUAL((int)gait::Gait::Wave, last.gait);
   TEST_ASSERT_TRUE(last.stride == StrideMode::Dynamic);
 }
 
@@ -111,7 +111,7 @@ void test_reconnect_starts_in_stand_and_keeps_settings()
   TEST_ASSERT_TRUE(d.mode == RequestedMode::Stand);
   TEST_ASSERT_EQUAL(10, d.height);
   TEST_ASSERT_EQUAL(34, d.speed);
-  TEST_ASSERT_EQUAL(1, d.gait);
+  TEST_ASSERT_EQUAL((int)gait::Gait::Ripple, d.gait);
   TEST_ASSERT_TRUE(d.stride == StrideMode::Fixed);
 }
 
@@ -142,7 +142,7 @@ void test_button_held_through_reconnect_is_not_a_press()
   pad.buttons = BUTTON_R1;
   tick();
   tick();
-  TEST_ASSERT_EQUAL(0, last.gait);
+  TEST_ASSERT_EQUAL((int)gait::Gait::Wave, last.gait);
 }
 
 // --- Mapping table ---
@@ -226,12 +226,14 @@ void test_combination_has_priority_over_home_toggle()
 void test_shoulders_change_gait_and_wrap()
 {
   pressButton(BUTTON_R1);
-  TEST_ASSERT_EQUAL(1, last.gait);
+  TEST_ASSERT_EQUAL((int)gait::Gait::Ripple, last.gait);
   pressButton(BUTTON_L1);
+  pressButton(BUTTON_L1);
+  TEST_ASSERT_EQUAL((int)gait::Gait::Tri, last.gait);
   pressButton(BUTTON_L1);
   TEST_ASSERT_EQUAL(gait::GAIT_COUNT - 1, last.gait);
   pressButton(BUTTON_R1);
-  TEST_ASSERT_EQUAL(0, last.gait);
+  TEST_ASSERT_EQUAL((int)gait::Gait::Tri, last.gait);
 }
 
 void test_dpad_steps_height_and_speed_within_range()
@@ -269,7 +271,7 @@ void test_held_buttons_do_not_repeat()
   pad.dpad = DPAD_UP;
   for (int i = 0; i < 100; i++)
     tick();
-  TEST_ASSERT_EQUAL(1, last.gait);
+  TEST_ASSERT_EQUAL((int)gait::Gait::Ripple, last.gait);
   TEST_ASSERT_EQUAL(10, last.height);
   TEST_ASSERT_TRUE(last.stride == StrideMode::Fixed);
 }

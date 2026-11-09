@@ -335,8 +335,8 @@ func TestDrivingWalksTheRobot(t *testing.T) {
 	if err := c.S.SetDrive(session.Drive{Forward: true, SteerRight: true}); err != nil {
 		t.Fatal(err)
 	}
-	c.WaitFor(t, 4*time.Second, "walking in Wave with the legs moving", func(s session.Snapshot) bool {
-		return s.Body == session.BodyWalk && session.GaitName(s.Telemetry.Gait) == "Wave" && s.PoseFresh && moved(s.Pose) > 5
+	c.WaitFor(t, 4*time.Second, "walking in Ripple with the legs moving", func(s session.Snapshot) bool {
+		return s.Body == session.BodyWalk && session.GaitName(s.Telemetry.Gait) == "Ripple" && s.PoseFresh && moved(s.Pose) > 5
 	})
 	if err := c.S.SetDrive(session.Drive{}); err != nil {
 		t.Fatal(err)

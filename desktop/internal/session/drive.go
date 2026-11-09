@@ -103,7 +103,7 @@ func (s *Session) StepHeight(steps int) error {
 	return s.setting(func() { s.height = stepDial(s.height, steps*dialStep) })
 }
 
-// NextGait selects the next gait, after Hop Tri again.
+// NextGait selects the next gait, after Hop Tri again; it starts at Wave.
 func (s *Session) NextGait() error {
 	return s.setting(func() { s.gait = (s.gait + 1) % gaitCount })
 }

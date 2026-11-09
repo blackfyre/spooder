@@ -77,12 +77,16 @@ struct Desired
   uint8_t gestureRequestCounter; // incremented on every gesture request
 };
 
+// The gait selected at start-up: gait::Gait::Wave, which keeps five or six
+// feet down and spreads the weight most evenly (wave-default-gait).
+constexpr uint8_t START_GAIT = 1;
+
 struct Mapper
 {
   // Settings kept across disconnects.
   uint8_t height = 0;
   uint8_t speed = 44;
-  uint8_t gait = 0;
+  uint8_t gait = START_GAIT;
   StrideMode stride = StrideMode::Dynamic;
   StickMode stickMode = StickMode::Steer;
   uint8_t clearCounter = 0;

@@ -369,10 +369,14 @@ func TestControlsMapToGamepad(t *testing.T) {
 	r := newRig(t)
 	r.tap(HandY)
 	r.want(ModeStand, 2)
+	if r.last.Gait != StartGait {
+		t.Fatalf("start: gait %d", r.last.Gait)
+	}
 	r.tap(HandR1)
-	if r.last.Gait != 1 {
+	if r.last.Gait != StartGait+1 {
 		t.Fatalf("R1: gait %d", r.last.Gait)
 	}
+	r.tap(HandL1)
 	r.tap(HandL1)
 	r.tap(HandL1)
 	if r.last.Gait != GaitCount-1 {

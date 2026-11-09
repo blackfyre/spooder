@@ -550,7 +550,7 @@ func TestSettingKeys(t *testing.T) {
 	for _, k := range []key.Name{"X", "X", "V", "G", "T"} {
 		press(w, router, k, 0)
 	}
-	if c := s.Command(); c.Speed != 64 || c.Height != 10 || c.Gait != 1 || c.Stride != 1 {
+	if c := s.Command(); c.Speed != 64 || c.Height != 10 || session.GaitName(c.Gait) != "Ripple" || c.Stride != 1 {
 		t.Fatalf("settings: %+v", c)
 	}
 	press(w, router, "Z", 0)

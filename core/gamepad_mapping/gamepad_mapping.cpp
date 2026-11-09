@@ -3,6 +3,8 @@
 #include <math.h>
 #include "movement/gait.h"
 
+static_assert(gamepad_mapping::START_GAIT == static_cast<uint8_t>(gait::Gait::Wave), "the mapping starts in Wave");
+
 namespace gamepad_mapping
 {
 

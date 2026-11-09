@@ -38,6 +38,7 @@ gamepad_mapping::Desired desired(Controller &c, uint32_t nowMs)
   gamepad_mapping::Desired d = {};
   d.mode = c.mode;
   d.speed = SPEED;
+  d.gait = gamepad_mapping::START_GAIT;
   d.stride = StrideMode::Dynamic;
   d.controllerConnected = on;
   d.clearCounter = c.clearCounter;

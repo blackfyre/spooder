@@ -44,7 +44,7 @@ func report(lastID uint8, result protocol.CalibrationResult) protocol.Frame {
 func TestObserveOnly(t *testing.T) {
 	s, _ := connected(t)
 	c := s.Command()
-	want := protocol.Command{Mode: uint8(RequestSleep), Speed: 44}
+	want := protocol.Command{Mode: uint8(RequestSleep), Speed: 44, Gait: commandGait}
 	if c != want {
 		t.Fatalf("command %+v, want %+v", c, want)
 	}

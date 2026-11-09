@@ -129,7 +129,7 @@ func TestReleaseAndDisconnectDropTheDrive(t *testing.T) {
 func TestWalkingSettings(t *testing.T) {
 	s := standing(t)
 	c := s.Command()
-	if c.Speed != 44 || c.Height != 0 || c.Gait != 0 || c.Stride != 0 {
+	if c.Speed != 44 || c.Height != 0 || GaitName(c.Gait) != "Wave" || c.Stride != 0 {
 		t.Fatalf("defaults: %+v", c)
 	}
 	_ = s.StepSpeed(1)
@@ -138,11 +138,11 @@ func TestWalkingSettings(t *testing.T) {
 	_ = s.NextGait()
 	_ = s.ToggleStride()
 	c = s.Command()
-	if c.Speed != 64 || c.Height != 10 || GaitName(c.Gait) != "Wave" || StrideName(c.Stride) != "fixed" {
+	if c.Speed != 64 || c.Height != 10 || GaitName(c.Gait) != "Ripple" || StrideName(c.Stride) != "fixed" {
 		t.Fatalf("after the keys: %+v", c)
 	}
 	snap := s.Snapshot()
-	if snap.Speed != 64 || snap.Height != 10 || snap.Gait != 1 || snap.Stride != 1 {
+	if snap.Speed != 64 || snap.Height != 10 || snap.Gait != 2 || snap.Stride != 1 {
 		t.Fatalf("snapshot: %+v", snap)
 	}
 	// Clamped to 0-100, and the gait wraps.
@@ -150,15 +150,15 @@ func TestWalkingSettings(t *testing.T) {
 		_ = s.StepSpeed(-1)
 		_ = s.StepHeight(1)
 	}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 4; i++ {
 		_ = s.NextGait()
 	}
-	if c = s.Command(); c.Speed != 0 || c.Height != 100 || c.Gait != 0 {
+	if c = s.Command(); c.Speed != 0 || c.Height != 100 || GaitName(c.Gait) != "Tri" {
 		t.Fatalf("clamped: %+v", c)
 	}
 	// Observing sends the defaults again.
 	s.ReleaseControl()
-	if c = s.Command(); c.Speed != 44 || c.Height != 0 || c.Gait != 0 || c.Stride != 0 {
+	if c = s.Command(); c.Speed != 44 || c.Height != 0 || GaitName(c.Gait) != "Wave" || c.Stride != 0 {
 		t.Fatalf("observing: %+v", c)
 	}
 }

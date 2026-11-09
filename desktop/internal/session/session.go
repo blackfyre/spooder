@@ -33,10 +33,11 @@ const StaleAfter = time.Second
 
 // Command defaults while observing, and the walking settings' starting
 // values, as the bridge's gamepad mapping starts: body height 0, speed 44,
-// gait Tri, dynamic stride.
+// gait Wave, dynamic stride.
 const (
 	commandHeight = 0
 	commandSpeed  = 44
+	commandGait   = 1 // Wave, as START_GAIT in core/gamepad_mapping
 )
 
 // Log sizes.
@@ -112,7 +113,7 @@ func New(now func() time.Time, onChange func()) *Session {
 	if now == nil {
 		now = time.Now
 	}
-	return &Session{now: now, onChange: onChange, mode: RequestSleep, speed: commandSpeed, height: commandHeight}
+	return &Session{now: now, onChange: onChange, mode: RequestSleep, speed: commandSpeed, height: commandHeight, gait: commandGait}
 }
 
 func (s *Session) changed() {
@@ -216,6 +217,7 @@ func (s *Session) Command() protocol.Command {
 		Mode:               uint8(RequestSleep),
 		Height:             commandHeight,
 		Speed:              commandSpeed,
+		Gait:               commandGait,
 		ClearCounter:       s.clearCounter,
 		ModeRequestCounter: s.modeCounter,
 		// The robot counts a gesture request only from the source in

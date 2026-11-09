@@ -309,7 +309,7 @@ The pak's output goes to `Spooder.txt` in NextUI's logs folder (`$LOGS_PATH`) wh
 | `B` | Toggle steer / crab mode |
 | `Start` | Toggle Stand / Walk |
 | `Y` | Toggle Sleep (the pak starts in Sleep: `Y` stands the robot, then `Start` walks it) |
-| `R1` / `L1` | Next / previous gait |
+| `R1` / `L1` | Next / previous gait (starts in Wave) |
 | D-pad up / down | Body height ±10 |
 | D-pad right / left | Speed ±10 |
 | `X` | Toggle stride: dynamic / fixed |
@@ -381,7 +381,7 @@ The desktop app in `desktop/` speaks the link protocol on the robot's USB port. 
 3. **Take control** with the bridge's gamepad off and the app's e-stop released. Clear fault (`F`; the fault cannot clear while any e-stop is still signalled), then Calibrate (`2`; `1` Stand, `3` Sleep). From Stand, keys `4`–`8` (or the gesture buttons) play say hi, wiggle, dance, attack and ball; rehearse them on the virtual robot first (`mise run desktop-sim`). The keys are listed under the mode buttons while in control. LED 6 shows blue (USB in control) once the fault is cleared, and the source shows `USB (this app)`.
 4. **Drive.** In control, from Stand (`1`):
    - **Drive keys:** hold `W`/`S` to walk forward and back, `A`/`D` to steer (turning on the spot without `W`/`S`, mirrored when reversing), and `Q`/`E` to step sideways. The first press requests Walk. Releasing every key holds the feet, and `1` stands again.
-   - **Settings:** `Z`/`X` set the speed dial, `C`/`V` the height (steps of 10), `G` the next gait and `T` the stride mode. The line under the mode buttons shows what is sent.
+   - **Settings:** `Z`/`X` set the speed dial, `C`/`V` the height (steps of 10), `G` the next gait (starting in Wave) and `T` the stride mode. The line under the mode buttons shows what is sent.
    - **Stopping:** losing the window focus stops the input, and Space is the e-stop.
    - Rehearse on the virtual robot first, and keep the robot on a stand until the gait looks right.
 5. **Calibrate.** Select a joint with the arrow keys or the pointer; `=`/`-` nudge fine, Shift coarse, `R` flips the direction. A change shows `pending` until the robot's report confirms it; clamped or rejected changes are marked and show the robot's value. The joint moves at 60°/s at most.
@@ -416,7 +416,7 @@ Button names are Bluepad32's (Xbox layout: `a` bottom, `b` right, `x` left, `y` 
 | `Home` (system) | Toggle Stand / Walk |
 | `y` | Toggle Sleep (returns to the previous mode) |
 | `Back` + `Home` held 1 s | Toggle Calibrate (leaving returns to Stand) |
-| `r1` / `l1` | Next / previous gait |
+| `r1` / `l1` | Next / previous gait (starts in Wave) |
 | D-pad up / down | Body height ±10 |
 | D-pad right / left | Speed ±10 |
 | `x` | Toggle stride: dynamic / fixed |

@@ -13,7 +13,7 @@ Button names are Bluepad32's, in the Xbox layout.
 | `Home` | Toggle Stand / Walk |
 | `Y` | Toggle Sleep |
 | `Back` + `Home` held 1 s | Toggle Calibrate |
-| `R1` / `L1` | Next / previous gait |
+| `R1` / `L1` | Next / previous gait (starts in Wave) |
 | D-pad up / down | Body height |
 | D-pad right / left | Speed |
 | `X` | Toggle stride: dynamic / fixed |
