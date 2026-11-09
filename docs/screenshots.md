@@ -57,7 +57,11 @@ The gamepad bridge's 240×135 screen, rendered on the host by its own drawing co
 
 ## The handheld
 
-The TrimUI's 1280×720 drive screen, rendered on the host by the pak's own drawing code from sample states (see [Development](development.md#screenshots)). [The handheld controller](handheld.md) describes each.
+The TrimUI's 1280×720 start and drive screens, rendered on the host by the pak's own drawing code from sample states (see [Development](development.md#screenshots)). [The handheld controller](handheld.md) describes each.
+
+| Start screen |
+| --- |
+| ![The start screen with the join message and the A RETRY and B QUIT keys](images/handheld-join.png) |
 
 | Panels | Driving view |
 | --- | --- |

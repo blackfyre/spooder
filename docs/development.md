@@ -38,7 +38,7 @@ Each area has its own `CLAUDE.md` with its layout and rules.
 
 - The calibrator's are taken by hand against the virtual robot (`mise run desktop-sim`), in both looks.
 - The bridge screen's: `mise run bridge-screenshots` writes `docs/images/bridge-*.png`.
-- The handheld's: run the drawing test with `SPOODER_SCREENSHOTS` set to a directory, then copy the states shown here (`driving`, `driveview`, `simulation`, `fault`, `leaving`, `gestures`) to `docs/images/handheld-<state>.png`:
+- The handheld's: run the drawing test with `SPOODER_SCREENSHOTS` set to a directory, then copy the states shown here (`join`, `driving`, `driveview`, `simulation`, `fault`, `leaving`, `gestures`) to `docs/images/handheld-<state>.png`:
 
   ```sh
   cd desktop/handheld

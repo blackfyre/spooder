@@ -584,9 +584,7 @@ func (s *screen) draw(sc app.Screen) {
 func (s *screen) header(sc app.Screen) {
 	l := s.l
 	y := l.headerY
-	tx := l.left
-	tx += s.text(s.f.title, "Spooder", tx, y+(l.gap(headerH)-int32(s.f.title.Height()))/2, l.colW, colText)
-	s.text(s.f.title, ".", tx, y+(l.gap(headerH)-int32(s.f.title.Height()))/2, l.colW, colAccent)
+	s.title()
 
 	cy := y + (l.gap(headerH)-l.gap(chipHeight))/2
 	type chipSpec struct {
@@ -634,6 +632,15 @@ func (s *screen) header(sc app.Screen) {
 		s.chip(x, cy, c.text, c.face, c.fg, c.dot)
 		x -= l.gap(10)
 	}
+}
+
+// title draws "Spooder." with the orange full stop at the header's left, on
+// the drive screen and the start screen alike.
+func (s *screen) title() {
+	l := s.l
+	y := l.headerY + (l.gap(headerH)-int32(s.f.title.Height()))/2
+	tx := l.left + s.text(s.f.title, "Spooder", l.left, y, l.colW, colText)
+	s.text(s.f.title, ".", tx, y, l.colW, colAccent)
 }
 
 // The signal levels the header's signal dot changes tone at, in dBm: from

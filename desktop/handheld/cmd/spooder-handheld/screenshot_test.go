@@ -12,6 +12,7 @@ import (
 	"github.com/blackfyre/spooder/desktop/handheld/internal/app"
 	"github.com/blackfyre/spooder/desktop/handheld/internal/padmap"
 	"github.com/blackfyre/spooder/desktop/handheld/internal/supplyband"
+	"github.com/blackfyre/spooder/desktop/handheld/internal/wlan"
 	"github.com/blackfyre/spooder/desktop/internal/legview"
 )
 
@@ -141,9 +142,19 @@ var screenshotCases = []struct {
 	}, 1200 * time.Millisecond},
 }
 
-// TestDrawsEveryState draws each state on a software renderer at the
-// device's size. With SPOODER_SCREENSHOTS set to a directory, it also saves
-// each as a PNG there.
+// The start screen's states (handheld-start-screen).
+var startScreenshotCases = []struct {
+	name string
+	page startPage
+	held padmap.Buttons
+}{
+	{"join", failedPage(&wlan.NotJoinedError{Network: "HomeNetwork"}), padmap.HandA},
+	{"checking", checkingPage(true, ""), 0},
+}
+
+// TestDrawsEveryState draws each state of the drive screen and the start
+// screen on a software renderer at the device's size. With
+// SPOODER_SCREENSHOTS set to a directory, it also saves each as a PNG there.
 func TestDrawsEveryState(t *testing.T) {
 	if err := img.Init(img.INIT_PNG); err != nil {
 		t.Fatal(err)
@@ -151,30 +162,37 @@ func TestDrawsEveryState(t *testing.T) {
 	defer img.Quit()
 	f := testFonts(t)
 	dir := os.Getenv("SPOODER_SCREENSHOTS")
-	for _, c := range screenshotCases {
+	render := func(name string, draw func(s *screen, now *time.Time)) {
 		surf, err := sdl.CreateRGBSurfaceWithFormat(0, 1280, 720, 32, sdl.PIXELFORMAT_ARGB8888)
 		if err != nil {
 			t.Fatal(err)
 		}
+		defer surf.Free()
 		r, err := sdl.CreateSoftwareRenderer(surf)
 		if err != nil {
-			surf.Free()
 			t.Fatal(err)
 		}
+		defer func() { _ = r.Destroy() }()
 		win := surfaceWindow{1280, 720}
 		now := time.Unix(1000, 0)
 		s := &screen{win: win, r: r, f: f, l: newLayout(win.w, win.h, f), now: func() time.Time { return now }}
-		if c.open > 0 {
-			s.draw(c.sc)
-			now = now.Add(c.open)
-		}
-		s.draw(c.sc)
+		draw(s, &now)
 		if dir != "" {
-			if err := img.SavePNG(surf, filepath.Join(dir, c.name+".png")); err != nil {
-				t.Errorf("%s: %v", c.name, err)
+			if err := img.SavePNG(surf, filepath.Join(dir, name+".png")); err != nil {
+				t.Errorf("%s: %v", name, err)
 			}
 		}
-		_ = r.Destroy()
-		surf.Free()
+	}
+	for _, c := range screenshotCases {
+		render(c.name, func(s *screen, now *time.Time) {
+			if c.open > 0 {
+				s.draw(c.sc)
+				*now = now.Add(c.open)
+			}
+			s.draw(c.sc)
+		})
+	}
+	for _, c := range startScreenshotCases {
+		render(c.name, func(s *screen, _ *time.Time) { s.start(c.page, c.held) })
 	}
 }
