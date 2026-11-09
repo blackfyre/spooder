@@ -27,7 +27,7 @@ const (
 // Where the body's and the battery's masses sit, in the body frame.
 var (
 	bodyAt    = Point3{}
-	batteryAt = Point3{}
+	batteryAt = Point3{X: 0, Y: -0.175, Z: 1.125} // the centre of the cavity under the frame
 )
 
 // ContactMM: a foot higher than this above the lowest is off the ground.

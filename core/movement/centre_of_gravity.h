@@ -37,9 +37,13 @@ static_assert(BODY_G + 6 * SERVO_G == CENTRE_G, "the body is the weighed centre 
 static_assert(2 * SERVO_G + COXA_LINK_G + FEMUR_LINK_G + TIBIA_LINK_G == LEG_G, "the links share the weighed leg");
 constexpr float TIBIA_LINK_AT = 0.4f;
 
-// Where the body's and the battery's masses sit.
+// Where the body's and the battery's masses sit. The battery fills the
+// cavity under the frame (hardware/aecert-hexapod-v1/README.md): between
+// Frame Bottom's channel sides (x +-24.65), its front wall (y 75.65) and the
+// step in its floor at the open rear (y -76.0), from the floor (z -13.75) up
+// to Frame Top's underside (z 16.0); its centre is that box's.
 const Vector3 BODY_AT(0, 0, 0);
-const Vector3 BATTERY_AT(0, 0, 0);
+const Vector3 BATTERY_AT(0, -0.175f, 1.125f);
 
 // A foot higher than this above the lowest foot is off the ground.
 constexpr float CONTACT_MM = 10;
