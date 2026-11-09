@@ -15,7 +15,7 @@
 3. Start **Spooder** from Tools.
 4. Press `Y` to stand the robot, then `Start` to walk it.
 
-If the TrimUI is on another network, the pak renews its address once and then names the network to join. The controls are in [Controls](controls.md#trimui-handheld).
+The pak starts only on a network named `spooder-drive-` and four hex digits: on another network, the bridge's setup network `spooder-XXXX` included, or on none, it names the network to join; on the bridge's network without a 192.168.4.x address, it renews its address once first. While it drives, it checks the network once a second: if NextUI's WiFi moves the TrimUI to another network, the pak sends nothing (the robot sleeps, as when the handheld goes out of range), the header's link chip reads `OFF NETWORK` and the robot panel (on the driving view, its title) names the network to rejoin. Back on that network, it sends again with Sleep requested; press `Y` to stand again. Another bridge's network counts as another network: restart the pak to drive that robot. The controls are in [Controls](controls.md#trimui-handheld).
 
 ## The drive screen
 

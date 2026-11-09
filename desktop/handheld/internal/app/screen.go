@@ -68,6 +68,12 @@ type LinkView struct {
 	SinceLast                                       time.Duration
 	SignalKnown                                     bool
 	SignalDBm                                       int
+	// OffNetwork: wlan0 is not on Network, the network the run started on,
+	// so no command frame is sent; NowOn is the network it is on, "" for
+	// none (openspec change handheld-network-check).
+	OffNetwork bool
+	Network    string
+	NowOn      string
 }
 
 // Screen is the drive screen's model.
@@ -116,6 +122,7 @@ func (a *App) Screen(now time.Time) Screen {
 		sc.Leave = a.leave.action
 	}
 	signalKnown, signalDBm := a.signalKnown, a.signalDBm
+	offNetwork, network, nowOn := a.offNetwork, a.network, a.nowOn
 	a.mu.Unlock()
 
 	sc.Requested = Requested{
@@ -173,5 +180,6 @@ func (a *App) Screen(now time.Time) Screen {
 		SinceLast:         st.SinceLast(now),
 	}
 	sc.Link.SignalKnown, sc.Link.SignalDBm = signalKnown, signalDBm
+	sc.Link.OffNetwork, sc.Link.Network, sc.Link.NowOn = offNetwork, network, nowOn
 	return sc
 }

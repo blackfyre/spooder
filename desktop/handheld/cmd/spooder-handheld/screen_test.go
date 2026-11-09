@@ -139,10 +139,45 @@ func TestLayoutFitsTheDevice(t *testing.T) {
 		}
 	}
 
-	// The header's chips and the title share the width.
-	chips := s.chipWidth("SOUND OFF", false) + s.chipWidth("SIM", false) + s.chipWidth("LINK STALE", true) + s.chipWidth("-100 DBM", true) + s.chipWidth("E-STOP OFF", false) + 4*l.gap(10)
+	// The header's chips and the title share the width, with the widest
+	// link chip.
+	chips := s.chipWidth("SOUND OFF", false) + s.chipWidth("SIM", false) + s.chipWidth("OFF NETWORK", true) + s.chipWidth("-100 DBM", true) + s.chipWidth("E-STOP OFF", false) + 4*l.gap(10)
 	if title := textWidth(f.title, "Spooder."); l.left+title+l.gap(20) > l.w-l.gap(margin)-chips {
 		t.Errorf("the title (%d) and the chips (%d) overlap", title, chips)
+	}
+
+	// The rejoin notice fits the robot panel's notice line unshortened.
+	notice := robotNotice(app.Screen{Link: app.LinkView{OffNetwork: true, Network: "spooder-drive-ffff"}})
+	ix := l.left + l.gap(panelPad)
+	room := l.colW - 2*l.gap(panelPad) - trackedWidth(f.micro, "NOTICE  ", trackMicro)
+	if w := textWidth(f.micro, notice); w > room {
+		t.Errorf("the rejoin notice is %d wide, the line %d (from %d)", w, room, ix)
+	}
+}
+
+// Off the network the run started on, the driving view's title names the
+// network to rejoin, before the pose's state.
+func TestDriveViewTitleOffNetwork(t *testing.T) {
+	sc := app.Screen{Pose: app.Pose{Have: true, Stale: true}}
+	if got, _ := driveViewTitle(sc); got != "DRIVING VIEW · STALE" {
+		t.Fatalf("on the network: %q", got)
+	}
+	sc.Link = app.LinkView{OffNetwork: true, Network: "spooder-drive-1a2b"}
+	if got, c := driveViewTitle(sc); got != "DRIVING VIEW · REJOIN spooder-drive-1a2b" || c != colWarn {
+		t.Fatalf("off the network: %q", got)
+	}
+}
+
+// Off the network the run started on, the robot panel's notice names it in
+// place of any other notice (openspec change handheld-network-check).
+func TestRobotNoticeOffNetwork(t *testing.T) {
+	sc := app.Screen{Notice: "send: network is unreachable"}
+	if got := robotNotice(sc); got != sc.Notice {
+		t.Fatalf("on the network: %q, want the notice", got)
+	}
+	sc.Link = app.LinkView{OffNetwork: true, Network: "spooder-drive-1a2b", NowOn: "Home WiFi"}
+	if got := robotNotice(sc); !strings.Contains(got, "spooder-drive-1a2b") || !strings.Contains(got, "NOTHING SENT") {
+		t.Fatalf("off the network: %q, want spooder-drive-1a2b and NOTHING SENT", got)
 	}
 }
 

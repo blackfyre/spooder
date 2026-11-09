@@ -36,9 +36,10 @@ func (l *fakeLink) Rebaseline()                         { l.rebaselines++; l.rx.
 
 // fakeRunner records every command, power save's included, in order.
 type fakeRunner struct {
-	mu    sync.Mutex
-	calls []string
-	link  string // iw dev wlan0 link's output
+	mu       sync.Mutex
+	calls    []string
+	link     string // iw dev wlan0 link's output
+	linkFail bool   // iw dev wlan0 link fails
 }
 
 func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -52,6 +53,9 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte
 	case "iw dev wlan0 link":
 		f.mu.Lock()
 		defer f.mu.Unlock()
+		if f.linkFail {
+			return nil, errors.New("exit status 1")
+		}
 		return []byte(f.link), nil
 	}
 	return nil, nil
@@ -75,6 +79,7 @@ type rig struct {
 	c    padmap.Controls
 	cmd  protocol.Command
 	stop bool
+	held bool // the last step held its frame
 }
 
 func newRig(t *testing.T) *rig {
@@ -96,7 +101,10 @@ func (r *rig) step() protocol.Command {
 	}
 	r.now = r.now.Add(udplink.Period)
 	r.a.SetControls(r.c)
-	r.cmd, r.stop = r.a.Step(r.now)
+	var out udplink.Outcome
+	r.cmd, out = r.a.Step(r.now)
+	r.stop = out == udplink.Stop
+	r.held = out == udplink.Hold
 	return r.cmd
 }
 
@@ -570,8 +578,13 @@ func TestStartWithoutDeviceUsesAddr(t *testing.T) {
 	}
 }
 
+// iwOn is iw dev wlan0 link's output on ssid, with a signal level.
+func iwOn(ssid string) string {
+	return "Connected to 02:00:00:00:00:00 (on wlan0)\n\tSSID: " + ssid + "\n\tsignal: -61 dBm\n"
+}
+
 func TestStartOnDevice(t *testing.T) {
-	run := &fakeRunner{}
+	run := &fakeRunner{link: iwOn("spooder-drive-1a2b")}
 	sys := System{
 		Runner:   run,
 		Addrs:    func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("192.168.4.2")}, nil },
@@ -590,7 +603,10 @@ func TestStartOnDevice(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	want := "iw dev wlan0 get power_save\niw dev wlan0 set power_save off\niw dev wlan0 set power_save on"
+	if sc := s.App.Screen(time.Now()); sc.Link.OffNetwork || sc.Link.Network != "spooder-drive-1a2b" {
+		t.Fatalf("network %+v, want on spooder-drive-1a2b", sc.Link)
+	}
+	want := "iw dev wlan0 link\niw dev wlan0 get power_save\niw dev wlan0 set power_save off\niw dev wlan0 link\niw dev wlan0 set power_save on"
 	if got := run.log(); got != want {
 		t.Fatalf("ran\n%s\nwant\n%s", got, want)
 	}
@@ -599,7 +615,7 @@ func TestStartOnDevice(t *testing.T) {
 // On the TrimUI there is no /proc/net/wireless: the signal level comes
 // from iw, sampled at the start and every SignalPeriod while running.
 func TestSignalFromIwOnDevice(t *testing.T) {
-	run := &fakeRunner{link: "Connected to 02:00:00:00:00:00 (on wlan0)\n\tsignal: -61 dBm\n"}
+	run := &fakeRunner{link: iwOn("spooder-drive-1a2b")}
 	sys := System{
 		Runner:   run,
 		Addrs:    func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("192.168.4.2")}, nil },
@@ -633,15 +649,135 @@ func TestSignalFromIwOnDevice(t *testing.T) {
 }
 
 func TestStartOnDeviceNotJoined(t *testing.T) {
-	run := &fakeRunner{}
-	sys := System{Runner: run, Addrs: func(string) ([]net.IP, error) { return nil, nil }}
-	_, err := Start(context.Background(), Config{Device: true, Addr: udplink.DefaultAddr}, sys)
-	var nj *wlan.NotJoinedError
-	if !errors.As(err, &nj) {
-		t.Fatalf("got %v, want the join message", err)
+	for _, c := range []struct {
+		link string
+		ip   string
+	}{
+		{iwOn("spooder-drive-1a2b"), ""},      // no address
+		{iwOn("spooder-1a2b"), "192.168.4.2"}, // the setup network, in the bridge's range
+		{"Not connected.\n", "192.168.4.2"},
+	} {
+		run := &fakeRunner{link: c.link}
+		sys := System{Runner: run, Addrs: func(string) ([]net.IP, error) {
+			if c.ip == "" {
+				return nil, nil
+			}
+			return []net.IP{net.ParseIP(c.ip)}, nil
+		}}
+		_, err := Start(context.Background(), Config{Device: true, Addr: udplink.DefaultAddr}, sys)
+		var nj *wlan.NotJoinedError
+		if !errors.As(err, &nj) {
+			t.Fatalf("%q: got %v, want the join message", c.link, err)
+		}
+		if strings.Contains(run.log(), "power_save") {
+			t.Fatalf("%q: ran\n%s\nbefore the network check passed", c.link, run.log())
+		}
 	}
-	if strings.Contains(run.log(), "power_save") {
-		t.Fatalf("ran\n%s\nbefore the address check passed", run.log())
+}
+
+// onDevice makes the rig's app check the network as a device run started
+// on spooder-drive-1a2b does, wlan0 read through the rig's runner.
+func (r *rig) onDevice() {
+	r.run.mu.Lock()
+	r.run.link = iwOn("spooder-drive-1a2b")
+	r.run.mu.Unlock()
+	r.a.readFile = func(string) ([]byte, error) { return nil, os.ErrNotExist }
+	r.a.network = "spooder-drive-1a2b"
+}
+
+// sample sets iw's link output (or its failure) and samples wlan0.
+func (r *rig) sample(link string, fail bool) {
+	r.run.mu.Lock()
+	r.run.link, r.run.linkFail = link, fail
+	r.run.mu.Unlock()
+	r.a.SampleWLAN(context.Background())
+}
+
+// Off the network the run started on, every tick is held, whatever reads
+// fail or whichever bridge's network wlan0 is on; back on it, the first
+// frame requests Sleep with the held control masked and the robot frames
+// rebaselined (openspec change handheld-network-check).
+func TestOffNetworkHoldsAndRejoinRequestsSleep(t *testing.T) {
+	r := walking(t)
+	r.onDevice()
+	r.sample(iwOn("spooder-drive-1a2b"), false)
+	r.steps(2)
+	if r.held || r.cmd.Mode != uint8(padmap.ModeWalk) {
+		t.Fatalf("on the network: held %v, mode %d; want Walk sent", r.held, r.cmd.Mode)
+	}
+
+	for _, c := range []struct {
+		what, link string
+		fail       bool
+	}{
+		{"another network", iwOn("Home WiFi"), false},
+		{"a failed read", "", true},
+		{"no network", "Not connected.\n", false},
+		{"another bridge", iwOn("spooder-drive-9f00"), false},
+	} {
+		r.sample(c.link, c.fail)
+		r.steps(3)
+		if !r.held {
+			t.Fatalf("%s: a frame was sent off the network", c.what)
+		}
+		sc := r.a.Screen(r.now)
+		if !sc.Link.OffNetwork || sc.Link.Network != "spooder-drive-1a2b" {
+			t.Fatalf("%s: screen %+v, want off spooder-drive-1a2b", c.what, sc.Link)
+		}
+	}
+	if sc := r.a.Screen(r.now); sc.Link.NowOn != "spooder-drive-9f00" {
+		t.Fatalf("now on %q, want spooder-drive-9f00", sc.Link.NowOn)
+	}
+
+	// Back on it, with Y held.
+	before := r.link.rebaselines
+	r.c.Buttons = padmap.HandY
+	r.sample(iwOn("spooder-drive-1a2b"), false)
+	r.step()
+	if r.held || r.cmd.Mode != uint8(padmap.ModeSleep) {
+		t.Fatalf("rejoined: held %v, mode %d; want Sleep sent", r.held, r.cmd.Mode)
+	}
+	if r.link.rebaselines != before+1 {
+		t.Fatalf("%d rebaselines on rejoining, want 1", r.link.rebaselines-before)
+	}
+	r.steps(5)
+	if r.cmd.Mode != uint8(padmap.ModeSleep) {
+		t.Fatalf("Y held through the rejoin changed the mode to %d", r.cmd.Mode)
+	}
+	// A failed read on the network keeps sending.
+	r.sample("", true)
+	r.c.Buttons = 0
+	r.steps(2)
+	r.press(padmap.HandY)
+	if r.held || r.cmd.Mode != uint8(padmap.ModeStand) {
+		t.Fatalf("Y after release: held %v, mode %d; want Stand sent", r.held, r.cmd.Mode)
+	}
+}
+
+// A leave off the network gets no telemetry, so it acts after the full
+// wait, every tick held.
+func TestLeaveOffNetworkActsAfterTheWait(t *testing.T) {
+	r := walking(t)
+	r.onDevice()
+	r.sample(iwOn("Home WiFi"), false)
+	r.step()
+	r.a.Press(ActionExit, r.now)
+	ticks := 0
+	for !r.stop {
+		r.step()
+		ticks++
+		if !r.stop && !r.held {
+			t.Fatal("a frame was sent off the network during the leave")
+		}
+		if ticks > int(LeaveTimeout/udplink.Period)+2 {
+			t.Fatal("the leave did not act")
+		}
+	}
+	if ticks < int(LeaveTimeout/udplink.Period)-1 {
+		t.Fatalf("the leave acted after %d ticks, want the full %v", ticks, LeaveTimeout)
+	}
+	if r.a.Ended() != ActionExit {
+		t.Fatalf("ended %v, want exit", r.a.Ended())
 	}
 }
 

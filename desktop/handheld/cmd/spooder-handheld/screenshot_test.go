@@ -77,6 +77,13 @@ var screenshotCases = []struct {
 		// Select + B switched the sound off.
 		SoundOn: false,
 	}, 0},
+	{"offnetwork", app.Screen{
+		Robot:     app.Robot{Have: true, Stale: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, VoltageMv: 6020, CurrentMa: 1800, Source: "bridge", SupplyLimits: exampleLimits},
+		Requested: app.Requested{Mode: "Walk", Height: 40, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},
+		Link:      app.LinkView{HaveFrame: true, SinceLast: 1400 * time.Millisecond, SignalKnown: true, SignalDBm: -44, Sent: 6120, OffNetwork: true, Network: "spooder-drive-1a2b", NowOn: "Home WiFi"},
+		State:     app.Driving,
+		SoundOn:   true,
+	}, 0},
 	{"leaving", app.Screen{
 		Robot:     app.Robot{Have: true, Body: "Walk", Gait: "Tripod", OutputsOn: true, VoltageMv: 6020, CurrentMa: 2900, Source: "bridge", SupplyLimits: exampleLimits},
 		Requested: app.Requested{Mode: "Sleep", Height: 120, Speed: 44, Gait: "Tripod", Stride: "Dynamic", StickMode: "Steer"},

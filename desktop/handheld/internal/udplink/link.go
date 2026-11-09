@@ -28,9 +28,21 @@ const (
 	maxEvents = 256
 )
 
-// Step returns the command to send at now, or stop to end Run without
-// sending.
-type Step func(now time.Time) (cmd protocol.Command, stop bool)
+// Outcome is what Run does with a step's command.
+type Outcome int
+
+const (
+	// Send sends the command.
+	Send Outcome = iota
+	// Hold sends nothing this tick: no datagram, the sequence number
+	// unchanged (the handheld off the bridge's network).
+	Hold
+	// Stop ends Run without sending.
+	Stop
+)
+
+// Step returns the command for the tick at now and what to do with it.
+type Step func(now time.Time) (cmd protocol.Command, out Outcome)
 
 // Link is one run's socket, sender and receiver.
 type Link struct {
@@ -134,7 +146,8 @@ func (l *Link) Rebaseline() {
 
 // Run waits out StartWait from the socket's creation, then sends step's
 // command every Period, the sequence number advancing by one per frame,
-// until ctx ends or step asks to stop. A send error is counted and the next
+// until ctx ends or step asks to stop; a held tick sends nothing and keeps
+// the sequence number. A send error is counted and the next
 // tick tries again. Ticks missed while step blocks (a suspend) are dropped,
 // not sent late in a burst.
 func (l *Link) Run(ctx context.Context, step Step) error {
@@ -165,11 +178,15 @@ func (l *Link) Run(ctx context.Context, step Step) error {
 	}
 }
 
-// send sends one tick's frame; it reports whether step asked to stop.
+// send sends one tick's frame, unless step holds it; it reports whether
+// step asked to stop.
 func (l *Link) send(step Step) bool {
-	cmd, stop := step(time.Now())
-	if stop {
+	cmd, out := step(time.Now())
+	switch out {
+	case Stop:
 		return true
+	case Hold:
+		return false
 	}
 	l.mu.Lock()
 	seq := l.seq

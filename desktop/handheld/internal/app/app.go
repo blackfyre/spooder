@@ -109,10 +109,19 @@ type App struct {
 	leave    leave
 	done     Action
 	notice   string
-	// The signal level from the last sample (SampleSignal), off the screen's
+	// The signal level from the last sample (SampleWLAN), off the screen's
 	// redraw: reading it may run iw.
 	signalKnown bool
 	signalDBm   int
+	// network is the network the run started on, "" off the device: no
+	// network check (openspec change handheld-network-check). offNetwork:
+	// the last sample read wlan0 on another network (nowOn, "" for none),
+	// and every tick is held; rejoined: it read the started network again
+	// after that, for the next step to resume.
+	network    string
+	offNetwork bool
+	nowOn      string
+	rejoined   bool
 }
 
 // New returns an app driving through link. power and readFile may be nil.
@@ -120,25 +129,35 @@ func New(link Link, run wlan.Runner, power PowerSave, readFile func(string) ([]b
 	return &App{link: link, run: run, power: power, readFile: readFile, hand: padmap.NewHandheld()}
 }
 
-// SignalPeriod is how often the run samples the signal level.
+// SignalPeriod is how often the run samples wlan0's network and signal
+// level.
 const SignalPeriod = time.Second
 
 // signalTimeout bounds one sample's iw.
 const signalTimeout = 500 * time.Millisecond
 
-// SampleSignal reads wlan0's signal level for the screen (wlan.Signal: the
-// kernel's statistics, or iw where there are none). Off the device it does
-// nothing; a failed read makes the level unknown.
-func (a *App) SampleSignal(ctx context.Context) {
+// SampleWLAN reads wlan0's network and signal level (wlan.Read: one iw,
+// the level from the kernel's statistics first). Off the device it does
+// nothing. A failed level read makes the level unknown; a failed network
+// read keeps the last verdict on the network (handheld-network-check, D3).
+func (a *App) SampleWLAN(ctx context.Context) {
 	if a.readFile == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, signalTimeout)
 	defer cancel()
-	dbm, err := wlan.Signal(ctx, a.run, a.readFile)
+	s := wlan.Read(ctx, a.run, a.readFile)
 	a.mu.Lock()
-	a.signalKnown, a.signalDBm = err == nil, dbm
-	a.mu.Unlock()
+	defer a.mu.Unlock()
+	a.signalKnown, a.signalDBm = s.SignalKnown, s.SignalDBm
+	if a.network == "" || !s.NetworkKnown {
+		return
+	}
+	off := s.Network != a.network
+	if a.offNetwork && !off {
+		a.rejoined = true
+	}
+	a.offNetwork, a.nowOn = off, s.Network
 }
 
 // ms is the mapping's clock: milliseconds since the run's first step.
@@ -208,17 +227,29 @@ func (l *leave) observe(ev udplink.Event) {
 }
 
 // Step is one tick at now: it takes the received frames, advances the
-// leave, and returns the command to send, or stop when the run ends. It
-// runs a leave's action itself, so a suspend blocks it until the resume.
-func (a *App) Step(now time.Time) (protocol.Command, bool) {
+// leave, and returns the command and whether to send it, hold it (off the
+// network the run started on) or stop (the run ended). It runs a leave's
+// action itself, so a suspend blocks it until the resume.
+func (a *App) Step(now time.Time) (protocol.Command, udplink.Outcome) {
 	a.mu.Lock()
 	if a.state == Done {
 		a.mu.Unlock()
-		return protocol.Command{}, true
+		return protocol.Command{}, udplink.Stop
 	}
 	if !a.begun {
 		a.begun, a.start = true, now
 		a.hand.Begin(a.ms(now))
+	}
+	if a.rejoined && !a.offNetwork {
+		// Back on the network after holding (handheld-network-check, D4): as
+		// after a resume, the robot frames rebaselined, Sleep requested and
+		// the controls held now ignored until released. A leave in progress
+		// goes on.
+		a.rejoined = false
+		a.link.Rebaseline()
+		a.link.TakeEvents()
+		a.hand.RequestSleep()
+		a.hand.MaskHeld()
 	}
 	events := a.link.TakeEvents()
 	if a.state == Leaving {
@@ -234,8 +265,12 @@ func (a *App) Step(now time.Time) (protocol.Command, bool) {
 	}
 	a.desired = a.hand.Step(a.controls, a.ms(now))
 	cmd := a.hand.Command(a.desired)
+	out := udplink.Send
+	if a.offNetwork {
+		out = udplink.Hold
+	}
 	a.mu.Unlock()
-	return cmd, false
+	return cmd, out
 }
 
 func (a *App) setNotice(format string, args ...any) {
@@ -257,7 +292,7 @@ func (a *App) restorePower(ctx context.Context) {
 }
 
 // act runs a leave's action, without the lock held.
-func (a *App) act(act Action, now time.Time) (protocol.Command, bool) {
+func (a *App) act(act Action, now time.Time) (protocol.Command, udplink.Outcome) {
 	ctx := context.Background()
 	switch act {
 	case ActionSuspend:
@@ -280,13 +315,13 @@ func (a *App) act(act Action, now time.Time) (protocol.Command, bool) {
 	a.mu.Lock()
 	a.state, a.done = Done, act
 	a.mu.Unlock()
-	return protocol.Command{}, true
+	return protocol.Command{}, udplink.Stop
 }
 
 // resume returns to driving after a suspend, with Sleep requested, the
 // controls held at that moment masked until released, and the link's
 // sequence numbers rebaselined.
-func (a *App) resume(now time.Time) (protocol.Command, bool) {
+func (a *App) resume(now time.Time) (protocol.Command, udplink.Outcome) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.link.Rebaseline()
@@ -296,7 +331,10 @@ func (a *App) resume(now time.Time) (protocol.Command, bool) {
 	a.state = Driving
 	a.leave = leave{}
 	a.desired = a.hand.Step(a.controls, a.ms(now))
-	return a.hand.Command(a.desired), false
+	if a.offNetwork {
+		return a.hand.Command(a.desired), udplink.Hold
+	}
+	return a.hand.Command(a.desired), udplink.Send
 }
 
 // State is the leave state machine's state.

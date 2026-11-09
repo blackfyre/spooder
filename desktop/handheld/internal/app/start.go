@@ -84,19 +84,23 @@ type Session struct {
 	power  *wlan.PowerSave
 }
 
-// Start prepares a run. With Device it checks wlan0's address first (a
-// *wlan.NotJoinedError when it is not on the bridge's network: show its
-// message and call Start again to retry), then reads WiFi power saving and
+// Start prepares a run. With Device it checks wlan0's network first, by
+// its name and then its address (a *wlan.NotJoinedError when it is not on
+// a bridge's WiFi drive network: show its message and call Start again to
+// retry), keeping the network for the run's check while it drives, then reads WiFi power saving and
 // turns it off; without Device it does neither. Then it makes the link's
 // socket. Nothing is sent until Run.
 func Start(ctx context.Context, cfg Config, sys System) (*Session, error) {
 	s := &Session{}
 	var power PowerSave
 	var readFile func(string) ([]byte, error)
+	var network string
 	if cfg.Device {
-		if err := wlan.CheckAddress(ctx, sys.Runner, sys.Addrs); err != nil {
+		n, err := wlan.CheckNetwork(ctx, sys.Runner, sys.Addrs)
+		if err != nil {
 			return nil, err
 		}
+		network = n
 		// A setting that cannot be read is left alone: driving with power
 		// saving on is slower to react, not unsafe.
 		p, err := wlan.ReadPowerSave(ctx, sys.Runner)
@@ -117,15 +121,16 @@ func Start(ctx context.Context, cfg Config, sys System) (*Session, error) {
 	}
 	s.Link = link
 	s.App = New(link, sys.Runner, power, readFile)
-	s.App.SampleSignal(ctx)
+	s.App.network = network
+	s.App.SampleWLAN(ctx)
 	if s.Notice != "" {
 		s.App.setNotice("%s", s.Notice)
 	}
 	return s, nil
 }
 
-// Run sends until ctx ends or a leave ends the run, sampling the signal
-// level every SignalPeriod meanwhile.
+// Run sends until ctx ends or a leave ends the run, sampling wlan0's
+// network and signal level every SignalPeriod meanwhile.
 func (s *Session) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -139,7 +144,7 @@ func (s *Session) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				s.App.SampleSignal(ctx)
+				s.App.SampleWLAN(ctx)
 			}
 		}
 	}()

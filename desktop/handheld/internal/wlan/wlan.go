@@ -1,8 +1,9 @@
 // Package wlan is the handheld's WiFi housekeeping on the device
-// (openspec change add-handheld-controller, designs D6 and D7): the check
-// that wlan0 is on the bridge's network with one lease renewal, the join
-// message, the power-saving setting read, turned off and restored, and the
-// signal level. Every command runs through a Runner, so the host tests
+// (openspec changes add-handheld-controller, designs D6 and D7, and
+// handheld-network-check): the check that wlan0 is on the bridge's WiFi
+// drive network, by its name and then its address with one lease renewal,
+// the join message, the power-saving setting read, turned off and restored,
+// and the network and signal level while running. Every command runs through a Runner, so the host tests
 // cover each branch with a fake one.
 package wlan
 
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -22,6 +24,15 @@ const Interface = "wlan0"
 
 // BridgeNet is the bridge access point's network.
 var BridgeNet = net.IPNet{IP: net.IPv4(192, 168, 4, 0).To4(), Mask: net.CIDRMask(24, 32)}
+
+// driveNetwork is the name the bridge's WiFi drive gives its access point:
+// "spooder-drive-" and the last four hex digits of its MAC, lower case
+// (core/setup/access_point's driveSsid). The setup network, "spooder-" and
+// the same digits, does not match.
+var driveNetwork = regexp.MustCompile(`^spooder-drive-[0-9a-f]{4}$`)
+
+// IsDriveNetwork tells whether ssid names a bridge's WiFi drive network.
+func IsDriveNetwork(ssid string) bool { return driveNetwork.MatchString(ssid) }
 
 // WirelessPath is the kernel's wireless statistics.
 const WirelessPath = "/proc/net/wireless"
@@ -100,20 +111,28 @@ func (e *NotJoinedError) Error() string {
 // once it has a lease or after five tries.
 var RenewArgs = []string{"-i", Interface, "-n", "-q", "-t", "5"}
 
-// CheckAddress passes when wlan0 holds an IPv4 address on the bridge's
-// network. Otherwise it renews the lease once with udhcpc and checks again;
-// still none, it returns a *NotJoinedError naming the network wlan0 is on.
-func CheckAddress(ctx context.Context, run Runner, addrs Addrs) error {
+// CheckNetwork passes when wlan0 is on a bridge's WiFi drive network (by
+// its name, IsDriveNetwork) and holds an IPv4 address on the bridge's
+// network, and returns that network's name. On another network, or none,
+// it returns a *NotJoinedError naming it without renewing the lease: a
+// renewal cannot change the network. On a drive network without the
+// address it renews the lease once with udhcpc and checks again; still
+// none, it returns a *NotJoinedError.
+func CheckNetwork(ctx context.Context, run Runner, addrs Addrs) (string, error) {
+	ssid := CurrentNetwork(ctx, run)
+	if !IsDriveNetwork(ssid) {
+		return "", &NotJoinedError{Network: ssid}
+	}
 	if onBridge(addrs) {
-		return nil
+		return ssid, nil
 	}
 	// A failed renewal is not an error of its own: the second check says
 	// whether the address is there.
 	_, _ = run.Run(ctx, "udhcpc", RenewArgs...)
 	if onBridge(addrs) {
-		return nil
+		return ssid, nil
 	}
-	return &NotJoinedError{Network: CurrentNetwork(ctx, run)}
+	return "", &NotJoinedError{Network: ssid}
 }
 
 // CurrentNetwork is the SSID wlan0 is on (`iw dev wlan0 link`), or "".
@@ -122,7 +141,13 @@ func CurrentNetwork(ctx context.Context, run Runner) string {
 	if err != nil {
 		return ""
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	return ParseLinkSSID(out)
+}
+
+// ParseLinkSSID reads the SSID from the output of `iw dev wlan0 link`, ""
+// when it names none (Not connected.).
+func ParseLinkSSID(b []byte) string {
+	for _, line := range strings.Split(string(b), "\n") {
 		if ssid, ok := strings.CutPrefix(strings.TrimSpace(line), "SSID:"); ok {
 			return strings.TrimSpace(ssid)
 		}
@@ -222,20 +247,40 @@ func ParseLinkSignal(b []byte) (int, error) {
 	return 0, ErrNoSignal
 }
 
-// Signal reads wlan0's signal level: from the kernel's wireless statistics
-// through readFile, or, when they have no wlan0 line (cfg80211 drivers
-// without wireless extensions, as on the TrimUI Smart Pro, have no file at
-// all), from `iw dev wlan0 link` through run. Neither giving one reads as
-// ErrNoSignal.
-func Signal(ctx context.Context, run Runner, readFile func(string) ([]byte, error)) (int, error) {
+// Sample is one reading of wlan0 while running: the network it is on and
+// its signal level.
+type Sample struct {
+	// NetworkKnown: the network could be read; Network is its SSID, "" for
+	// none.
+	NetworkKnown bool
+	Network      string
+	// SignalKnown: SignalDBm holds the signal level.
+	SignalKnown bool
+	SignalDBm   int
+}
+
+// Read reads wlan0's network and signal level with one `iw dev wlan0 link`
+// through run (openspec change handheld-network-check, D3); the level comes
+// from the kernel's wireless statistics through readFile first, where they
+// have a wlan0 line (cfg80211 drivers without wireless extensions, as on
+// the TrimUI Smart Pro, have no file at all). An iw that fails leaves the
+// network unknown.
+func Read(ctx context.Context, run Runner, readFile func(string) ([]byte, error)) Sample {
+	var s Sample
 	if b, err := readFile(WirelessPath); err == nil {
 		if dbm, err := ParseSignal(b); err == nil {
-			return dbm, nil
+			s.SignalKnown, s.SignalDBm = true, dbm
 		}
 	}
 	out, err := run.Run(ctx, "iw", "dev", Interface, "link")
 	if err != nil {
-		return 0, ErrNoSignal
+		return s
 	}
-	return ParseLinkSignal(out)
+	s.NetworkKnown, s.Network = true, ParseLinkSSID(out)
+	if !s.SignalKnown {
+		if dbm, err := ParseLinkSignal(out); err == nil {
+			s.SignalKnown, s.SignalDBm = true, dbm
+		}
+	}
+	return s
 }

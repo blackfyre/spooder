@@ -110,6 +110,11 @@ func (h *Handheld) SetNeutral(on bool) {
 	h.neutral = on
 }
 
+// MaskHeld ignores the controls held at the next Step until they are
+// released: on rejoining the bridge's network (openspec change
+// handheld-network-check, D4).
+func (h *Handheld) MaskHeld() { h.maskHeld = true }
+
 // EmergencyStop is the handheld's e-stop toggle (Select + Start).
 func (h *Handheld) EmergencyStop() bool { return h.estop }
 

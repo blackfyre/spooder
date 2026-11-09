@@ -563,7 +563,7 @@ func (s *screen) draw(sc app.Screen) {
 	if sc.DriveView {
 		s.driveView(sc)
 	} else {
-		s.robot(sc.Robot, sc.Notice)
+		s.robot(sc.Robot, robotNotice(sc))
 		s.requested(sc.Requested, sc.Held)
 		s.link(sc.Link)
 	}
@@ -606,6 +606,12 @@ func (s *screen) header(sc app.Screen) {
 		} else {
 			linkChip = chipSpec{"LINK", colChip, colText, &ok}
 		}
+	}
+	if sc.Link.OffNetwork {
+		// Off the network the run started on: nothing is sent
+		// (handheld-network-check), whatever still arrives.
+		alarm := colAccent
+		linkChip = chipSpec{"OFF NETWORK", colChip, colText, &alarm}
 	}
 	signal := "SIGNAL —"
 	if sc.Link.SignalKnown {
@@ -731,6 +737,15 @@ func (s *screen) robot(rb app.Robot, notice string) {
 		nx := ix + s.tracked(s.f.micro, "NOTICE  ", ix, ny, colWarn, trackMicro)
 		s.text(s.f.micro, notice, nx, ny, ix+iw-nx, colWarn)
 	}
+}
+
+// robotNotice is the robot panel's notice: off the network the run started
+// on, the network to rejoin (handheld-network-check), in place of any other.
+func robotNotice(sc app.Screen) string {
+	if sc.Link.OffNetwork {
+		return "REJOIN " + sc.Link.Network + " · NOTHING SENT"
+	}
+	return sc.Notice
 }
 
 // bandColour is a supply value's colour for its band (design D3 of

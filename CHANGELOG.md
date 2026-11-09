@@ -6,6 +6,7 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 
 ### Added
 
+- **Handheld network check.** The pak starts only on a network named `spooder-drive-` and four hex digits, the bridge's WiFi drive: the bridge's setup network and other networks in 192.168.4.0/24 no longer pass its address check. While it drives, it reads the network once a second with the signal level; off the network it started on it sends no command frame (the bridge's lapse sleeps the robot), its link chip reads `OFF NETWORK` and the robot panel (on the driving view, its title) names the network to rejoin. Back on it, it sends again with Sleep requested and the held controls masked, as after a suspend. Only the pak changes.
 - **Front-pair attack.** The body braces over four planted feet, raises the front legs and strikes twice under the selected servo profile's joint speed budget, with an animated handheld preview. Host tests check travel and world-frame support at both height extremes.
 - **Dance gesture.** An eight-beat routine at 120 BPM rolls, nods, twists and bounces over planted feet, then taps a front foot and straightens; the handheld preview follows the same script.
 

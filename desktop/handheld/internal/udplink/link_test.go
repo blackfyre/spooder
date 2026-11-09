@@ -63,8 +63,8 @@ func TestStartWaitRateSequenceAndSourcePort(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_ = l.Run(ctx, func(time.Time) (protocol.Command, bool) {
-			return protocol.Command{Mode: 2, Speed: 44, Flags: protocol.FlagControllerConnected}, false
+		_ = l.Run(ctx, func(time.Time) (protocol.Command, Outcome) {
+			return protocol.Command{Mode: 2, Speed: 44, Flags: protocol.FlagControllerConnected}, Send
 		})
 	}()
 	got := b.collect(t, t0.Add(StartWait+1300*time.Millisecond))
@@ -194,12 +194,12 @@ func TestBlockedStepDoesNotBurst(t *testing.T) {
 	calls := 0
 	go func() {
 		defer wg.Done()
-		_ = l.Run(ctx, func(time.Time) (protocol.Command, bool) {
+		_ = l.Run(ctx, func(time.Time) (protocol.Command, Outcome) {
 			calls++
 			if calls == 3 {
 				time.Sleep(110 * time.Millisecond) // a suspend
 			}
-			return protocol.Command{}, false
+			return protocol.Command{}, Send
 		})
 	}()
 	got := b.collect(t, time.Now().Add(StartWait+400*time.Millisecond))
@@ -215,5 +215,48 @@ func TestBlockedStepDoesNotBurst(t *testing.T) {
 	}
 	if gap := got[2].at.Sub(got[1].at); gap < 100*time.Millisecond {
 		t.Fatalf("the blocked step's frame came %v after the one before, want after the block", gap)
+	}
+}
+
+// A held tick sends no datagram and keeps the sequence number: the frames
+// after it continue where the frames before it stopped.
+func TestHeldTicksSendNothing(t *testing.T) {
+	b := newListener(t)
+	l, err := Dial(b.addr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	calls := 0
+	go func() {
+		defer wg.Done()
+		_ = l.Run(ctx, func(time.Time) (protocol.Command, Outcome) {
+			calls++
+			if calls > 3 && calls <= 8 {
+				return protocol.Command{Mode: 1}, Hold
+			}
+			if calls > 10 {
+				return protocol.Command{}, Stop
+			}
+			return protocol.Command{Mode: 2}, Send
+		})
+	}()
+	got := b.collect(t, time.Now().Add(StartWait+600*time.Millisecond))
+	cancel()
+	wg.Wait()
+	if len(got) != 5 {
+		t.Fatalf("%d datagrams, want 5 (3 sent, 5 held, 2 sent)", len(got))
+	}
+	for i, a := range got {
+		f, ok := classify(a.bytes)
+		if !ok || f.Seq != uint8(i) || f.Command.Mode != 2 {
+			t.Fatalf("datagram %d: %+v, want sequence %d, mode 2", i, f, i)
+		}
+	}
+	if st := l.Status(time.Now()); st.Sent != 5 {
+		t.Fatalf("sent %d, want 5", st.Sent)
 	}
 }

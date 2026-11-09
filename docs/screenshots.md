@@ -67,6 +67,10 @@ The TrimUI's 1280×720 drive screen, rendered on the host by the pak's own drawi
 | --- | --- | --- |
 | ![The panels page in bench simulation, with the SIM chip](images/handheld-simulation.png) | ![The panels page with the emergency stop and undervoltage faults](images/handheld-fault.png) | ![The leave banner, waiting for Sleep](images/handheld-leaving.png) |
 
+| Off the network |
+| --- |
+| ![The panels page with the OFF NETWORK chip and the notice to rejoin spooder-drive-1a2b, nothing sent](images/handheld-offnetwork.png) |
+
 | Gesture overlay |
 | --- |
 | ![The gesture overlay while L2 is held: five tiles as the TrimUI's buttons, wiggle playing, dance, attack and ball not scripted yet](images/handheld-gestures.png) |

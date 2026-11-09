@@ -200,13 +200,7 @@ func (s *screen) driveView(sc app.Screen) {
 	l := s.l
 	x, w := l.left, l.w-2*l.gap(margin)
 	h := l.bodyBottom - l.bodyY
-	title, tc := "DRIVING VIEW", colMuted
-	switch {
-	case !sc.Pose.Have:
-		title = "DRIVING VIEW · NO POSE"
-	case sc.Pose.Stale:
-		title, tc = "DRIVING VIEW · STALE", colWarn
-	}
+	title, tc := driveViewTitle(sc)
 	y := s.panel(x, l.bodyY, w, h, "01", title, tc)
 	ix := x + l.gap(panelPad)
 	wellH := l.bodyBottom - l.gap(panelPad) - y
@@ -237,6 +231,21 @@ func (s *screen) driveView(sc app.Screen) {
 	s.tracked(s.f.micro, "FAULTS", cx, fy, colMuted, trackMicro)
 	fy += l.microH + l.gap(labelGap) + l.gap(2)
 	s.faultChips(rb, cx, fy, cw, l.bodyBottom-l.gap(panelPad), val)
+}
+
+// driveViewTitle is the driving view panel's title and its colour. Off the
+// network the run started on, it names the network to rejoin: the page has
+// no robot panel for the notice (handheld-network-check).
+func driveViewTitle(sc app.Screen) (string, sdl.Color) {
+	switch {
+	case sc.Link.OffNetwork:
+		return "DRIVING VIEW · REJOIN " + sc.Link.Network, colWarn
+	case !sc.Pose.Have:
+		return "DRIVING VIEW · NO POSE", colMuted
+	case sc.Pose.Stale:
+		return "DRIVING VIEW · STALE", colWarn
+	}
+	return "DRIVING VIEW", colMuted
 }
 
 // driveViewCells is the robot's state beside the driving view: its body
