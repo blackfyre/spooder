@@ -13,6 +13,8 @@
 //   refused, supply   the supply read ABSENT_SUPPLY_V or more on any tick
 //   refused, no USB   no host has enumerated the board, or it suspended it
 //   entered           otherwise; simulation then lasts until restart
+// While no USB host is attached the window shows Waiting (a press would be
+// refused), and Available once one is.
 // The window also closes once real output has been on. A refusal is shown for
 // REFUSED_SHOW_MS after the press. In simulation, a measured supply above the
 // brown-out voltage latches the supply fault until restart. The state is an
@@ -65,6 +67,7 @@ struct Entry
   robot_tick::BenchEvent refusal = robot_tick::BenchEvent::None;
   uint32_t pressMs = 0;
   bool supplyFault = false; // latched in Simulating until restart
+  bool usbHost = false;     // the latest sample's: the window's indication
 };
 
 struct Result

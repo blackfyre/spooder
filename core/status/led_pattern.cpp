@@ -51,6 +51,9 @@ constexpr uint32_t NO_GAMEPAD_BLINK_MS = 1000;
 constexpr uint32_t STALE_BLINK_MS = 250;
 constexpr uint32_t CONFLICT_BLINK_MS = 250;
 constexpr uint32_t BENCH_BLINK_MS = 250; // the window and the refusals
+// The window before USB is ready: amber, slower than the stale link's 250 ms
+// amber blink, so the two stay distinct.
+constexpr uint32_t BENCH_WAITING_BLINK_MS = 1000;
 constexpr uint32_t SIMULATING_PERIOD_MS = 1000;
 constexpr float INPUT_SERIAL_LEVEL = 0.4f; // dim white
 
@@ -125,6 +128,8 @@ static Rgb benchIndicator(const State &s, Rgb normal)
   {
   case Bench::None:
     return normal;
+  case Bench::Waiting:
+    return blinkOn(s.nowMs, BENCH_WAITING_BLINK_MS) ? AMBER : OFF;
   case Bench::Available:
     return first ? WHITE : OFF;
   case Bench::RefusedSupply:

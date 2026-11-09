@@ -41,7 +41,7 @@ Bench simulation drives the real robot board end to end without its servo supply
 1. Remove the servo supply, and leave the board for about 6 s so the supply sense drains.
 2. Connect the Servo 2040 to a computer over USB.
 3. Start or reset the board.
-4. Press USER once while LED 6 blinks white, within the first 3 s.
+4. Watch LED 6: it blinks amber slowly until the computer has enumerated the board (about 1 s), then fast white until 3 s after start-up. Press USER once while it blinks white; a press while it is amber is refused.
 
 LED 6 then shows violet for half of each second. A refusal shows on LED 6 for 3 s: red and amber means a supply was measured, red and blue means no USB host has enumerated the board. Restart the board to leave.
 

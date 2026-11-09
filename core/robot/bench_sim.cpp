@@ -10,7 +10,9 @@ static led_pattern::Bench indication(const Entry &e)
   switch (e.phase)
   {
   case Phase::Window:
-    return led_pattern::Bench::Available;
+    // White only once a press can enter: before USB is ready it would be
+    // refused.
+    return e.usbHost ? led_pattern::Bench::Available : led_pattern::Bench::Waiting;
   case Phase::Refused:
     return e.refusal == BenchEvent::RefusedSupply ? led_pattern::Bench::RefusedSupply : led_pattern::Bench::RefusedUsb;
   case Phase::Simulating:
@@ -28,6 +30,7 @@ Result step(Entry &e, const Sample &sample)
     e.started = true;
     e.startMs = sample.nowMs;
   }
+  e.usbHost = sample.usbHost;
   // Every tick counts, the press tick's included.
   if (!(sample.measuredSupplyV < ABSENT_SUPPLY_V))
     e.supplyAbsent = false;

@@ -7,11 +7,15 @@ Lets the robot firmware on the Servo 2040 be driven end to end on the bench with
 ## ADDED Requirements
 
 ### Requirement: Simulation offered at start-up
-The robot firmware SHALL offer bench simulation for a window of 3 s after start-up. Throughout the window the status LEDs SHALL show a pattern, distinct from every other indication, that simulation is available, alongside the normal start-up indication. The robot SHALL run in live mode from its first control tick, and offering simulation SHALL NOT delay any control tick. The window SHALL close early, for the rest of the boot, once servo output has been on.
+The robot firmware SHALL offer bench simulation for a window of 3 s after start-up. Throughout the window the status LEDs SHALL show, alongside the normal start-up indication, one of two patterns, each distinct from every other indication: while no USB host has enumerated the board (or while it has suspended it), that the window is open but a press would be refused; once one has, that simulation is available. The robot SHALL run in live mode from its first control tick, and offering simulation SHALL NOT delay any control tick. The window SHALL close early, for the rest of the boot, once servo output has been on.
 
 #### Scenario: Normal start-up
 - **WHEN** the robot starts and the USER button is not pressed
 - **THEN** the LEDs show that simulation is available for 3 s, the robot is in live mode from its first tick, and after 3 s the indication stops and the robot stays in live mode
+
+#### Scenario: Available once USB is ready
+- **WHEN** the robot starts on USB and the host enumerates the board 1 s after start-up
+- **THEN** for that first second the LEDs show the window open with USB not ready, and from then until 3 s after start-up that simulation is available
 
 #### Scenario: Output already on
 - **WHEN** servo output has switched on within the window

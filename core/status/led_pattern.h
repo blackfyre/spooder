@@ -14,7 +14,10 @@
 //   other modes        green, LED count = mode (1 Initialise ... 5 Calibrate)
 // LED 5 shows the command source (except during faults and supply waiting).
 // Bench simulation (core/robot/bench_sim) overlays LED 5, in every state:
-//   simulation offered   white blinking (250 ms), for the 3 s window
+//   window, no USB yet   amber blinking slowly (1 s), until a host has
+//                        enumerated the board; a press now is refused
+//   simulation offered   white blinking (250 ms), for the rest of the 3 s
+//                        window
 //   refused: supply      red alternating with amber (250 ms), for 3 s
 //   refused: no USB host red alternating with blue (250 ms), for 3 s
 //   simulating           violet for half of each second, LED 5's own content
@@ -44,7 +47,8 @@ enum class Input : uint8_t
 enum class Bench : uint8_t
 {
   None,
-  Available,     // the 3 s window is open
+  Waiting,       // the 3 s window is open, no USB host yet: a press is refused
+  Available,     // the 3 s window is open and a USB host is attached
   RefusedSupply, // entry refused: a servo supply was measured
   RefusedUsb,    // entry refused: no USB host attached
   Simulating,

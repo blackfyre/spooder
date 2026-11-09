@@ -69,6 +69,22 @@ void test_window_is_offered_from_the_first_tick_in_live_mode()
   TEST_ASSERT_FALSE(result.bench.simulated);
 }
 
+// Before a USB host has enumerated the board the window shows Waiting (a press
+// would be refused), then Available.
+void test_window_waits_for_usb_before_offering()
+{
+  sample.usbHost = false;
+  releasedUntil(0, 1000);
+  TEST_ASSERT_EQUAL((int)Phase::Window, (int)result.phase);
+  TEST_ASSERT_EQUAL((int)led_pattern::Bench::Waiting, (int)result.bench.indication);
+  sample.usbHost = true;
+  stepAt(1000);
+  TEST_ASSERT_EQUAL((int)led_pattern::Bench::Available, (int)result.bench.indication);
+  sample.usbHost = false; // the host suspended it
+  stepAt(1020);
+  TEST_ASSERT_EQUAL((int)led_pattern::Bench::Waiting, (int)result.bench.indication);
+}
+
 void test_window_is_measured_from_the_first_tick_not_zero()
 {
   releasedUntil(5000, 7980);
@@ -623,6 +639,7 @@ int main()
 {
   UNITY_BEGIN();
   RUN_TEST(test_window_is_offered_from_the_first_tick_in_live_mode);
+  RUN_TEST(test_window_waits_for_usb_before_offering);
   RUN_TEST(test_window_is_measured_from_the_first_tick_not_zero);
   RUN_TEST(test_press_at_2980_ms_enters);
   RUN_TEST(test_press_at_3000_ms_changes_nothing);

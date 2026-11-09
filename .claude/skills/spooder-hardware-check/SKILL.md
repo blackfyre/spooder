@@ -162,7 +162,8 @@ In the default build, a connected USB host also receives binary link frames (tel
 | LED 6 cyan / blinking magenta / fast-blinking amber | Bridge link up with gamepad / without gamepad / link stale |
 | LED 6 blue | A USB host with a connected controller is in control |
 | LED 6 alternating magenta and cyan | Source conflict: the bridge and a USB host both claim control; the robot sleeps until one lets go |
-| LED 6 blinking white (250 ms), first 3 s after start-up | Bench simulation offered: press USER now to enter it (over whatever LED 6 would show) |
+| LED 6 blinking amber slowly (on half of each second), first 3 s after start-up | Bench simulation window open, USB not ready yet (no host has enumerated the board, or it suspended it): wait for white; a press now is refused |
+| LED 6 blinking white (250 ms), until 3 s after start-up | Bench simulation offered and USB ready: press USER now to enter it (over whatever LED 6 would show) |
 | LED 6 alternating red and amber (250 ms), 3 s | Bench simulation refused: a servo supply was measured (1 V or more on some tick since start-up) |
 | LED 6 alternating red and blue (250 ms), 3 s | Bench simulation refused: no USB host (a charger, a host that has not enumerated the board, or one that suspended it) |
 | LED 6 violet half of each second, its normal content the other half | In bench simulation, in every state, until the simulation supply fault latches (then all six show cyan and red) |
@@ -221,7 +222,7 @@ Bench simulation drives the real Servo 2040 end to end with no servo supply: gai
 
 1. **Remove the servo supply,** and wait until its sense has drained: the 220 µF capacitor behind the voltage sense takes about 5.5 s to fall from 6 V to 1 V. A supply removed just before a reset still reads above 1 V and refuses entry.
 2. **Connect the board's USB to a computer** (not a charger), and start it (RESET, or plug in). Do not hold USER while it starts: USER is the BOOT switch, and held through reset it enters BOOTSEL.
-3. **Press USER once while LED 6 blinks white** (the first 3 s; enumeration takes about 1 s, so press after the blink starts). The robot runs live from its first tick meanwhile; offering simulation delays nothing.
+3. **Press USER once LED 6 blinks white** (within the first 3 s). Until a host has enumerated the board, about 1 s, LED 6 blinks amber slowly instead, and a press then is refused for no USB host; on a charger or a bare cable it stays amber. The robot runs live from its first tick meanwhile; offering simulation delays nothing.
    - Entered: `bench simulation: entered` on the console, LED 6 violet half of each second, the status line ending `; SIMULATION`. The modelled supply (a steady 6.0 V at load 1) settles for 500 ms like a real one; the body starts on the next new mode request after entry, not on one held from before.
    - Refused, LED 6 red and amber for 3 s, `bench simulation refused: servo supply present`: the supply read 1 V or more on some tick since start-up (connected, still draining, or USB 5 V on the servo rail through an uncut USB/ext trace). Remove it, wait about 6 s, RESET and press again.
    - Refused, LED 6 red and blue for 3 s, `bench simulation refused: no USB host`: no host has enumerated the board (a charger, a bare cable, a host still enumerating) or the host suspended it. When both gates fail, the supply reason is shown.

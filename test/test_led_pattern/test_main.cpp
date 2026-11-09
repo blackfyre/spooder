@@ -253,6 +253,16 @@ void test_bench_patterns_at_both_phases()
   s.bench = Bench::Available;
   TEST_ASSERT_TRUE(led5(s, 0) == full(WHITE_FULL, NORMAL_BRIGHTNESS));
   TEST_ASSERT_FALSE(lit(led5(s, 125)));
+  // Before USB is ready: amber, on for 500 ms of each second, so not the
+  // stale link's 250 ms amber blink.
+  s.bench = Bench::Waiting;
+  TEST_ASSERT_TRUE(led5(s, 0) == full(AMBER_FULL, NORMAL_BRIGHTNESS));
+  TEST_ASSERT_TRUE(led5(s, 125) == full(AMBER_FULL, NORMAL_BRIGHTNESS));
+  TEST_ASSERT_TRUE(led5(s, 499) == full(AMBER_FULL, NORMAL_BRIGHTNESS));
+  TEST_ASSERT_FALSE(lit(led5(s, 500)));
+  State stale = healthy(BodyMode::Stand);
+  stale.input = Input::LinkStale;
+  TEST_ASSERT_FALSE(lit(led5(stale, 125)));
   s.bench = Bench::RefusedSupply;
   TEST_ASSERT_TRUE(led5(s, 0) == full(RED_FULL, NORMAL_BRIGHTNESS));
   TEST_ASSERT_TRUE(led5(s, 125) == full(AMBER_FULL, NORMAL_BRIGHTNESS));
@@ -268,7 +278,7 @@ void test_bench_patterns_at_both_phases()
   TEST_ASSERT_TRUE(led5(s, 500) == led5(plain, 500));
   TEST_ASSERT_TRUE(led5(s, 500) == full(BLUE_FULL, NORMAL_BRIGHTNESS));
   // The main LEDs are unchanged by every overlay.
-  const Bench all[] = {Bench::Available, Bench::RefusedSupply, Bench::RefusedUsb, Bench::Simulating};
+  const Bench all[] = {Bench::Waiting, Bench::Available, Bench::RefusedSupply, Bench::RefusedUsb, Bench::Simulating};
   for (Bench b : all)
   {
     for (uint32_t t = 0; t < 1000; t += 125)

@@ -79,7 +79,8 @@ All on LED 5, so the main LEDs keep their normal start-up indication (amber puls
 
 | State | LED 5 |
 |---|---|
-| Window open | white, blinking at 250 ms, in every state (overrides LED 5's normal content, for at most 3 s) |
+| Window open, no USB host yet | amber, on for 500 ms of each 1 s, in every state (overrides LED 5's normal content); a press now is refused. Slower than the stale link's 250 ms amber blink, so the two stay distinct |
+| Window open, USB host attached | white, blinking at 250 ms, in every state (overrides LED 5's normal content, until the window closes at 3 s) |
 | Refused, supply present | red alternating with amber, 250 ms, for 3 s |
 | Refused, no USB host | red alternating with blue, 250 ms, for 3 s |
 | Simulating | violet (160, 0, 255) for half of each 1 s period, LED 5's normal content for the other half, in every state including faults, except the simulation supply fault (below) |
