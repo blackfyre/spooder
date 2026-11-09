@@ -466,7 +466,7 @@ void init(BodyState &s)
   s.mode = Mode::Initialise;
   s.started = false;
   s.outputsEnabled = true;
-  s.currentGait = Gait::Tri;
+  s.currentGait = gait::START_GAIT;
   s.speed = MovementCommand().speed;
   s.jointBudgetDegPerS = servo_profile::SELECTED.budgetDegPerS();
   s.motionScale = 1;

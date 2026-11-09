@@ -3,7 +3,9 @@
 #include <math.h>
 #include "movement/gait.h"
 
-static_assert(gamepad_mapping::START_GAIT == static_cast<uint8_t>(gait::Gait::Wave), "the mapping starts in Wave");
+// The Go copies (desktop/handheld/internal/padmap StartGait, desktop/internal/
+// session commandGait, desktop/internal/wifiprobe commandGait) hold 1.
+static_assert(gamepad_mapping::START_GAIT == 1, "the Go copies of the start gait hold 1 (Wave)");
 
 namespace gamepad_mapping
 {

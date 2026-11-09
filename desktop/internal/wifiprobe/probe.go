@@ -30,9 +30,11 @@ const (
 	// restart never continues the previous run's session (design D4).
 	StartWait = 150 * time.Millisecond
 	// The command fields a handheld sends at rest: no translation or
-	// rotation, a gamepad's default height and speed.
+	// rotation, a gamepad's default height, speed and gait (Wave, START_GAIT
+	// in core/gamepad_mapping).
 	commandHeight = 0
 	commandSpeed  = 44
+	commandGait   = 1
 )
 
 // Config is the command line. Every "after" is measured from the probe's
@@ -215,6 +217,7 @@ func (p *probe) command(t time.Duration) protocol.Command {
 		Mode:               p.mode,
 		Height:             commandHeight,
 		Speed:              commandSpeed,
+		Gait:               commandGait,
 		Flags:              protocol.FlagControllerConnected,
 		ClearCounter:       p.clearCounter,
 		ModeRequestCounter: p.modeCounter,

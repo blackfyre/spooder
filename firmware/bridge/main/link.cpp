@@ -50,6 +50,7 @@ static void initialDesired()
   desired = {};
   desired.mode = RequestedMode::Sleep;
   desired.speed = 44;
+  desired.gait = gamepad_mapping::START_GAIT;
   desired.controllerConnected = false;
 }
 

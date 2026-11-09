@@ -7,6 +7,7 @@
 // Hardware-free: the bridge fills PadState from Bluepad32; host tests fill it
 // directly.
 #include <stdint.h>
+#include "movement/gait.h"
 #include "movement/movement_command.h"
 #include "protocol/protocol.h"
 
@@ -77,9 +78,8 @@ struct Desired
   uint8_t gestureRequestCounter; // incremented on every gesture request
 };
 
-// The gait selected at start-up: gait::Gait::Wave, which keeps five or six
-// feet down and spreads the weight most evenly (wave-default-gait).
-constexpr uint8_t START_GAIT = 1;
+// The gait selected at start-up: the robot's (gait::START_GAIT, Wave).
+constexpr uint8_t START_GAIT = static_cast<uint8_t>(gait::START_GAIT);
 
 struct Mapper
 {

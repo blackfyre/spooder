@@ -5,6 +5,7 @@
 // when to act on it; a command never sets movement state directly.
 // Hardware-free: compiled for the board and for host tests.
 #include <stdint.h>
+#include "gait.h"
 #include "vectors.h"
 
 enum class RequestedMode : uint8_t
@@ -28,7 +29,8 @@ struct MovementCommand
   float rotate = 0;  // -100..100
   float height = 0;  // body height dial, 0..100; higher raises the body
   float speed = 44;  // speed dial, 0..100
-  int gait = 0;      // index into gait::Gait; unknown values are ignored
+  // Index into gait::Gait; unknown values are ignored.
+  int gait = static_cast<int>(gait::START_GAIT);
   StrideMode stride = StrideMode::Dynamic;
   uint32_t issuedAtMs = 0; // millis() when the controller produced the command
   // Gesture requests: each change of gestureSeq requests `gesture` (a

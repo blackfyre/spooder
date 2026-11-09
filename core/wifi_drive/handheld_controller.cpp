@@ -146,6 +146,7 @@ gamepad_mapping::Desired desired(Controller &c, uint32_t nowMs)
   if (!on)
   {
     d.speed = DEFAULT_SPEED;
+    d.gait = gamepad_mapping::START_GAIT;
     d.stride = StrideMode::Dynamic;
     return d;
   }

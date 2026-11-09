@@ -177,7 +177,7 @@ LED 6 here is the sixth LED, the command source; `core/status/led_pattern` count
 | `w` | Walk forward |
 | `r` | Walk rotating |
 | `x` | Walk with no input |
-| `g` | Next gait |
+| `g` | Next gait (starts in Wave) |
 | `f` | Toggle fixed stride |
 | `z` | Sleep |
 | `c` | Calibrate |

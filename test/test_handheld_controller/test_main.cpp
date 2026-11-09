@@ -371,7 +371,7 @@ void test_handheld_goes_quiet()
   TEST_ASSERT_EQUAL_INT8(0, d.rotate);
   TEST_ASSERT_EQUAL_UINT8(0, d.height);
   TEST_ASSERT_EQUAL_UINT8(DEFAULT_SPEED, d.speed);
-  TEST_ASSERT_EQUAL_UINT8(0, d.gait);
+  TEST_ASSERT_EQUAL_UINT8(gamepad_mapping::START_GAIT, d.gait); // a gamepad's start, not Tri
   TEST_ASSERT_TRUE(d.stride == StrideMode::Dynamic);
 }
 

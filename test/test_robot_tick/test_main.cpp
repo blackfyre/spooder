@@ -858,6 +858,19 @@ void test_calibration_set_accepted_in_calibrate_and_applied_at_the_rate_limit()
 
 // --- frames and their rates --------------------------------------------------------
 
+// With no servo supply the body never starts (body::init does not run), and
+// telemetry still reports the starting gait, the one every controller starts
+// in, not Tri (wave-default-gait D2).
+void test_telemetry_reports_the_start_gait_before_the_body_starts()
+{
+  supply = {0, 0.05f};
+  ticks(50);
+  const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
+  TEST_ASSERT_NOT_NULL(t);
+  TEST_ASSERT_EQUAL((int)body::Mode::Initialise, t->telemetry.bodyMode);
+  TEST_ASSERT_EQUAL((int)gait::START_GAIT, t->telemetry.gait);
+}
+
 void test_telemetry_every_fifth_tick_on_both_links()
 {
   ticks(50);
@@ -1360,6 +1373,7 @@ int main()
   RUN_TEST(test_conflict_between_links_sleeps_and_is_reported);
   RUN_TEST(test_calibration_set_rejected_outside_calibrate);
   RUN_TEST(test_calibration_set_accepted_in_calibrate_and_applied_at_the_rate_limit);
+  RUN_TEST(test_telemetry_reports_the_start_gait_before_the_body_starts);
   RUN_TEST(test_telemetry_every_fifth_tick_on_both_links);
   RUN_TEST(test_pose_on_both_links_two_ticks_after_telemetry);
   RUN_TEST(test_telemetry_reports_each_links_own_frame_counts);

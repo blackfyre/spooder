@@ -99,7 +99,9 @@ struct BodyState
   float speed;       // speed dial, 0..100
   float fixedStride; // share of the fixed stride mode, 0..1
 
-  gait::Gait currentGait;
+  // Set here as well as in init: the robot reports it before the body has
+  // ever started (no supply), when init has not run.
+  gait::Gait currentGait = gait::START_GAIT;
   float cycleProgress[LEG_COUNT];
   gait::LegCycle legCycles[LEG_COUNT];
 

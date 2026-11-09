@@ -26,6 +26,15 @@ enum class Gait : uint8_t
 };
 constexpr int GAIT_COUNT = 6;
 
+// The gait the robot starts in, and every controller with it (the gamepad
+// mapping, the portal, the handheld, the desktop calibrator, the serial keys):
+// Wave, which keeps five or six feet down and spreads the weight most evenly
+// (wave-default-gait). The robot's own start and the command it runs with no
+// source in control (MovementCommand's default) use it too, so telemetry
+// reports the gait the controllers start with before one is in control and
+// while the body is stopped.
+constexpr Gait START_GAIT = Gait::Wave;
+
 struct GaitParams
 {
   float phaseOffset[LEG_COUNT]; // cycle start per leg, in progress units

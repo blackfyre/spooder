@@ -95,7 +95,7 @@ void test_unknown_gait_is_ignored()
   MovementCommand c = command(RequestedMode::Walk);
   c.gait = 42;
   run(c, 100);
-  TEST_ASSERT_TRUE(s.currentGait == gait::Gait::Tri);
+  TEST_ASSERT_TRUE(s.currentGait == gait::START_GAIT); // unchanged from the start
 }
 
 void test_walk_request_waits_for_stand_transition()
@@ -256,6 +256,7 @@ void test_gait_change_rephases_legs()
   s.jointBudgetDegPerS = 0; // exact rates: without the joint speed budget
   MovementCommand walk = command(RequestedMode::Walk);
   walk.translate = Vector2(0, 50);
+  walk.gait = static_cast<int>(gait::Gait::Tri); // not the start gait, so the change below is one
   run(walk, 500);
   walk.gait = static_cast<int>(gait::Gait::Wave);
   now += 20;

@@ -26,7 +26,7 @@ Losing the window's focus, releasing control or losing the connection SHALL drop
 
 #### Scenario: Settings
 - **WHEN** the operator presses X twice, V once, G once and T once while in control
-- **THEN** the frames carry speed 64, height 10, the Wave gait and the fixed stride
+- **THEN** the frames carry speed 64, height 10, the Ripple gait and the fixed stride
 
 #### Scenario: Focus lost while driving
 - **WHEN** the window loses focus while W is held
