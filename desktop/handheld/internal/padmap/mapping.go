@@ -49,6 +49,8 @@ const (
 	GaitCount = 6
 	// StartGait is START_GAIT (core/gamepad_mapping): Wave.
 	StartGait = 1
+	// StartSpeed is START_SPEED (core/movement/movement_command.h).
+	StartSpeed = 44
 )
 
 // RequestedMode is RequestedMode in core/movement/movement_command.h.
@@ -134,7 +136,7 @@ type Mapper struct {
 
 // NewMapper returns a Mapper with the C++ member initialisers.
 func NewMapper() Mapper {
-	return Mapper{speed: 44, gait: StartGait, stride: StrideDynamic, stickMode: StickSteer, baseMode: ModeStand}
+	return Mapper{speed: StartSpeed, gait: StartGait, stride: StrideDynamic, stickMode: StickSteer, baseMode: ModeStand}
 }
 
 // sqrtf is C's sqrtf: the float64 square root of a float32 rounds to the

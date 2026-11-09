@@ -36,8 +36,8 @@ constexpr uint8_t SEQ_WINDOW = 8;
 // Six lost frames of a 50 Hz handheld leave 140 ms; seven leave 160 ms.
 constexpr uint32_t LIVENESS_MS = 150;
 // The desired state with no live session: a gamepad's defaults
-// (gamepad_mapping::Mapper).
-constexpr uint8_t DEFAULT_SPEED = 44;
+// (gamepad_mapping::Mapper; START_SPEED and START_GAIT).
+constexpr uint8_t DEFAULT_SPEED = START_SPEED;
 
 struct Sender
 {

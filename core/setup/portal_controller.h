@@ -20,9 +20,9 @@ namespace portal_controller
 {
 
 constexpr uint32_t CONNECTED_WINDOW_MS = 1000;
-// The speed dial a gamepad starts with (gamepad_mapping::Mapper's default);
-// the gait is gamepad_mapping::START_GAIT.
-constexpr uint8_t SPEED = 44;
+// The speed dial a gamepad starts with (START_SPEED, movement_command.h); the
+// gait is gamepad_mapping::START_GAIT.
+constexpr uint8_t SPEED = START_SPEED;
 
 struct Controller
 {

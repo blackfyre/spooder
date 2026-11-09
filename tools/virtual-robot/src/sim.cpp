@@ -24,7 +24,7 @@ void Bridge::frame(std::vector<uint8_t> &out)
   }
   protocol::Command c = {};
   c.mode = (uint8_t)(state == State::Gamepad ? RequestedMode::Stand : RequestedMode::Sleep);
-  c.speed = 44;
+  c.speed = START_SPEED;
   c.gait = gamepad_mapping::START_GAIT; // a gamepad's start, as the bridge sends it
   c.flags = (state == State::Gamepad ? protocol::FLAG_CONTROLLER_CONNECTED : 0) |
             (estop ? protocol::FLAG_EMERGENCY_STOP : 0);

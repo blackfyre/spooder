@@ -85,7 +85,7 @@ struct Mapper
 {
   // Settings kept across disconnects.
   uint8_t height = 0;
-  uint8_t speed = 44;
+  uint8_t speed = START_SPEED;
   uint8_t gait = START_GAIT;
   StrideMode stride = StrideMode::Dynamic;
   StickMode stickMode = StickMode::Steer;

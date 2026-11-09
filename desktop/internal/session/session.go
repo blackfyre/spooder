@@ -36,8 +36,8 @@ const StaleAfter = time.Second
 // gait Wave, dynamic stride.
 const (
 	commandHeight = 0
-	commandSpeed  = 44
-	commandGait   = 1 // Wave, as START_GAIT in core/gamepad_mapping
+	commandSpeed  = 44 // START_SPEED in core/movement/movement_command.h
+	commandGait   = 1  // Wave, as START_GAIT in core/gamepad_mapping
 )
 
 // Log sizes.

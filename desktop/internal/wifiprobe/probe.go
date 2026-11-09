@@ -33,7 +33,7 @@ const (
 	// rotation, a gamepad's default height, speed and gait (Wave, START_GAIT
 	// in core/gamepad_mapping).
 	commandHeight = 0
-	commandSpeed  = 44
+	commandSpeed  = 44 // START_SPEED in core/movement/movement_command.h
 	commandGait   = 1
 )
 

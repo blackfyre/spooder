@@ -6,6 +6,9 @@
 // The Go copies (desktop/handheld/internal/padmap StartGait, desktop/internal/
 // session commandGait, desktop/internal/wifiprobe commandGait) hold 1.
 static_assert(gamepad_mapping::START_GAIT == 1, "the Go copies of the start gait hold 1 (Wave)");
+// And of the start speed (padmap StartSpeed, the session's and the probe's
+// commandSpeed).
+static_assert(START_SPEED == 44, "the Go copies of the start speed hold 44");
 
 namespace gamepad_mapping
 {

@@ -22,13 +22,18 @@ enum class StrideMode : uint8_t
   Fixed,   // constant stride and rotation length; input sets direction only
 };
 
+// The speed dial the robot and every controller start at (the gamepad
+// mapping, the portal, the bridge, the handheld, the desktop calibrator, the
+// WiFi probe). The Go copies hold 44, which gamepad_mapping.cpp pins.
+constexpr uint8_t START_SPEED = 44;
+
 struct MovementCommand
 {
   RequestedMode mode = RequestedMode::Stand;
-  Vector2 translate; // magnitude 0..100
-  float rotate = 0;  // -100..100
-  float height = 0;  // body height dial, 0..100; higher raises the body
-  float speed = 44;  // speed dial, 0..100
+  Vector2 translate;         // magnitude 0..100
+  float rotate = 0;          // -100..100
+  float height = 0;          // body height dial, 0..100; higher raises the body
+  float speed = START_SPEED; // speed dial, 0..100
   // Index into gait::Gait; unknown values are ignored.
   int gait = static_cast<int>(gait::START_GAIT);
   StrideMode stride = StrideMode::Dynamic;
