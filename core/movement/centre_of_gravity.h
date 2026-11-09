@@ -18,14 +18,23 @@ namespace centre_of_gravity
 
 using kinematics::LEG_COUNT;
 
-// Masses in grams. The servo and the battery are weighed; the rest are
-// estimates from typical parts until the rebuilt robot is weighed.
-constexpr float BODY_G = 420;      // frame, Servo 2040, BEC, wiring; no battery
+// Masses in grams, all weighed but the links' split. The coxa servo sits on
+// the frame at the coxa pivot; it is counted with each leg's masses, at the
+// pivot, which places it the same, so BODY_G is the frame as weighed with
+// its six coxa servos (CENTRE_G) less those servos. A leg (the coxa bracket outward: femur
+// and tibia servos and the links) weighed LEG_G; the links share what the
+// two servos leave of it, in the earlier estimates' ratio, where along each
+// link unknown.
+constexpr float CENTRE_G = 827;    // frame, Servo 2040, BEC, wiring and the six coxa servos, weighed
+constexpr float BODY_G = 497;      // CENTRE_G less the six coxa servos; no battery
 constexpr float BATTERY_G = 284;   // 2S 5000 mAh, weighed
 constexpr float SERVO_G = 55;      // MG996R with horn and screws, weighed; one per joint
-constexpr float COXA_LINK_G = 30;  // halfway along the coxa
-constexpr float FEMUR_LINK_G = 45; // halfway along the femur
-constexpr float TIBIA_LINK_G = 50; // TIBIA_LINK_AT of the way from the knee to the foot
+constexpr float LEG_G = 303;       // one leg outward of the coxa servo, weighed
+constexpr float COXA_LINK_G = 46;  // halfway along the coxa
+constexpr float FEMUR_LINK_G = 70; // halfway along the femur
+constexpr float TIBIA_LINK_G = 77; // TIBIA_LINK_AT of the way from the knee to the foot
+static_assert(BODY_G + 6 * SERVO_G == CENTRE_G, "the body is the weighed centre less its coxa servos");
+static_assert(2 * SERVO_G + COXA_LINK_G + FEMUR_LINK_G + TIBIA_LINK_G == LEG_G, "the links share the weighed leg");
 constexpr float TIBIA_LINK_AT = 0.4f;
 
 // Where the body's and the battery's masses sit.

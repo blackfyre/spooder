@@ -10,15 +10,17 @@ import (
 // test/golden/centre_of_gravity.txt. A static estimate: no accelerations,
 // no foot forces.
 
-// Masses in grams (centre_of_gravity.h). The servo and the battery are
-// weighed; the rest are estimates until the rebuilt robot is weighed.
+// Masses in grams (centre_of_gravity.h), all weighed but the links' split.
+// The coxa servo sits on the frame at the coxa pivot and is counted with
+// each leg, at the pivot, so the body is the centre as weighed (827 g with
+// its six coxa servos) less those servos.
 const (
-	BodyMassG    = 420.0 // frame, Servo 2040, BEC, wiring; no battery
+	BodyMassG    = 497.0 // frame, Servo 2040, BEC, wiring; 827 g weighed less the coxa servos; no battery
 	BatteryMassG = 284.0 // 2S 5000 mAh, weighed
 	servoMassG   = 55.0  // MG996R with horn and screws, weighed; one per joint
-	coxaLinkG    = 30.0  // halfway along the coxa
-	femurLinkG   = 45.0  // halfway along the femur
-	tibiaLinkG   = 50.0  // tibiaLinkAt of the way from the knee to the foot
+	coxaLinkG    = 46.0  // halfway along the coxa
+	femurLinkG   = 70.0  // halfway along the femur
+	tibiaLinkG   = 77.0  // tibiaLinkAt of the way from the knee to the foot
 	tibiaLinkAt  = 0.4
 )
 

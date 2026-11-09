@@ -18,7 +18,7 @@ Behaviour is specified in OpenSpec (`locomotion` and `leg-actuation` capabilitie
 | `kinematics.h/.cpp` | `solveLeg`, link lengths, `servoOutputIndex` | yes |
 | `joint_calibration.h/.cpp` | Per-joint `Joint` (offset, 0° and 180° pulses, reversed), `Table`, `clampJoint`, rate-limited `step`, `toPulse`, `legOffsets` | yes |
 | `calibration_defaults.cpp` | `joint_calibration::DEFAULTS`, the compiled defaults in a fixed format (export target) | yes |
-| `centre_of_gravity.h/.cpp` | The estimated centre of gravity: point masses (body, battery, servos, links; the servo and battery weighed, the rest estimates), forward kinematics on the measured pivots (`body_geometry.h`), the support hull and margin. Host tests only; the desktop's `legview` copy is pinned by `test/golden/centre_of_gravity.txt` | yes |
+| `centre_of_gravity.h/.cpp` | The estimated centre of gravity: point masses (body, battery, servos, links; weighed, the links' split of a leg an estimate), forward kinematics on the measured pivots (`body_geometry.h`), the support hull and margin. Host tests only; the desktop's `legview` copy is pinned by `test/golden/centre_of_gravity.txt` | yes |
 | `body_geometry.h` | Each leg's coxa pivot in the body frame, measured from upstream's frame STLs (`hardware/aecert-hexapod-v1/README.md`); the mount angles are gait's. The desktop's `legview.Mounts` copy is pinned by `test/golden/body_geometry.txt` | yes |
 | `vectors.h` | `Vector2`/`Vector3`, `lerp`, `mapFloat` | yes |
 | `firmware/servo2040/src/servo_output.*` | `ServoCluster` on PIO 0 (GPIO0–17): batched pulses, one `load()` per step, output on/off, protection inhibit | no |

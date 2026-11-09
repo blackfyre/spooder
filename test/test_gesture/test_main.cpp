@@ -417,7 +417,8 @@ void test_lifted_legs_keep_the_body_over_its_support()
 {
   // Sampled through the whole gesture, eased moves and interrupted returns
   // included. The pivots are measured from the frame's STLs (body_geometry)
-  // but the masses estimated until the robot is weighed, so this guards the
+  // and the masses weighed, but the links' share of each leg placed by
+  // estimate and the battery's place assumed, so this guards the
   // scripts' intent, not the physical margin.
   const float MARGIN_MM = 20;
   const uint32_t STOPS[] = {0, 1200, 1900, 2600, 3575, 3725};
