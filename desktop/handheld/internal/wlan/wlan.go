@@ -224,7 +224,7 @@ func ParseSignal(b []byte) (int, error) {
 // `iw dev wlan0 link`, as in
 //
 //	Connected to 02:00:00:00:00:00 (on wlan0)
-//		SSID: spooder-drive-1A2B
+//		SSID: spooder-drive-1a2b
 //		signal: -40 dBm
 //
 // Not connected (no signal line) reads as ErrNoSignal.
