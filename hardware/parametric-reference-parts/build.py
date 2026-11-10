@@ -15,6 +15,7 @@ only then write their STEP files.
     uv run --locked --quiet --script build.py          # gates, export, re-read, publish, import checks
     uv run --locked --quiet --script build.py --check  # gates only, nothing written
     uv run --locked --quiet --script build.py --test   # the unit tests
+    uv run --locked --quiet --script build.py --chord-error  # the STLs' own chord error (chord_error.py)
 
 `mise run cad-reference` runs the tests and the build. Its dependencies are
 locked in build.py.lock (`uv lock --script`). A source is a folder here with
@@ -35,6 +36,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 
+import chord_error  # noqa: E402
 import export  # noqa: E402
 import gates  # noqa: E402
 import import_check  # noqa: E402
@@ -92,6 +94,8 @@ def main(argv: list[str] | None = None, root: Path = HERE, repo_root: Path = REP
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true", help="run the gates, write nothing")
     parser.add_argument("--test", action="store_true", help="run the unit tests")
+    parser.add_argument("--chord-error", action="store_true",
+                        help="print each part's STL chord error, write nothing")
     args = parser.parse_args(argv)
 
     # An interrupted publish is resolved before anything else, in every mode.
@@ -106,6 +110,8 @@ def main(argv: list[str] | None = None, root: Path = HERE, repo_root: Path = REP
     print(f"{len(sources)} source(s), {count} part(s)" + "".join(f"; {s.name}: {len(s.parts)}" for s in sources))
     if failures:
         return report_failures("part contract check(s)", failures)
+    if args.chord_error:
+        return chord_error.main(sources)
     if count == 0:
         print("No parts.")
     solids, failures = check_parts(sources)

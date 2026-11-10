@@ -82,6 +82,18 @@ The STL's vertices lie on the true surface; its facets cut inside convex arcs an
 
 A first estimate from the frame STLs (each pair of adjacent facets meeting at 0.5–30°, facet width taken as the shorter triangle's height, r = w / (2 sin(θ/2))): the largest sagitta is 0.05 mm on Frame Top and Frame Bottom, 0.13 mm on Servo Mount, 0.003 mm on Bearing Axle Mount and 0.002 mm on Hubcap; most of each part's area is flat. This estimate is not reliable where a flat face meets a shallow draft or chamfer (a wide facet at a small angle reads as a large radius), so task 2.1 measures it properly: circles fitted to the vertex loops of each curved feature in trimesh sections give r and the segment count n, and the chord error r(1 − cos(π/n)).
 
+Measured (task 2.1, `build.py --chord-error`, `chord_error.py`): sections every 0.5 mm along each axis through each STL; in each section loop, runs of at least four segments whose vertices lie on one circle to 0.002 mm and turn at each vertex by the angle that circle gives them (to 10 %) are a curved feature, and its chord error is r(1 − cos(θ/2)) for its longest segment's angle θ, n = 2π/θ. Horizontal sections see the vertical cylinders and cones; vertical sections see rounds whose axes lie level (such as Frame Bottom's rear floor step), and count a run only where the facets it crosses stand square to the section, since a slantwise cut through a vertical cylinder or cone shows its facets stretched. No section sees the one round revolved about a vertical axis in its meridian, the 1 mm round at the foot of the Bearing Axle Mount's boss: a circle fitted directly to its vertices gives r 1.003 mm and a chord error of 0.003 mm, no more than that part's maximum below (found in review; the script does not measure it). Arcs that are not exactly circular in the STL (Frame Top's and Frame Bottom's arc C, fitted to 0.02 mm) are counted only where a run of them fits a circle to 0.002 mm; their facets' sagitta is under 0.03 mm. A unit test measures the five STLs and compares them with this table.
+
+| Part | Chord error (mm) | Feature (r, n) |
+|---|---|---|
+| Frame Top | 0.050 | r 25.00, n 49 (the outline's side arcs) |
+| Frame Bottom | 0.053 | r 38.82, n 60 |
+| Servo Mount | 0.003 | r 2.20, n 56 |
+| Bearing Axle Mount | 0.003 | r 1.60, n 54 |
+| Hubcap | 0.002 | r 13.00, n 187 |
+
+No part exceeds 0.15 mm, so no part declares a tessellation exception. The first estimate's 0.13 mm on Servo Mount came from a flat face meeting a chamfer, as cautioned above.
+
 - **Maximum 0.20 mm:** above the worst estimated chord error (0.13 mm) with 0.07 mm left for measurement rounding (dimensions are measured to 0.01 mm).
 - **95th percentile 0.05 mm:** flat faces dominate every frame part's area, and a flat face measured correctly deviates by nothing; a face measured 0.1 mm off over more than 5 % of the area fails it.
 - **Volume 0.5 %:** a 34-segment bore loses about θ²/6 ≈ 0.6 % of its own cross-section to its facets, a small fraction of a part's volume; a wrong wall thickness or a missing hole of any size that matters exceeds 0.5 %.
@@ -152,6 +164,12 @@ Root `CLAUDE.md`: the command list, the verification gates ("when `hardware/para
 - When the solid gate fails, the other gates are not run for that part (they need one closed solid), and the report says so.
 - Staging and re-reading cover every source before any `step/` is replaced, so a failed re-read in one source writes nothing anywhere. Stale `.step-staging-*` folders from a killed run are removed with the leftover `step.old/`. A source with no parts keeps no empty `step/`.
 - FreeCADCmd opens any further argument as a document, so `freecad_import.py` gets its files in `SPOODER_STEP_FILES` (passed into the flatpak with `--env=`), and prints its JSON after a marker line. The flatpak has its own `/tmp`, so the real-tool test stages its STEP under the tooling folder, not in `/tmp`. FreeCADCmd on `PATH` is preferred to the flatpak.
+
+- The frame group's dimensions are measured as `hardware/aecert-hexapod-v1/README.md` describes (trimesh sections, probes and circle fits), recorded in each part file beside its constant. Where an STL's curve is not exactly circular (Frame Top's and Frame Bottom's arc C inside the rim and walls, Frame Bottom's second rear arc), the constant is the least-squares circle through its vertices, and the comment says so; every other arc fits its vertices to 0.002 mm.
+- Frame Top and Frame Bottom share their plan in `parts/_frame.py` (the outline, the arms placed at 0° and ±56° with the corner arms 10.53 mm further out, the slots, the mount holes, the open middle, the frame screws), since both STLs agree on every shared value to 0.001 mm.
+- Frame Bottom's chamfers are cut as one wedge per convex horizontal edge (`_frame.chamfered`), not with OpenCascade's chamfer, which fails on its walls (thin walls, tips of r 0.7 under a 1 mm chamfer, tangent joins). Where a chamfered edge meets a re-entrant corner the two wedges' meet is cut too; where it runs tangent into an edge that is not chamfered its wedge runs on 6 mm; a chamfer on a face stops at the walls standing on it. The STL's own exceptions are modelled as it has them: no chamfer on the walls' top edges facing the open middle and the open rear, on the floor hole's top edges, on the corner arms' slot ends or on the rear floor's outer edge, and a 0.75 mm round (not a chamfer) on the rear floor's step.
+- The test that the Aecert source declares "exactly the five frame parts" checks the five frame part files declare exactly those five parts, and fails naming any missing one, so that a later group's part files do not need the test changed.
+- `chord_error.py` chains each section's segments itself, since trimesh's section loops need networkx, which the build does not pin.
 
 ## Follow-ups
 

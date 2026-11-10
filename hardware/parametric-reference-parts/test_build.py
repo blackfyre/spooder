@@ -1,4 +1,5 @@
-"""Tests of the parametric reference parts' build (tasks 1.1 to 1.4).
+"""Tests of the parametric reference parts' build (tasks 1.1 to 1.4) and of
+the Aecert source's frame group (tasks 2.1 to 2.3).
 
     uv run --locked --quiet --script hardware/parametric-reference-parts/build.py --test
 
@@ -6,13 +7,16 @@ Discovery is tested on part files written into temporary sources; each gate
 is shown to fail on a bad synthetic shape and pass on the good one, against
 STLs exported from synthetic solids; the STEP export and its folder swap on
 temporary sources; and the import checks with the tools hidden, with stubbed
-tool output, and (when both are installed) with the real tools.
+tool output, and (when both are installed) with the real tools. The frame
+group's tests discover the real Aecert source: its five parts, a named
+dimension changed and rebuilt, and the measurements the frame README states.
 """
 
 from __future__ import annotations
 
 import io
 import json
+import math
 import os
 import shutil
 import tempfile
@@ -25,6 +29,7 @@ from unittest import mock
 from build123d import Box, Compound, Cylinder, Plane, Pos, Solid, export_step, export_stl
 
 import build
+import chord_error
 import export
 import gates
 import import_check
@@ -623,6 +628,136 @@ class ImportChecks(Temp):
             print(r.line())
         self.assertEqual([(r.tool, r.status) for r in results], [("FreeCAD", "PASS"), ("solidcraft", "PASS")],
                          [r.line() for r in results])
+
+
+# --- 2. the frame group ------------------------------------------------------
+
+AECERT = "aecert-hexapod-v1"
+FRAME_FILES = {"frame_top.py": "Frame Top", "frame_bottom.py": "Frame Bottom", "servo_mount.py": "Servo Mount",
+               "bearing_axle_mount.py": "Bearing Axle Mount", "hubcap.py": "Hubcap"}
+
+
+class FrameGroup(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sources, failures = discover(HERE, build.REPO)
+        cls.failures = failures
+        cls.source = next((s for s in sources if s.name == AECERT), None)
+
+    def part(self, name):
+        return next(p for p in self.source.parts if p.name == name)
+
+    def test_the_frame_group_is_declared(self):
+        self.assertEqual(self.failures, [])
+        self.assertIsNotNone(self.source, f"no source {AECERT}")
+        declared = {p.file.name: p.name for p in self.source.parts if p.file.name in FRAME_FILES}
+        for filename, name in FRAME_FILES.items():
+            self.assertEqual(declared.get(filename), name, f"frame part {name} is not declared in {filename}")
+        self.assertEqual(sorted(declared.values()), sorted(FRAME_FILES.values()))
+        for name in FRAME_FILES.values():
+            self.assertEqual(self.part(name).stl, build.REPO / "hardware" / AECERT / "stl" / f"{name}.stl")
+
+    def test_a_thicker_hubcap_fails_its_gates(self):
+        part = self.part("Hubcap")
+        module = part.build.__globals__
+        good, _ = quiet(gates.check, "Hubcap", part.build(), part.stl, samples=FEW)
+        self.assertEqual(good.failures, [])
+        module["THICKNESS"] += 0.5
+        try:
+            thicker = part.build()
+        finally:
+            module["THICKNESS"] -= 0.5
+        self.assertAlmostEqual(thicker.bounding_box().size.Z, module["THICKNESS"] + 0.5, places=6)
+        report, _ = quiet(gates.check, "Hubcap", thicker, part.stl, samples=FEW)
+        self.assertTrue(failed(report, "volume") or failed(report, "deviation"), report.failures)
+
+    def test_mount_hole_pairs_lie_where_the_readme_says(self):
+        # README: each Bearing Axle Mount screws to a pair of frame holes
+        # 28.5 mm apart, 87.60 mm (middle legs) or 98.13 mm (corners) from
+        # the centre, at 0° and ±56° from the sides. Found as the frames'
+        # r 1.6 holes, not from the constants that place them.
+        for name in ("Frame Top", "Frame Bottom"):
+            solid = self.part(name).build()
+            centres = {(round(e.arc_center.X, 3), round(e.arc_center.Y, 3)) for e in solid.edges()
+                       if e.geom_type.name == "CIRCLE" and abs(e.radius - 1.6) < 1e-6}
+            pairs = []
+            for a in centres:
+                for b in centres:
+                    if a < b and abs(math.dist(a, b) - 28.5) < 0.01:
+                        pairs.append(((a[0] + b[0]) / 2, (a[1] + b[1]) / 2))
+            with self.subTest(part=name):
+                self.assertEqual(len(pairs), 6, pairs)
+                radii = sorted(round(math.hypot(*m), 2) for m in pairs)
+                self.assertEqual(radii, [87.6, 87.6, 98.13, 98.13, 98.13, 98.13])
+                angles = sorted(round(math.degrees(math.atan2(m[1], m[0])) % 180, 2) for m in pairs)
+                self.assertEqual(angles, [0.0, 0.0, 56.0, 56.0, 124.0, 124.0])
+
+    def test_readme_figures(self):
+        servo = self.part("Servo Mount").build.__globals__
+        bam = self.part("Bearing Axle Mount").build.__globals__
+        # README: the Servo Mount's 15 mm ring and 5 mm ear pads ...
+        self.assertAlmostEqual(servo["RING_HEIGHT"], 15.0)
+        self.assertAlmostEqual(servo["PAD_TOP_Z"] - servo["RING_BOTTOM_Z"] - servo["RING_HEIGHT"], 5.0)
+        ring = self.part("Servo Mount").build()
+        self.assertAlmostEqual(ring.bounding_box().size.Z, 20.0, places=6)
+        # ... the pads 57 mm long ...
+        self.assertAlmostEqual(ring.bounding_box().size.X, 57.0, places=6)
+        # ... and the Bearing Axle Mount's axle 9.90 mm off its screws' line,
+        # on a 9.4 mm base.
+        self.assertAlmostEqual(bam["AXLE_X"] - bam["SCREW_X"], 9.90)
+        self.assertAlmostEqual(bam["PLATE_THICKNESS"], 9.4)
+
+
+class ChordError(unittest.TestCase):
+    def test_a_tessellated_cylinder_gives_its_sagitta(self):
+        import trimesh
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "c.stl"
+            trimesh.creation.cylinder(radius=10.0, height=5.0, sections=24).export(str(path))
+            f = chord_error.measure(path)
+        self.assertIsNotNone(f)
+        self.assertAlmostEqual(f.radius, 10.0, places=3)
+        self.assertAlmostEqual(f.segments_per_turn, 24.0, places=3)
+        self.assertAlmostEqual(f.error, 10.0 * (1 - math.cos(math.pi / 24)), places=4)
+
+    def test_a_level_cylinder_is_seen_too(self):
+        import trimesh
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "c.stl"
+            mesh = trimesh.creation.cylinder(radius=10.0, height=5.0, sections=24)
+            mesh.apply_transform(trimesh.transformations.rotation_matrix(math.pi / 2, [0, 1, 0]))
+            mesh.export(str(path))
+            f = chord_error.measure(path)
+        self.assertIsNotNone(f)
+        self.assertEqual(f.axis, "x")
+        self.assertAlmostEqual(f.error, 10.0 * (1 - math.cos(math.pi / 24)), places=4)
+
+    def test_the_frame_parts_match_the_recorded_table(self):
+        # design.md, "Tolerances": the chord error table task 2.1 records,
+        # and the 0.15 mm above which a part needs an exception.
+        design = (build.REPO / "openspec" / "changes" / "parametric-reference-parts" / "design.md").read_text()
+        rows = {}
+        for line in design.splitlines():
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) == 3 and cells[0] in FRAME_FILES.values():
+                rows[cells[0]] = (float(cells[1]), cells[2])
+        self.assertEqual(sorted(rows), sorted(FRAME_FILES.values()))
+        sources, _ = discover(HERE, build.REPO)
+        parts = {p.name: p for s in sources if s.name == AECERT for p in s.parts}
+        for name, (error, feature) in rows.items():
+            with self.subTest(part=name):
+                f = chord_error.measure(parts[name].stl)
+                self.assertEqual(f"{f.error:.3f}", f"{error:.3f}")
+                self.assertIn(f"r {f.radius:.2f}, n {f.segments_per_turn:.0f}", feature)
+                self.assertLessEqual(f.error, 0.15, f"{name} needs a tessellation exception")
+                self.assertNotIn("deviation_max", parts[name].exceptions)
+
+    def test_a_box_has_no_curves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write_stl(block(), Path(tmp) / "b.stl")
+            self.assertIsNone(chord_error.measure(path))
 
 
 if __name__ == "__main__":
