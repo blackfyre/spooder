@@ -55,6 +55,7 @@ mise run handheld-deps      # name the missing Linux packages for the handheld's
 mise run bridge-screenshots  # render the bridge screen's pages to docs/images/bridge-*.png
 mise run cad             # check the electronics mount, then write its print/ and step/ files
 mise run cad-preview     # render the electronics mount to hardware/spooder-electronics-mount/images/
+mise run cad-reference   # check the parametric reference parts against their STLs, then write their STEP files
 mise run vulncheck       # govulncheck of desktop/ against desktop/vulncheck-baseline.txt (shrink-only)
 mise run worktree-add <name>     # delivery worktree .claude/worktrees/<name> on deliver/<name>, from origin/main
 mise run worktree-remove <name>  # remove it and its local branch
@@ -62,9 +63,9 @@ mise run worktree-init           # ready a worktree another tool made (Orca's se
 mise run clean
 ```
 
-**Verification gates:** `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e`, `mise run handheld-test`, `mise run handheld-build`, `mise run handheld-package` and, when `hardware/spooder-electronics-mount/` changes, `mise run cad`. Compiler warnings in Spooder's own sources are errors in the robot build, the bridge build and the host tests (each area's `CLAUDE.md` says how); SDK warnings are not. Hardware behaviour can only be checked on the boards (the `spooder-hardware-check` skill).
+**Verification gates:** `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run e2e`, `mise run handheld-test`, `mise run handheld-build`, `mise run handheld-package` and, when `hardware/spooder-electronics-mount/` changes, `mise run cad`, and when `hardware/parametric-reference-parts/` changes, `mise run cad-reference`. Compiler warnings in Spooder's own sources are errors in the robot build, the bridge build and the host tests (each area's `CLAUDE.md` says how); SDK warnings are not. Hardware behaviour can only be checked on the boards (the `spooder-hardware-check` skill).
 
-**CI** (`.github/workflows/ci.yml`) runs the same gates, except `mise run cad` and `mise run handheld-package` (the emulated arm64 build), on a clean Ubuntu runner on every push to `main` and `deliver/*` and every pull request, and nightly with `mise run vulncheck`. It is an independent check, not a merge gate: the delivery workflow's own gates decide merges. Actions are pinned to commit SHAs.
+**CI** (`.github/workflows/ci.yml`) runs the same gates, except `mise run cad`, `mise run cad-reference` and `mise run handheld-package` (the emulated arm64 build), on a clean Ubuntu runner on every push to `main` and `deliver/*` and every pull request, and nightly with `mise run vulncheck`. It is an independent check, not a merge gate: the delivery workflow's own gates decide merges. Actions are pinned to commit SHAs.
 
 **Flash both boards together** when the link protocol changes (`protocol::VERSION`, now 3). A mismatched pair fails safe: each side discards the other's frames, so the link looks lost and the robot sleeps.
 
@@ -79,6 +80,7 @@ mise run clean
 - `cmake/build_identity.cmake`: the build identity (`git describe --always --dirty --abbrev=12`, or `unknown`), written as a generated source by the robot's, the virtual robot's and the bridge's builds, rewritten only when it changes.
 - `hardware/`: Spooder's own printed parts, and reference files copied unchanged.
   - `spooder-electronics-mount/`: the printed mount for the electronics on the frame top (deck, cover, bumpers, holders), generated and checked with build123d (`mise run cad`, `mise run cad-preview`); its README gives the parts and colours, printing, the hardware list, the assembly order, the cable routes and the measurements to take before printing.
+  - `parametric-reference-parts/`: parametric build123d solids of the reference printed parts (for now Aecert's frame group), from named dimensions measured on the STLs, checked against them and exported as STEP, with FreeCAD and solidcraft import checks (`mise run cad-reference`); its README gives the part contract, how to add a part, the gates and tolerances and the import checks, and each source's README its parts.
   - The reference files, each folder's README giving its source and licence:
     - `aecert-hexapod-v1/`: upstream's printed parts (STLs and the whole-robot 3MF) at `ca5ed27`, the commit the movement code was ported from, with the measured link lengths against the firmware's and `BOM.md`, the hardware list derived from the parts;
     - `lilygo-t-display/`: the bridge board's STEP model, case shell, schematic and KiCad/Eagle libraries;
