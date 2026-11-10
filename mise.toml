@@ -194,6 +194,14 @@ run = [
   "uv run --locked --quiet --script build.py",
 ]
 
+[tasks.cad-reference]
+description = "Check the parametric reference parts against their STLs and write their STEP files"
+dir = "hardware/parametric-reference-parts"
+run = [
+  "uv run --locked --quiet --script build.py --test",
+  "uv run --locked --quiet --script build.py",
+]
+
 [tasks.cad-preview]
 description = "Render the electronics mount on the frame top to hardware/spooder-electronics-mount/images"
 dir = "hardware/spooder-electronics-mount"
