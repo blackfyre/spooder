@@ -83,11 +83,16 @@ Every part passes the global gates; none declares an exception. The measured val
 | Femur Bearing Side | `parts/femur_bearing_side.py` | `hardware/aecert-hexapod-v1/stl/Femur Bearing Side.stl` | `step/Femur Bearing Side.step` | 0.013 % | 0.032 mm | 0.004 mm | none |
 | Femur Support | `parts/femur_support.py` | `hardware/aecert-hexapod-v1/stl/Femur Support.stl` | `step/Femur Support.step` | 0.022 % | 0.035 mm | 0.013 mm | none |
 
+Limits: volume 0.5 %, maximum deviation 0.20 mm, 95th percentile 0.05 mm, bounding box 0.15 mm (every femur part within 0.007 mm). The STLs' chord error (`build.py --chord-error`) is 0.007 mm on both side plates and 0.003 mm on Femur Support, well under the 0.15 mm above which a tessellation exception would be declared.
+
+- Femur Horn Side and Femur Bearing Side share their plan in `parts/_femur.py`: the 30 mm stadium outline round the two bore axes, 8.35 mm thick, the two lightening slots (their 45° sides running back on the horn side and forward on the bearing side), the countersunk middle hole and the recess over the web between the slots. Each part file holds its first bore's axis and its own bores: the horn side an r 10.098 horn recess with four screw holes 6.8 mm off each axis, the bearing side an r 11.2 bearing pocket over an r 9.0 hole through its floor.
+- **Axis-to-axis length.** Both sides place their second bore `AXIS_TO_AXIS` (110.000 mm, `parts/_femur.py`) along x from their first. Circle fits to the bores give 110.000 mm on both STLs, on every section; `hardware/aecert-hexapod-v1/README.md` gives the femur as 108 mm ("Measured on Spooder"), 2 mm less. The constant takes the STLs' value, which the gates hold the solids to; correcting that README's 108 is a follow-up. It is the printed parts' bore spacing, not the movement's femur link length (`FEMUR_LENGTH`, 116 mm). `test_femur.py` finds both sides' bore axes from the built solids' cylindrical faces, checks they lie `AXIS_TO_AXIS` apart to 0.01 mm, and rebuilds both with the constant raised by 1 mm to check they follow it.
+- Femur Support's sides and the two rounded ends of the plates' web recess are parabolas, not arcs (a parabola fits their vertices to 0.006 mm and 0.005 mm, a circle only to 0.081 mm and 0.07 mm), so each is modelled as a quadratic Bézier, which is exactly a parabola, and needs no exception.
+
 ## Groups still to model
 
 Each is a later change adding its part files, its STEP files, its table here and a `CHANGELOG.md` line:
 
-- **Femur:** Femur Horn Side, Femur Bearing Side, Femur Support.
 - **Tibia:** Tibia Left and Tibia Right (a mirrored pair), Tibia Support.
 - **Feet:** Foot Left and Foot Right (a mirrored pair), Foot Shaft, Foot Tip.
 - **Plates:** Leg Parts A, Leg Parts B and Foot Left Right, arrangements of the single parts.
