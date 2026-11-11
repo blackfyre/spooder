@@ -18,12 +18,12 @@ First sections of Foot Left: from z 0 to 5 a plate whose sections show 22 loops 
 ## Goals / Non-Goals
 
 **Goals:**
-- Foot Left, Foot Right, Foot Shaft and Foot Tip as parametric parts that pass every global gate and import as one closed solid in FreeCAD and solidcraft.
+- Foot Left, Foot Right, Foot Shaft and Foot Tip as parametric parts that pass the gates (the global limits, or a per-part exception documented as below) and import as one closed solid in FreeCAD and solidcraft.
 - The flexure's path and beam widths as named dimensions, shared by both feet, so changing one and running `--check` rebuilds both feet with it.
 
 **Non-Goals:**
 - Foot Left Right (a later arrangement change), the ball foot, the other groups.
-- Any edit to the shared tooling, its tests, the folder README or another group's files.
+- Any edit to the shared tooling, its tests (`test_build.py`) or another group's files, and any edit to the folder README beyond its exception sentence (Gates and exceptions).
 - Changing the spring: upstream's flexure is reproduced as it is.
 
 ## Decisions
@@ -37,6 +37,7 @@ aecert-hexapod-v1/parts/
   foot_right.py   Foot Right: Foot Left's solid, mirrored and moved (below)
   foot_shaft.py   Foot Shaft
   foot_tip.py     Foot Tip
+test_feet.py      the feet group's tests (Tests, below)
 ```
 
 The foot half's dimensions live in `_feet.py`, not in `foot_left.py`, because both feet are built from them, as Frame Top and Frame Bottom share `_frame.py`. Each constant carries its source comment (the trimesh section, probe or circle fit, and where), measured on Foot Left's STL.
@@ -49,7 +50,7 @@ The serpentine is modelled as a path, not as a set of separate slots: named cons
 
 The two foot STLs are mirror images: Foot Right reflected across x and moved onto Foot Left lies within 0.0012 mm of it (20 000 area samples). Their bounding boxes give a mirror plane x = 124.445, but Foot Right's y range sits 1.069 mm lower than Foot Left's. A mirrored-pair declaration takes only a `Plane`, and a reflection across any plane cannot add that offset; a tilted plane would turn the part instead. The offset is far above the 0.15 mm bounding-box gate, so the mirrored-pair mechanism does not meet the gates.
 
-Foot Right is therefore its own part file whose `build` imports `foot_left` (a sibling, allowed by the contract), mirrors its solid across `Plane.YZ.offset(MIRROR_X)` and moves it by `RIGHT_OFFSET_Y`, both measured from the two STLs' bounding boxes and comments saying so. Foot Right has no model of its own, so a retuned flexure changes both feet, which is what the mirrored pair would have given.
+Foot Right is therefore its own part file whose `build` imports `foot_left` (a sibling, allowed by the contract, as an arrangement plate imports the single parts), mirrors its solid across `Plane.YZ.offset(MIRROR_X)` and moves it by `RIGHT_OFFSET_Y`, both measured from the two STLs' bounding boxes and comments saying so. Foot Right has no model of its own, so a retuned flexure changes both feet, which is what the mirrored pair would have given. The main spec's mirrored-pair rule covers a part file declaring two sides; Foot Right declares one part, so discovery accepts it, and the feet requirement states this exception.
 
 ### Foot Shaft and Foot Tip
 
@@ -57,24 +58,35 @@ Each is modelled from its own sections in its STL's coordinates. Both look like 
 
 ### Gates and exceptions
 
-Every part is held to the global gates. `build.py --chord-error` measures each STL's chord error once the parts are declared. A part whose chord error exceeds 0.15 mm gets the documented per-part exception for the tessellation gate, at its chord error plus 0.05 mm. A feature that feature-based modelling cannot match (a freeform surface) is recorded as a per-part exception that names the feature and its size, and the amount by which it exceeds the global limit; a global limit is never loosened. Both are listed in the feet group's table.
+Every part is held to the global gates. `build.py --chord-error` measures each STL's chord error once the parts are declared. A part whose chord error exceeds 0.15 mm gets the documented per-part exception for the tessellation gate, at its chord error plus 0.05 mm. A feature that feature-based modelling cannot match (a freeform surface) is recorded as a per-part exception that names the feature and its size, and the amount by which it exceeds the global limit; a global limit is never loosened. Both are listed in the feet group's table. The tessellation limit is rounded up to 0.01 mm. A freeform exception is marked by a reason starting with "freeform" (as the folder README's example), so the tests can tell the two kinds apart; it applies to the failing gate only, at the measured amount, and is not derived from the chord error. If any foot declares an exception, the folder README's sentence "No part declares an exception yet." would become false, so this change rewrites that one sentence to name the foot exceptions and point to the feet group's table; the rest of the folder README, including its chord-error table, is left alone.
+
+### Tests
+
+The feet group's tests live in `test_feet.py`, a new file beside `test_build.py`, which `build.py --test` already discovers (`test_*.py`); `test_build.py` is not edited, so the parallel group changes do not conflict on it. They discover the real Aecert source, as `FrameGroup` does, and check:
+
+- the four foot parts are declared, each in its file and against its STL, failing with the missing part's name;
+- the retuning: one flexure beam width in `_feet` (the module object that Foot Left's build reads) raised by 0.3 mm and restored in a `finally`; both feet rebuilt differ in volume from their unchanged builds and each fails its volume or deviation gate, which also shows Foot Right is built from the shared model;
+- for each foot part, `chord_error.measure` on its STL: above 0.15 mm the part declares the `deviation_max` exception with the limit at the chord error plus 0.05 mm, rounded up to 0.01 mm; at or below it every exception it declares has a reason starting with "freeform", a feature and a limit above the global limit, and `gates.check` on the part without that exception fails that exception's gate (so a freeform exception is never declared for a gate that passes); a foot with neither declares none;
+- for each foot exception, the README row gives the amount over the global limit (the limit minus the global limit, in the gate's unit: % for `volume`, mm for the others, to two decimals, followed by "over"), which `test_source_readmes_list_their_parts` does not check.
+
+That the README rows name each exception's feature and absolute limit is already checked by `test_source_readmes_list_their_parts` for every part.
 
 ## Risks / Trade-offs
 
 - **The flexure's thin beams and rounds** may defeat OpenCascade's fillets, as Frame Bottom's chamfers did → cut them with explicit profiles in the flexure sketch, as `_frame.chamfered` cuts wedges.
 - **Run time:** the surface deviation gate on Foot Left's 14 038 facets adds to the build's ten minutes; acceptable for a gate run locally.
-- **Merge conflicts:** the coxa, femur, tibia and LilyGO changes edit `aecert-hexapod-v1/README.md` and `CHANGELOG.md` in parallel → this change touches only its own section, its own line in "Groups still to model" and one changelog line.
+- **Merge conflicts:** the coxa, femur, tibia and LilyGO changes edit `aecert-hexapod-v1/README.md` and `CHANGELOG.md` in parallel → this change touches only its own section, its own line in "Groups still to model", one changelog line, its own `test_feet.py` and, if a foot declares an exception, the folder README's exception sentence.
 
 ## Assumptions
 
 - The group is delivered as one change, all four parts, although the parts are independent: the programme adds one group per change (the archived change's Follow-ups, the source README's "Groups still to model"), and splitting it would leave a group half modelled with a second change for two small parts.
 - Foot Right is a separate part file built from Foot Left's solid (Foot Right, above), not a mirrored-pair declaration, since the pair mechanism cannot carry the 1.069 mm offset.
 - The foot half's dimensions are measured on Foot Left's STL; Foot Right is checked through the mirror against its own STL.
-- No unit test is added: the brief limits this change to its part files, STEP files, README section and changelog line, and `test_build.py` is shared tooling. The gates check each part, and the retuning is checked by changing a flexure constant and running `--check` (tasks 2.3).
-- The folder README's sentence "No part declares an exception yet" and its chord-error table belong to the shared README, which this change does not edit; if a foot needs an exception, the feet group's table records it and the folder README is left to a change that may edit it (Follow-ups).
+- The feet group's tests go in a new `test_feet.py`, not in `test_build.py`: the brief keeps this change off the shared tooling and its tests, and the parallel group changes would otherwise conflict there. The retuning is checked in a unit test that restores the constant in-process, not by editing `_feet.py` and checking it out again.
+- The folder README's chord-error table belongs to the shared README and is not edited. Its sentence "No part declares an exception yet." is the one exception: leaving it false would make the documentation lie, so it is rewritten if a foot declares an exception.
 - The changelog line goes under Unreleased, Added.
 
 ## Follow-ups
 
 - Foot Left Right, the combined plate, as an arrangement of Foot Left and Foot Right (the plates change).
-- If any foot declares an exception: update the folder README's "No part declares an exception yet" sentence and, if wanted, add the feet to its chord-error table.
+- If wanted, add the feet to the folder README's chord-error table.
