@@ -869,9 +869,9 @@ class ChordError(unittest.TestCase):
         self.assertAlmostEqual(f.error, 10.0 * (1 - math.cos(math.pi / 24)), places=4)
 
     def test_the_frame_parts_match_the_recorded_table(self):
-        # design.md, "Tolerances": the chord error table task 2.1 records,
-        # and the 0.15 mm above which a part needs an exception.
-        design = (build.REPO / "openspec" / "changes" / "parametric-reference-parts" / "design.md").read_text()
+        # README.md, "Gates and tolerances": the chord error table, and the
+        # 0.15 mm above which a part needs an exception.
+        design = (HERE / "README.md").read_text()
         rows = {}
         for line in design.splitlines():
             cells = [c.strip() for c in line.strip().strip("|").split("|")]

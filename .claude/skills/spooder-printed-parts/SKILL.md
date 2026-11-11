@@ -7,6 +7,8 @@ description: Workflow and rules for Spooder's own 3D-printed parts, generated as
 
 Printed parts are code: one build123d script per part set, which generates the geometry from named measurements, checks it and only then writes the print and CAD files. A part set lives in its own `hardware/<name>/` folder with the script, a preview renderer and a README covering printing, hardware, assembly and the measurements to check; the electronics mount (`add-electronics-mount`) is the first. The names in backticks below (`teardrop()`, `FrameMap`, `check_overhangs()`, `Part.print_up`, `BRIDGE` and so on) are the mount's, in its `model.py`, `layout.py` and `checks.py`; a new part set follows the same conventions.
 
+The parametric reference parts (`hardware/parametric-reference-parts/`, `mise run cad-reference`) are not a printed part set: they reproduce upstream's parts as solids gated against their STLs, with no print files and no printability rules. Their contract, gates and the way to add a part are in that folder's README, not here.
+
 ## Toolchain
 
 - **build123d 0.13.0**, pinned in the script's inline metadata (`requires-python = "==3.12.*"`) with `[tool.uv] exclude-newer` (older build123d breaks on a newer ocpsvg). Add numpy, trimesh and matplotlib the same way, at exact versions, and lock each script with `uv lock --script` into its `<script>.lock`.
@@ -51,6 +53,7 @@ flowchart LR
   - Drop solids that don't exist on the real board, such as header pins on a board with soldered wires, and record that in the docstring.
   - For a board with no model (the Servo 2040), build boxes from the drawing's dimensions (`hardware/pimoroni-servo2040/README.md`).
 - **The frame top STL is the truth for what lies under the deck.**
+  - Its parametric solid, `hardware/parametric-reference-parts/aecert-hexapod-v1/step/Frame Top.step`, is in the STL's own coordinates and within 0.20 mm of it; use it where a solid is needed, but the STL stays the reference.
   - The ring is solid at |x| ≥ 52 and along the front and rear edges; most of the rest is open.
   - Query the STL through its height map (`FrameMap`, from `reference_check.height_map()`), never guess.
 - **Leg keep-clear region:** r ≤ 78.8 mm above the frame top, plus the front and rear tabs (|x| ≤ 24, |y| ≤ 79). Nothing printed goes outside it.
