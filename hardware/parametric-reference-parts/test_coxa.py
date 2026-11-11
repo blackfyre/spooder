@@ -13,12 +13,14 @@ with a level axis, the ring's faces the largest downward and upward planar
 faces; on a side plate, the four screw holes are the closed vertical
 cylindrical faces of the smallest radius, the ears the two holes furthest
 apart, the outline the planar faces at its ends and the ears' half discs.
+
+It also checks the source README's licence line (spec: "Author's awareness
+stated").
 """
 
 from __future__ import annotations
 
 import itertools
-import math
 import unittest
 
 import build
@@ -173,10 +175,15 @@ class CoxaGroup(unittest.TestCase):
             measured = (measure_connector if name in CONNECTORS else measure_side)(self.part(name).build())
             for value, values in measured.items():
                 model = table[(value, name)][1]
+                recorded, cell = table[(value, name)][0], table[(value, name)][2]
                 for got in values:
                     with self.subTest(part=name, value=value):
                         self.assertLessEqual(abs(got - model), MATCH,
                                              f"{name}: {value} is {got:.3f} mm on the solid, {model} in the table")
+                        # The disagreement is the built solid's against the record, not only the table's.
+                        self.assertEqual(cell == MARKER, abs(got - recorded) > DISAGREEMENT,
+                                         f"{name}: {value} is {got:.3f} mm on the solid against {recorded} "
+                                         f"recorded; the marker is {cell!r}")
 
     def test_the_recorded_column_and_the_disagreements(self):
         reference = (build.REPO / "hardware" / AECERT / "README.md").read_text()
@@ -190,6 +197,14 @@ class CoxaGroup(unittest.TestCase):
                 self.assertEqual(cell == MARKER, disagrees,
                                  f"{name}: {value} is {model} against {got} recorded; the marker is {cell!r}")
                 self.assertIn(cell, ("", MARKER))
+
+    def test_the_authors_awareness_is_stated(self):
+        licence = next((ln for ln in (HERE / AECERT / "README.md").read_text().splitlines()
+                        if ln.startswith("- Licence: ")), "")
+        for phrase in ("upstream states no licence", "the author knows about Spooder's derived models",
+                       "has raised no concerns", "informal", "grants no licence"):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, licence, f"{AECERT}/README.md's licence line does not say {phrase!r}")
 
 
 if __name__ == "__main__":
