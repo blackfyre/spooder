@@ -85,6 +85,8 @@ That the README rows name each exception's feature and absolute limit is already
 - The feet group's tests go in a new `test_feet.py`, not in `test_build.py`: the brief keeps this change off the shared tooling and its tests, and the parallel group changes would otherwise conflict there. The retuning is checked in a unit test that restores the constant in-process, not by editing `_feet.py` and checking it out again.
 - The folder README's chord-error table belongs to the shared README and is not edited. Its sentence "No part declares an exception yet." is the one exception: leaving it false would make the documentation lie, so it is rewritten if a foot declares an exception.
 - The changelog line goes under Unreleased, Added.
+- The feet group's section in `aecert-hexapod-v1/README.md` starts with task group 1, holding the rows of Foot Shaft and Foot Tip: `test_source_readmes_list_their_parts` fails for any declared part without a row, so each group's commit adds its parts' rows to keep `build.py --test` passing. Task 3.2 completes the section (the feet's rows, the flexure, Foot Right) and its other edits.
+- Foot Shaft and Foot Tip need no exception: their sections are flats, 45° faces and circular rounds and arcs (Foot Shaft's 0.8 mm rounds, Foot Tip's 5.2 mm side and 4.5 mm top round), which feature-based modelling meets within the global limits.
 
 ## Follow-ups
 

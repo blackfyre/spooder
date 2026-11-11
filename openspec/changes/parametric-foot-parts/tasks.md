@@ -4,8 +4,8 @@ All commands run in `hardware/parametric-reference-parts/` unless they start wit
 
 ## 1. Foot Shaft and Foot Tip
 
-- [ ] 1.1 Model Foot Shaft in `aecert-hexapod-v1/parts/foot_shaft.py` from named dimensions measured with trimesh (sections, probes, circle fits), each with its source comment, built from features in the STL's coordinates. Verify `uv run --locked --quiet --script build.py --check` passes Foot Shaft against `hardware/aecert-hexapod-v1/stl/Foot Shaft.stl` with the global limits, or with an exception declared as in design.md ("Gates and exceptions").
-- [ ] 1.2 Model Foot Tip in `aecert-hexapod-v1/parts/foot_tip.py` the same way. Verify `build.py --check` passes Foot Tip against its STL as in 1.1.
+- [x] 1.1 Model Foot Shaft in `aecert-hexapod-v1/parts/foot_shaft.py` from named dimensions measured with trimesh (sections, probes, circle fits), each with its source comment, built from features in the STL's coordinates. Verify `uv run --locked --quiet --script build.py --check` passes Foot Shaft against `hardware/aecert-hexapod-v1/stl/Foot Shaft.stl` with the global limits, or with an exception declared as in design.md ("Gates and exceptions").
+- [x] 1.2 Model Foot Tip in `aecert-hexapod-v1/parts/foot_tip.py` the same way. Verify `build.py --check` passes Foot Tip against its STL as in 1.1.
 
 ## 2. Foot Left and Foot Right
 

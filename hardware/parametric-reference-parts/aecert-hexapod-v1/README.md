@@ -89,10 +89,24 @@ Limits: volume 0.5 %, maximum deviation 0.20 mm, 95th percentile 0.05 mm, boundi
 - **Axis-to-axis length.** Both sides place their second bore `AXIS_TO_AXIS` (110.000 mm, `parts/_femur.py`) along x from their first. Circle fits to the bores give 110.000 mm on both STLs, on every section; `hardware/aecert-hexapod-v1/README.md` gives the femur as 108 mm ("Measured on Spooder"), 2 mm less. The constant takes the STLs' value, which the gates hold the solids to; correcting that README's 108 is a follow-up. It is the printed parts' bore spacing, not the movement's femur link length (`FEMUR_LENGTH`, 116 mm). `test_femur.py` finds both sides' bore axes from the built solids' cylindrical faces, checks they lie `AXIS_TO_AXIS` apart to 0.01 mm, and rebuilds both with the constant raised by 1 mm to check they follow it.
 - Femur Support's sides and the two rounded ends of the plates' web recess are parabolas, not arcs (a parabola fits their vertices to 0.006 mm and 0.005 mm, a circle only to 0.081 mm and 0.07 mm), so each is modelled as a quadratic Bézier, which is exactly a parabola, and needs no exception.
 
+## Feet group
+
+The measured values are from `build.py --check` on 2026-11-11.
+
+| Part | Part file | STL | STEP | Volume | Max deviation | 95th percentile | Exception |
+|---|---|---|---|---|---|---|---|
+| Foot Shaft | `parts/foot_shaft.py` | `hardware/aecert-hexapod-v1/stl/Foot Shaft.stl` | `step/Foot Shaft.step` | 0.022 % | 0.003 mm | 0.002 mm | none |
+| Foot Tip | `parts/foot_tip.py` | `hardware/aecert-hexapod-v1/stl/Foot Tip.stl` | `step/Foot Tip.step` | 0.188 % | 0.012 mm | 0.005 mm | none |
+
+Limits: volume 0.5 %, maximum deviation 0.20 mm, 95th percentile 0.05 mm, bounding box 0.15 mm (both parts within 0.003 mm).
+
+- Foot Shaft: a hexagonal shaft (flats 4 mm apart, 45° sides meeting 4.5 mm from the axis, those points rounded 0.8 mm), a half-hexagon pin with a slanted end, an upright collar and a 5 mm tongue.
+- Foot Tip: a 10.4 mm cylinder whose top edge is a 4.5 mm round, turned as one profile, with an octagonal socket 5.15 mm deep in its underside.
+
 ## Groups still to model
 
 Each is a later change adding its part files, its STEP files, its table here and a `CHANGELOG.md` line:
 
 - **Tibia:** Tibia Left and Tibia Right (a mirrored pair), Tibia Support.
-- **Feet:** Foot Left and Foot Right (a mirrored pair), Foot Shaft, Foot Tip.
+- **Feet:** Foot Left and Foot Right (Foot Shaft and Foot Tip are in the feet group above).
 - **Plates:** Leg Parts A, Leg Parts B and Foot Left Right, arrangements of the single parts.
