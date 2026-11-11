@@ -30,6 +30,49 @@ Limits: volume 0.5 %, maximum deviation 0.20 mm, 95th percentile 0.05 mm, boundi
 - Servo Mount: the 15 mm ring and the 5 mm ear pads that `hardware/aecert-hexapod-v1/README.md` uses for the coxa servo's height.
 - Bearing Axle Mount: the 9.4 mm base and the axle 9.90 mm off the screw line, from which the coxa pivots are placed.
 
+## Coxa group
+
+Every part passes the global gates (`../README.md`, "Gates and tolerances"); none declares an exception. The measured values are from `build.py --check` on 2026-11-11.
+
+| Part | Part file | STL | STEP | Volume | Max deviation | 95th percentile | Exception |
+|---|---|---|---|---|---|---|---|
+| Coxa Horn Connector | `parts/coxa_horn_connector.py` | `hardware/aecert-hexapod-v1/stl/Coxa Horn Connector.stl` | `step/Coxa Horn Connector.step` | 0.022 % | 0.013 mm | 0.002 mm | none |
+| Coxa Horn Side | `parts/coxa_horn_side.py` | `hardware/aecert-hexapod-v1/stl/Coxa Horn Side.stl` | `step/Coxa Horn Side.step` | 0.001 % | 0.006 mm | 0.003 mm | none |
+| Coxa Bearing Connector | `parts/coxa_bearing_connector.py` | `hardware/aecert-hexapod-v1/stl/Coxa Bearing Connector.stl` | `step/Coxa Bearing Connector.step` | 0.021 % | 0.013 mm | 0.003 mm | none |
+| Coxa Bearing Side | `parts/coxa_bearing_side.py` | `hardware/aecert-hexapod-v1/stl/Coxa Bearing Side.stl` | `step/Coxa Bearing Side.step` | 0.003 % | 0.006 mm | 0.003 mm | none |
+
+Limits: volume 0.5 %, maximum deviation 0.20 mm, 95th percentile 0.05 mm, bounding box 0.15 mm (every coxa part within 0.004 mm).
+
+The STLs' own chord error (`build.py --chord-error`), far below the 0.15 mm above which a part would need a tessellation exception: Coxa Horn Connector 0.003 mm (r 10.10, n 123, the horn's recess), Coxa Horn Side 0.004 mm (r 7.00, n 92, the corners between the ears), Coxa Bearing Connector 0.003 mm (r 11.20, n 130, the bearing's seat), Coxa Bearing Side 0.004 mm (r 7.00, n 92).
+
+- The sides share their plate in `parts/_coxa.py` (the outline, the ears, the 28.5 mm hole pair and the chamfers); they differ in their place, their window (57.3 × 20 mm on the Horn Side; 40 × 20 mm with an 8 mm slot on the Bearing Side) and which holes are countersunk. Their volumes differ by 21 %, so neither is a mirror of the other.
+- The connectors share their ring and tongue in `parts/_coxa.py`, the Bearing Connector's turned 180° about its axis; they differ in the seat: the horn's r 10.1 recess with its five holes, or the bearing's r 11.2 bore over an r 9 hole.
+- The Bearing Side's window chamfer is cut 0.001 mm short of 1 mm: at 1 mm it takes the slot's r 1 corners to nothing, which OpenCascade's chamfer cannot do.
+- The connectors' seats, with their rounded rims and floors, are cut with a solid turned from their profile, not rounded with fillets: the fillets' tori come out of the STEP as open shells in solidcraft-cli 0.30.1, as the Bearing Axle Mount's boss foot did.
+
+### Coxa link geometry against the record
+
+The coxa link geometry that `hardware/aecert-hexapod-v1/README.md` records, measured on the built solids (`test_coxa.py` finds each value from the solid's faces and checks it against this table to 0.01 mm). A difference above 0.05 mm is marked `disagrees`; none is.
+
+| Value | Part | Recorded (mm) | Model (mm) | Disagreement |
+|---|---|---|---|---|
+| Insert hole from the coxa axis | Coxa Horn Connector | 21.5 | 21.500 |  |
+| Ring height | Coxa Horn Connector | 8.05 | 8.050 |  |
+| Insert hole above the underside | Coxa Horn Connector | 4.025 | 4.025 |  |
+| Insert hole from the coxa axis | Coxa Bearing Connector | 21.5 | 21.500 |  |
+| Ring height | Coxa Bearing Connector | 8.05 | 8.050 |  |
+| Insert hole above the underside | Coxa Bearing Connector | 4.025 | 4.025 |  |
+| Each ear from the hole pair's middle | Coxa Horn Side | 30.10 | 30.100 |  |
+| Hole pair spacing | Coxa Horn Side | 28.5 | 28.500 |  |
+| Side plate length | Coxa Horn Side | 68.25 | 68.250 |  |
+| Side plate width | Coxa Horn Side | 48 | 48.025 |  |
+| Each ear from the hole pair's middle | Coxa Bearing Side | 30.10 | 30.100 |  |
+| Hole pair spacing | Coxa Bearing Side | 28.5 | 28.500 |  |
+| Side plate length | Coxa Bearing Side | 68.25 | 68.250 |  |
+| Side plate width | Coxa Bearing Side | 48 | 48.025 |  |
+
+The plate's width is 48.025 mm to the top of its ears (r 4.025 round holes 25.5 mm beyond the pair's middle, and 18.5 mm to the plate's other edge), within 0.05 mm of the recorded 48.
+
 ## Groups still to model
 
 Each is a later change adding its part files, its STEP files, its table here and a `CHANGELOG.md` line:

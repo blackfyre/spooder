@@ -58,6 +58,12 @@ Each recorded value is measured on the built solids, not on the meshes, with bui
 - If a coxa part needs an exception, the folder README's "No part declares an exception yet" becomes stale; this change does not edit that file, and records the follow-up below.
 - Where the model disagrees with `hardware/aecert-hexapod-v1/README.md`, the reference README is left unchanged (the reference folders stay unchanged) and the disagreement is stated in the source README and the completion report.
 - The author's awareness is stated as given in the brief: the author knows about Spooder's derived models and has raised no concerns; it is informal and grants no licence.
+- The coxa section's parts table and chord-error table are written with group 1, not left to task 2.1: the existing documentation test (`test_build.py`, `Documentation`) fails for any declared part without its row, so task 1.4's `--test` could not pass without them. Task 2.1 keeps the licence sentence, the "Groups still to model" line and the changelog.
+- The two sides share the plate and the two connectors share the ring and tongue (equal to 0.003 mm on the STLs), so both live in `parts/_coxa.py`; the Bearing Connector is the shared body turned 180° about its axis, with its own seat. This is a rotation, not the mirrored-pair mechanism, and each part is still checked against its own STL.
+- The Bearing Side's window chamfer is 0.999 mm, not 1 mm: at 1 mm the chamfer takes the slot's r 1 corners to a point, which OpenCascade cannot build. The 0.001 mm is below the 0.01 mm to which dimensions are measured, and is stated in the part file and the source README.
+- The connectors' ear clearance is rounded before the outline is chamfered, as the STL's sections show (the rounds' ends are cut flat by the chamfers); the chamfers are therefore made by cutting the ring to a chamfered copy of its outline rather than by chamfering the ring's own edges.
+- The connectors' seats are cut with a turned profile rather than with fillets, as the Bearing Axle Mount's boss foot was: with fillets, solidcraft-cli 0.30.1 read both connectors' STEP files as open shells (the first `mise run cad-reference` run failed its solidcraft check on them).
+- The recorded coxa width (48 mm) is compared with the plate's width to the top of its ears (48.025 mm); the difference is under 0.05 mm, so no value disagrees and no follow-up correction of `hardware/aecert-hexapod-v1/README.md` is needed.
 
 ## Follow-ups
 
