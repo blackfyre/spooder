@@ -6,7 +6,7 @@ Parametric solids of the printed parts of Ryan Mirch's Aecert's Hexapod V1, mode
 
 - Repository: https://github.com/Ryan-Mirch/Aecerts_Hexapod_V1
 - Commit `ca5ed27` (2024-04-09), the one Spooder's movement code was ported from and whose STLs `hardware/aecert-hexapod-v1/` holds unchanged.
-- Licence: upstream states no licence. These parts reproduce Aecert's design; they are not Spooder's own work, and no licence is granted for them here.
+- Licence: upstream states no licence; the author knows about Spooder's derived models and has raised no concerns, which is informal and grants no licence. These parts reproduce Aecert's design; they are not Spooder's own work, and no licence is granted for them here.
 
 Each part is built in its STL's own coordinates. Frame Top and Frame Bottom share one frame, the body frame (y forward, z up, the coxa pivots at z = 0), so the movement constants measured from them (`core/movement/body_geometry.h`) can be read off these solids too.
 
@@ -77,7 +77,6 @@ The plate's width is 48.025 mm to the top of its ears (r 4.025 round holes 25.5 
 
 Each is a later change adding its part files, its STEP files, its table here and a `CHANGELOG.md` line:
 
-- **Coxa:** Coxa Horn Connector, Coxa Horn Side, Coxa Bearing Connector, Coxa Bearing Side.
 - **Femur:** Femur Horn Side, Femur Bearing Side, Femur Support.
 - **Tibia:** Tibia Left and Tibia Right (a mirrored pair), Tibia Support.
 - **Feet:** Foot Left and Foot Right (a mirrored pair), Foot Shaft, Foot Tip.
