@@ -5,7 +5,7 @@ The Aecert source SHALL include the femur group: Femur Horn Side, Femur Bearing 
 
 #### Scenario: Femur group built
 - **WHEN** the build is run
-- **THEN** it checks and exports Femur Horn Side, Femur Bearing Side and Femur Support, each against its STL in `hardware/aecert-hexapod-v1/stl/`, and each STEP file passes the FreeCAD and solidcraft import checks
+- **THEN** it checks and exports Femur Horn Side, Femur Bearing Side and Femur Support, each against its STL in `hardware/aecert-hexapod-v1/stl/`, and each STEP file passes the FreeCAD and solidcraft import checks where the tool is installed, and reports `SKIPPED` where it is not
 
 #### Scenario: A femur part is missing
 - **WHEN** any of the three femur parts is not declared in the Aecert source's parts folder
@@ -14,3 +14,7 @@ The Aecert source SHALL include the femur group: Femur Horn Side, Femur Bearing 
 #### Scenario: Axis-to-axis length checked
 - **WHEN** the unit tests build Femur Horn Side and Femur Bearing Side
 - **THEN** each side's two bore axes, found from the solid's cylindrical faces, lie the named axis-to-axis length apart, and a bore placed elsewhere fails the test
+
+#### Scenario: Axis-to-axis length changed
+- **WHEN** the unit tests rebuild Femur Horn Side and Femur Bearing Side with the named axis-to-axis length changed
+- **THEN** both sides' bore axes lie the changed length apart, and a side that does not place its bores from the named length fails the test
