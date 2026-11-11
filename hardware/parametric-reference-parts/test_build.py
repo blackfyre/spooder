@@ -26,7 +26,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from build123d import Box, Compound, Cylinder, Plane, Pos, Solid, export_step, export_stl
+from build123d import (Box, Compound, Cylinder, Face, Plane, Pos, Rectangle, Solid, export_step, export_stl,
+                      import_step)
 
 import build
 import chord_error
@@ -122,11 +123,38 @@ class Discovery(Temp):
 
     def test_finds_a_dropped_part_and_ignores_underscore_files(self):
         self.simple_part("src", "cube.py", "Cube", self.cube)
-        # A helper is not discovered, even when it has PARTS of its own.
-        self.simple_part("src", "_helper.py", "Helper", self.other)
+        self.part_file("src", "_helper.py", "SIDE = 10\n")
         sources, failures = self.discover()
         self.assertEqual(failures, [])
         self.assertEqual([p.name for s in sources for p in s.parts], ["Cube"])
+
+    def test_helper_declaring_parts_fails(self):
+        cases = {"plain": "PARTS = []\n", "tuple": "PARTS, OTHER = [], 1\n", "nested": "if True:\n    PARTS = []\n",
+                 "annotated": "PARTS: list = []\n", "global": "def f():\n    global PARTS\n    PARTS = []\n"}
+        for what, code in cases.items():
+            with self.subTest(what=what):
+                shutil.rmtree(self.root / "src", ignore_errors=True)
+                self.simple_part("src", "cube.py", "Cube", self.cube)
+                self.part_file("src", "_helper.py", code)
+                sources, failures = self.discover()
+                self.assertTrue(any(f.startswith("src/parts/_helper.py:") and "a helper declares no part" in f
+                                    for f in failures), failures)
+                self.assertEqual(sources[0].parts, [])
+
+    def test_symlinked_source_fails_and_is_not_touched(self):
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside)
+        (outside / "parts").mkdir()
+        (outside / "step.old").mkdir()
+        (outside / "step.old" / "keep.step").write_text("x")
+        (self.root / "linked").symlink_to(outside, target_is_directory=True)
+        for mode in (["--check"], []):
+            with self.subTest(mode=mode):
+                code, out = quiet(build.main, mode, self.root, self.repo)
+                self.assertEqual(code, 1, out)
+                self.assertIn("linked: a source is a folder here, not a symbolic link", out)
+                self.assertTrue((outside / "step.old" / "keep.step").is_file(), "recovery left the link alone")
+                self.assertFalse((outside / "step").exists())
 
     def test_helper_without_parts_is_accepted_and_importable(self):
         self.part_file("src", "_shapes.py", """
@@ -235,6 +263,15 @@ class Discovery(Temp):
             "calls open": "DATA = open('x.stl', 'rb')\n",
             "imports import_stl": "from build123d import import_stl\n",
             "calls b.import_stl": "import build123d as b\nMESH = b.import_stl('x.stl')\n",
+            "imports import_dxf": "from build123d import import_dxf\n",
+            "calls b.import_svg": "import build123d as b\nS = b.import_svg('x.svg')\n",
+            "reaches sys through dataclasses": "import dataclasses\nOS = dataclasses.sys.modules['os']\n",
+            "imports sys from dataclasses": "from dataclasses import sys\n",
+            "imports a dunder from math": "from math import __loader__\n",
+            "imports * from build123d": "from build123d import *\n",
+            "reaches build123d.importers": "import build123d as b\nI = b.importers\n",
+            "calls vars": "import dataclasses\nG = vars(dataclasses)\n",
+            "uses a dunder attribute": "import math\nG = math.__dict__\n",
         }
         for what, code in cases.items():
             for filename in ("cube.py", "_helper.py"):
@@ -267,6 +304,19 @@ class Discovery(Temp):
                 _, failures = self.discover()
                 self.assertTrue(any("relative to the repository root, inside it" in f for f in failures), failures)
 
+    def test_gate_failure_through_the_build_writes_nothing(self):
+        stl = self.stl("ref/bored.stl", bored())
+        self.simple_part("src", "a.py", "A", stl, "Pos(10, 10, 5) * Box(20, 20, 10)")
+        (self.root / "src" / "step").mkdir()
+        (self.root / "src" / "step" / "A.step").write_text("old")
+        with mock.patch.object(gates, "SAMPLES", FEW):
+            code, out = quiet(build.main, [], self.root, self.repo)
+        self.assertEqual(code, 1, out)
+        self.assertIn("gate(s) failed; nothing written", out)
+        self.assertRegex(out, r"src/A: volume: [0-9.]+ mm3 is [0-9.]+ % off")
+        self.assertEqual([p.name for p in (self.root / "src" / "step").iterdir()], ["A.step"])
+        self.assertEqual((self.root / "src" / "step" / "A.step").read_text(), "old")
+
     def test_contract_failure_writes_nothing(self):
         self.part_file("src", "bad.py", "import os\nPARTS = []\n")
         code, out = quiet(build.main, [], self.root, self.repo)
@@ -291,6 +341,18 @@ class Gates(Temp):
         report = self.check(bored())
         self.assertEqual(report.failures, [])
         self.assertIsNotNone(report.solid)
+
+    def test_solid_with_a_stray_face_fails(self):
+        stray = Pos(40, 0, 0) * Face(Rectangle(2, 2).wire())
+        report = self.check(Compound([bored().solids()[0], stray]))
+        self.assertTrue(failed(report, "solid"), report.failures)
+        self.assertIn("besides its one solid", " ".join(report.failures))
+
+    def test_translated_part_is_not_aligned(self):
+        # Compared in the STL's coordinates: the right shape 1 mm off fails.
+        report = self.check(Pos(1, 0, 0) * bored())
+        self.assertTrue(failed(report, "bounding box"), report.failures)
+        self.assertTrue(failed(report, "deviation max"), report.failures)
 
     def test_two_solids_fail(self):
         report = self.check(Compound([bored(), Pos(40, 0, 0) * Box(2, 2, 2)]))
@@ -413,6 +475,15 @@ class MirroredPair(Temp):
         self.assertEqual(failures, [])
         self.assertEqual(sorted(solids["src"]), ["Left", "Right"])
         self.assertLess(solids["src"]["Right"].bounding_box().max.X, 1e-6)
+
+    def test_build_exports_both_sides(self):
+        self.pair(bored(x=5, y=5).mirror(Plane.YZ))
+        with mock.patch.dict(os.environ, {"PATH": ""}), mock.patch.object(gates, "SAMPLES", FEW):
+            code, out = quiet(build.main, [], self.root, self.repo)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(sorted(p.name for p in (self.root / "src" / "step").iterdir()), ["Left.step", "Right.step"])
+        right = export.bbox(import_step(self.root / "src" / "step" / "Right.step"))
+        self.assertLess(right[3], 1e-3, "the right side is the mirror, at x <= 0")
 
     def test_wrong_right_stl_fails_the_right_only(self):
         solids, failures = self.pair(bored(x=15, y=5).mirror(Plane.YZ))
@@ -586,19 +657,24 @@ class ImportChecks(Temp):
 
     def test_malformed_tool_output_fails_per_part(self):
         part = self.checked()
-        bad_fc = [import_check.FREECAD_MARKER + "{", import_check.FREECAD_MARKER + '{"files": []}',
-                  import_check.FREECAD_MARKER + json.dumps({"files": {str(part.step.resolve()): {"solids": "x"}}})]
+        key = str(part.step.resolve())
+        marker = import_check.FREECAD_MARKER
+        # Each with a valid version, so it fails on what it malforms.
+        bad_fc = [(marker + "{", "unreadable result"),
+                  (marker + json.dumps({"version": "1.1.4", "files": []}), "unreadable result"),
+                  (marker + json.dumps({"version": "1.1.4", "files": {key: {"solids": "x"}}}), "unreadable result")]
         good = {"solids": 1, "closed": True, "valid": True, "volume": 1000.0}
-        for key, bad in (("solids", 1.9), ("solids", True), ("closed", "false"), ("valid", "false"),
-                         ("volume", "1000"), ("volume", True)):
-            got = {**good, key: bad}
-            bad_fc.append(import_check.FREECAD_MARKER + json.dumps({"files": {str(part.step.resolve()): got}}))
-        for out in bad_fc:
+        for field_name, bad in (("solids", 1.9), ("solids", True), ("closed", "false"), ("valid", "false"),
+                                ("volume", "1000"), ("volume", True)):
+            got = {**good, field_name: bad}
+            bad_fc.append((marker + json.dumps({"version": "1.1.4", "files": {key: got}}), "unreadable result {"))
+        for out, expect in bad_fc:
             with self.subTest(freecad=out):
                 proc = mock.Mock(returncode=0, stdout=out + "\n", stderr="")
                 with mock.patch.object(import_check, "run", return_value=proc):
                     results = import_check.check_freecad([part], ["FreeCADCmd"])
                 self.assertEqual([(r.part, r.status) for r in results], [("A", "FAIL")])
+                self.assertIn(expect, results[0].detail)
         for body in ('{"bodies": 3}', '{"bodies": [{"closed": true}]}', '{"bodies": ["x"]}', "{}",
                      '{"bodies": [{"closed": "true", "volume_mm3": 1000.0}]}',
                      '{"bodies": [{"closed": true, "volume_mm3": "1000"}]}'):
@@ -608,6 +684,35 @@ class ImportChecks(Temp):
                 with mock.patch.object(import_check, "run", side_effect=[version, evals]):
                     results = import_check.check_solidcraft([part], ["solidcraft-cli"])
                 self.assertEqual([(r.part, r.status) for r in results], [("A", "FAIL")])
+
+    def test_versions_are_reported_on_pass(self):
+        good_fc = {"solids": 1, "closed": True, "valid": True, "volume": 1000.0}
+        self.assertIn("FreeCAD 1.1.4", self.freecad(good_fc)[0].detail)
+        self.assertIn("solidcraft 0.30.1", self.solidcraft([{"closed": True, "volume_mm3": 1000.0}])[0].detail)
+
+    def test_freecad_failed_exit_or_missing_version_fails(self):
+        part = self.checked()
+        good = {"solids": 1, "closed": True, "valid": True, "volume": 1000.0}
+        cases = {"exit 1": (1, {"version": "1.1.4", "files": {str(part.step.resolve()): good}}),
+                 "no version": (0, {"files": {str(part.step.resolve()): good}}),
+                 "empty version": (0, {"version": "", "files": {str(part.step.resolve()): good}})}
+        for what, (code, payload) in cases.items():
+            with self.subTest(what=what):
+                proc = mock.Mock(returncode=code, stdout=import_check.FREECAD_MARKER + json.dumps(payload) + "\n",
+                                 stderr="")
+                with mock.patch.object(import_check, "run", return_value=proc):
+                    results = import_check.check_freecad([part], ["FreeCADCmd"])
+                self.assertEqual([(r.part, r.status) for r in results], [("A", "FAIL")])
+
+    def test_solidcraft_failed_version_fails(self):
+        for code, out in ((1, "solidcraft-cli 0.30.1\n"), (0, "")):
+            with self.subTest(code=code, out=out):
+                version = mock.Mock(returncode=code, stdout=out, stderr="")
+                evals = mock.Mock(returncode=0, stdout=json.dumps({"bodies": [{"closed": True, "volume_mm3": 1000.0}]}),
+                                  stderr="")
+                with mock.patch.object(import_check, "run", side_effect=[version, evals]):
+                    results = import_check.check_solidcraft([self.checked()], ["solidcraft-cli"])
+                self.assertEqual([r.status for r in results], ["FAIL"])
 
     def test_freecad_unreadable_file_fails(self):
         (r,) = self.freecad({"error": "Cannot read STEP file"})
@@ -706,6 +811,35 @@ class FrameGroup(unittest.TestCase):
         # on a 9.4 mm base.
         self.assertAlmostEqual(bam["AXLE_X"] - bam["SCREW_X"], 9.90)
         self.assertAlmostEqual(bam["PLATE_THICKNESS"], 9.4)
+
+
+class Documentation(unittest.TestCase):
+    """Each source README lists every declared part with its STL and STEP
+    file, every STEP file, and each exception's feature and limit."""
+
+    def test_source_readmes_list_their_parts(self):
+        sources, failures = discover(HERE, build.REPO)
+        self.assertEqual(failures, [])
+        self.assertTrue(sources)
+        for source in sources:
+            readme = (source.path / "README.md").read_text()
+            rows = [ln for ln in readme.splitlines() if ln.startswith("| ")]
+            for part in source.parts:
+                with self.subTest(source=source.name, part=part.name):
+                    row = next((r for r in rows if r.startswith(f"| {part.name} |")), None)
+                    self.assertIsNotNone(row, f"{part.name} has no row in {source.name}/README.md")
+                    self.assertIn(f"`{part.stl.relative_to(build.REPO)}`", row)
+                    self.assertIn(f"`step/{export.step_name(part.name)}`", row)
+                    self.assertIn(f"`parts/{part.file.name}`", row)
+                    for gate, spec in part.exceptions.items():
+                        self.assertIn(spec["feature"], row, f"exception {gate} names no feature")
+                        self.assertIn(str(spec["limit"]), row, f"exception {gate} gives no amount")
+                    if not part.exceptions:
+                        self.assertTrue(row.rstrip().endswith("| none |"), row)
+            step = source.path / export.STEP_DIR
+            for f in sorted(step.iterdir()) if step.is_dir() else []:
+                with self.subTest(source=source.name, step=f.name):
+                    self.assertIn(f"`step/{f.name}`", readme)
 
 
 class ChordError(unittest.TestCase):

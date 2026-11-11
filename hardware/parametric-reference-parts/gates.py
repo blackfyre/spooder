@@ -133,6 +133,12 @@ def single_solid(result) -> tuple[object | None, list[str]]:
         return None, [f"is {len(solids)} solids, not one"]
     solid = solids[0]
     reasons = []
+    # A compound must hold nothing besides its solid: a stray face, shell,
+    # wire or vertex would be dropped silently when the solid is exported.
+    extra = [kind for kind in ("faces", "edges", "vertices")
+             if len(getattr(result, kind)()) != len(getattr(solid, kind)())]
+    if extra:
+        reasons.append(f"holds {', '.join(extra)} besides its one solid")
     if not solid.is_valid:
         reasons.append("is not a valid solid")
     shells = solid.shells()

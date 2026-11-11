@@ -125,9 +125,15 @@ def check_freecad(parts: list[Checked], command: list[str] | None) -> list[Resul
         tail = (proc.stdout + proc.stderr).strip().splitlines()[-3:]
         return [Result(p.name, FREECAD, "FAIL", f"FreeCAD gave no result (exit {proc.returncode}): "
                        + " | ".join(tail)) for p in parts]
+    if proc.returncode != 0:
+        tail = (proc.stdout + proc.stderr).strip().splitlines()[-3:]
+        return [Result(p.name, FREECAD, "FAIL", f"FreeCAD exited {proc.returncode} after its result: "
+                       + " | ".join(tail)) for p in parts]
     try:
         data = json.loads(payload)
-        version = str(data.get("version", "unknown"))
+        version = data["version"]
+        if not isinstance(version, str) or not version.strip():
+            raise TypeError("no version")
         files = data["files"]
         if not isinstance(files, dict):
             raise TypeError("files is not an object")
@@ -155,10 +161,14 @@ def check_solidcraft(parts: list[Checked], command: list[str] | None) -> list[Re
     if not parts:
         return []
     try:
-        version_out = run([*command, "--version"]).stdout.strip()
+        version_proc = run([*command, "--version"])
     except (OSError, subprocess.TimeoutExpired) as e:
         return [Result(p.name, SOLIDCRAFT, "FAIL", f"solidcraft-cli did not run: {e}") for p in parts]
-    version = version_out.split()[-1] if version_out else "unknown"
+    version_out = version_proc.stdout.strip()
+    if version_proc.returncode != 0 or not version_out:
+        return [Result(p.name, SOLIDCRAFT, "FAIL", f"solidcraft-cli --version exited {version_proc.returncode} "
+                       f"with {version_out or 'no output'!r}") for p in parts]
+    version = version_out.split()[-1]
     results = []
     for p in parts:
         try:

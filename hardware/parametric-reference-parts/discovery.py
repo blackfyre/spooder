@@ -20,9 +20,12 @@ is checked against.
 from __future__ import annotations
 
 import ast
+import functools
+import importlib
 import importlib.util
 import re
 import sys
+import types
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,11 +34,37 @@ PARTS_DIR = "parts"
 # Modules a file in parts/ may import, besides its siblings in parts/.
 # __future__ is a compiler directive, not a module that reads anything.
 ALLOWED_IMPORTS = frozenset({"__future__", "math", "dataclasses", "typing", "build123d"})
-# Built-ins that read files or load code, refused as any reference.
-BANNED_NAMES = frozenset({"open", "exec", "eval", "compile", "__import__", "getattr", "__builtins__"})
+# Built-ins that read files, load code or reach other modules' globals,
+# refused as any reference.
+BANNED_NAMES = frozenset({"open", "exec", "eval", "compile", "__import__", "getattr", "__builtins__",
+                          "globals", "locals", "vars", "breakpoint"})
 # build123d's mesh and file importers, refused as a name, an imported name or
-# an attribute (so `b.import_stl` fails as well as `import_stl`).
+# an attribute (so `b.import_stl` fails as well as `import_stl`): these, and
+# every name starting with IMPORTER_PREFIX (`import_dxf`, `import_svg`, ...).
 BANNED_BUILD123D = frozenset({"import_stl", "import_3mf", "import_step", "import_brep", "Mesher"})
+IMPORTER_PREFIX = "import_"
+# A helper declares no part; this name in one fails the scan.
+PARTS_NAME = "PARTS"
+
+
+def banned_build123d(name: str) -> bool:
+    return name in BANNED_BUILD123D or name.startswith(IMPORTER_PREFIX)
+
+
+@functools.cache
+def module_attributes() -> frozenset[str]:
+    """Names under which an allowed module holds another module (such as
+    `dataclasses.sys` or `build123d.importers`): refused as attributes, so an
+    allowed module is no route to `sys`, `os` or the importers."""
+    names = set()
+    for mod in sorted(ALLOWED_IMPORTS - {"__future__"}):
+        module = importlib.import_module(mod)
+        names |= {n for n in dir(module) if isinstance(getattr(module, n, None), types.ModuleType)}
+    return frozenset(names)
+
+
+def dunder(name: str) -> bool:
+    return name.startswith("__") and name.endswith("__")
 DECLARATION_KEYS = frozenset({"name", "stl", "build", "mirror_of", "plane", "exceptions"})
 EXCEPTION_KEYS = frozenset({"limit", "feature", "reason"})
 
@@ -59,7 +88,14 @@ class Source:
 
 
 def find_sources(root: Path) -> list[Path]:
-    return sorted(p for p in root.iterdir() if p.is_dir() and (p / PARTS_DIR).is_dir())
+    """The source folders under `root`; a symbolic link is not one (it could
+    lead recovery and publishing outside the checkout), see `linked_sources`."""
+    return sorted(p for p in root.iterdir() if p.is_dir() and not p.is_symlink() and (p / PARTS_DIR).is_dir())
+
+
+def linked_sources(root: Path) -> list[Path]:
+    """Symbolic links under `root` that would otherwise be sources."""
+    return sorted(p for p in root.iterdir() if p.is_symlink() and p.is_dir() and (p / PARTS_DIR).is_dir())
 
 
 def scan_file(path: Path, siblings: set[str], label: str) -> list[str]:
@@ -69,6 +105,14 @@ def scan_file(path: Path, siblings: set[str], label: str) -> list[str]:
     except SyntaxError as e:
         return [f"{label}: does not parse: {e.msg} (line {e.lineno})"]
     failures = []
+    if path.name.startswith("_"):
+        # Any binding of PARTS, at any depth and in any target form (a tuple,
+        # a conditional, a `global` in a function).
+        for node in ast.walk(tree):
+            if ((isinstance(node, ast.Name) and node.id == PARTS_NAME and not isinstance(node.ctx, ast.Load))
+                    or (isinstance(node, (ast.Global, ast.Nonlocal)) and PARTS_NAME in node.names)):
+                failures.append(f"{label}:{node.lineno}: a helper declares no part; move {PARTS_NAME} to a part "
+                                "file not starting with _")
 
     def allowed(module: str) -> bool:
         return module in ALLOWED_IMPORTS or module in siblings
@@ -85,12 +129,18 @@ def scan_file(path: Path, siblings: set[str], label: str) -> list[str]:
             elif not allowed(node.module or ""):
                 failures.append(f"{label}:{line}: imports from {node.module}, outside the allowlist")
             for alias in node.names:
-                if alias.name in BANNED_BUILD123D:
+                if alias.name == "*":
+                    failures.append(f"{label}:{line}: imports *; import each name, so the scan sees it")
+                elif banned_build123d(alias.name):
                     failures.append(f"{label}:{line}: imports {alias.name}, which reads a file")
-        elif isinstance(node, ast.Name) and node.id in BANNED_NAMES | BANNED_BUILD123D:
+                elif dunder(alias.name) or alias.name in module_attributes():
+                    failures.append(f"{label}:{line}: imports {alias.name}, another module through an allowed one")
+        elif isinstance(node, ast.Name) and (node.id in BANNED_NAMES or banned_build123d(node.id)):
             failures.append(f"{label}:{line}: uses {node.id}, which reads a file or loads code")
-        elif isinstance(node, ast.Attribute) and node.attr in BANNED_BUILD123D | {"__builtins__"}:
-            failures.append(f"{label}:{line}: uses .{node.attr}, which reads a file or loads code")
+        elif isinstance(node, ast.Attribute) and (banned_build123d(node.attr) or dunder(node.attr)
+                                                  or node.attr in module_attributes()):
+            failures.append(f"{label}:{line}: uses .{node.attr}, which reads a file, loads code or reaches "
+                            "another module")
     return failures
 
 
@@ -228,6 +278,8 @@ def load_source(source_dir: Path, root: Path, repo_root: Path) -> tuple[Source, 
 def discover(root: Path, repo_root: Path) -> tuple[list[Source], list[str]]:
     """Every source under `root` with its parts, and every contract failure."""
     sources, failures = [], []
+    for d in linked_sources(root):
+        failures.append(f"{d.relative_to(root)}: a source is a folder here, not a symbolic link")
     for d in find_sources(root):
         source, errs = load_source(d, root, repo_root)
         sources.append(source)

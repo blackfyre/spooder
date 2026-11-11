@@ -42,8 +42,9 @@ The build enforces these rules, and fails naming the file:
 - Each discovered file declares exactly one part, or two for a mirrored pair. A file with `PARTS = []`, with no `PARTS`, or with more declarations fails.
 - In a pair, the second declaration has `mirror_of` and `plane` and no `build`. A `mirror_of` that names a part in another file fails.
 - Names and STLs are unique across all sources.
-- Helpers in `parts/_<group>.py` are not discovered, and need no `PARTS`.
-- Before any file in `parts/` is imported (the helpers included), it is parsed, and it may import only `math`, `dataclasses`, `typing`, `build123d`, `from __future__ import annotations` and its siblings in `parts/` (by bare name). It may not call or name `open`, `exec`, `eval`, `compile`, `__import__`, `getattr` or `__builtins__`, nor name build123d's importers (`import_stl`, `import_3mf`, `import_step`, `import_brep`, `Mesher`) in any form, including `b.import_stl` after `import build123d as b`. A relative import and a submodule of an allowed module (`build123d.importers`) fail too.
+- Helpers in `parts/_<group>.py` are not discovered and declare no part: a helper that binds `PARTS` anywhere (in any assignment form, or as a `global`) fails.
+- A source is a folder in this directory; a symbolic link that would be a source fails, and the build neither recovers nor publishes through it.
+- Before any file in `parts/` is imported (the helpers included), it is parsed, and it may import only `math`, `dataclasses`, `typing`, `build123d`, `from __future__ import annotations` and its siblings in `parts/` (by bare name). It may not call or name `open`, `exec`, `eval`, `compile`, `__import__`, `getattr`, `globals`, `locals`, `vars`, `breakpoint` or `__builtins__`, nor name build123d's importers (`Mesher` and every `import_*`, such as `import_stl`, `import_step` or `import_dxf`) in any form, including `b.import_stl` after `import build123d as b`. No attribute or imported name may be a dunder (`math.__dict__`) or a name under which an allowed module holds another module (`dataclasses.sys`, `from dataclasses import sys`, `build123d.importers`, `b.os`), so an allowed module is no route to `sys`, `os` or the importers. A relative import, a wildcard import (`from build123d import *`) and a submodule of an allowed module (`build123d.importers`) fail too.
 
 So part code cannot read the STL it is checked against: a part is modelled from features (sketches, extrusions, holes, chamfers, fillets), not converted from the mesh. The scan stops conversion by mistake or habit; deliberately obfuscated code is left to review.
 
@@ -108,7 +109,7 @@ An **arrangement plate** (Leg Parts A, Leg Parts B, Foot Left Right) is one file
 
 For each part, in order, the build checks, and collects every failure before it exits non-zero with nothing written:
 
-1. **Solid:** the result is exactly one valid `Solid` with a closed shell. When this fails, the other gates are not run for that part.
+1. **Solid:** the result is exactly one valid `Solid` with a closed shell, and holds no face, edge or vertex besides it. When this fails, the other gates are not run for that part.
 2. **Volume:** within **0.5 %** of the STL's.
 3. **Surface deviation**, both ways: the solid is tessellated at 0.005 mm chordal tolerance. On each side, the points are every vertex of that side's mesh after longest-edge bisection until no edge exceeds 0.5 mm, plus 100 000 points sampled by area (seed 20261110 on the part, 20261111 on the STL), each measured to the other mesh's closest point. Over both directions, the maximum (vertices and samples) must be at most **0.20 mm** and the 95th percentile (area samples) at most **0.05 mm**. The report gives each direction: STL to part shows a missing feature, part to STL an extra one.
 4. **Bounding box:** each of its six faces within **0.15 mm** of the STL's.
@@ -157,7 +158,7 @@ The default mode then imports each committed STEP file in two tools:
 - **FreeCAD**, headless: `freecad_import.py` under `FreeCADCmd`, from `PATH` or the flatpak (`flatpak run --command=FreeCADCmd org.freecad.FreeCAD`), reads each file with `Part.read` and reports its solids, `isClosed()`, `isValid()`, the volume and `FreeCAD.Version()`. The files go in `SPOODER_STEP_FILES` by absolute path, which the flatpak reads through its host file-system access.
 - **solidcraft:** `solidcraft-cli eval <file>`, whose JSON gives the bodies with `closed` and `volume_mm3`, and `solidcraft-cli --version`.
 
-Each part must import as one closed solid (in FreeCAD, valid too), with volume within 0.1 % of the built part's. Each check prints one line per part and tool: `PASS` with the tool's version, `FAIL` with the measured value, or `SKIPPED` with the reason when the tool is not installed. The summary counts passes, failures and skips per tool. A skip is never a pass and never fails the build; a failure fails it.
+Each part must import as one closed solid (in FreeCAD, valid too), with volume within 0.1 % of the built part's. Each check prints one line per part and tool: `PASS` with the tool's version, `FAIL` with the measured value (also when the tool exits non-zero or reports no version), or `SKIPPED` with the reason when the tool is not installed. The summary counts passes, failures and skips per tool. A skip is never a pass and never fails the build; a failure fails it.
 
 Versions checked: **FreeCAD 1.1.4** (flathub) and **solidcraft-cli 0.30.1**, on 2026-11-10, every frame part passing in both. Neither tool is pinned, so a newer version may read STEP differently; the check prints the version it ran.
 

@@ -58,7 +58,8 @@ Look for these first; each has happened here:
 - a spec scenario or task with no measurable acceptance (no limit, conditions or units that can fail), or a requirement no task verifies;
 - a new mode or exception that contradicts a requirement of a main spec in `openspec/specs/` without a delta for that spec in the change (bench simulation first missed `power-protection`, `controller-link` and `pose-telemetry`): check every main spec whose requirements the change makes untrue;
 - a test that drives a scenario but asserts only that nothing failed, not the outputs the spec names (the frames, readings or recovery it requires);
-- a printed part's size taken as given (a board's height, a module's thickness) without a source in the repository or a place in "Measure before printing".
+- a printed part's size taken as given (a board's height, a module's thickness) without a source in the repository or a place in "Measure before printing";
+- a source scan (`hardware/parametric-reference-parts/discovery.py`) that refuses a name in one syntactic form but not the others: as an attribute but not an imported name, a wildcard import or a module reached through an allowed one (`dataclasses.sys`), or a binding in a plain assignment but not in a tuple, a nested block or a `global`.
 
 ## Security
 
