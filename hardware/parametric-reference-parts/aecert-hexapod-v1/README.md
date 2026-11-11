@@ -96,10 +96,13 @@ The measured values are from `build.py --check` on 2026-11-11.
 | Part | Part file | STL | STEP | Volume | Max deviation | 95th percentile | Exception |
 |---|---|---|---|---|---|---|---|
 | Foot Shaft | `parts/foot_shaft.py` | `hardware/aecert-hexapod-v1/stl/Foot Shaft.stl` | `step/Foot Shaft.step` | 0.022 % | 0.003 mm | 0.002 mm | none |
+| Foot Left | `parts/foot_left.py` | `hardware/aecert-hexapod-v1/stl/Foot Left.stl` | `step/Foot Left.step` | 0.037 % | 0.035 mm | 0.002 mm | none |
+| Foot Right | `parts/foot_right.py` | `hardware/aecert-hexapod-v1/stl/Foot Right.stl` | `step/Foot Right.step` | 0.037 % | 0.035 mm | 0.002 mm | none |
 | Foot Tip | `parts/foot_tip.py` | `hardware/aecert-hexapod-v1/stl/Foot Tip.stl` | `step/Foot Tip.step` | 0.188 % | 0.012 mm | 0.005 mm | none |
 
-Limits: volume 0.5 %, maximum deviation 0.20 mm, 95th percentile 0.05 mm, bounding box 0.15 mm (both parts within 0.003 mm).
+Limits: volume 0.5 %, maximum deviation 0.20 mm, 95th percentile 0.05 mm, bounding box 0.15 mm (every part within 0.003 mm).
 
+- Foot Left: the foot half in `parts/_feet.py`, its serpentine flexure built from the `FLEXURE_` dimensions; Foot Right is Foot Left's solid mirrored and moved (`parts/foot_right.py`).
 - Foot Shaft: a hexagonal shaft (flats 4 mm apart, 45° sides meeting 4.5 mm from the axis, those points rounded 0.8 mm), a half-hexagon pin with a slanted end, an upright collar and a 5 mm tongue.
 - Foot Tip: a 10.4 mm cylinder whose top edge is a 4.5 mm round, turned as one profile, with an octagonal socket 5.15 mm deep in its underside.
 

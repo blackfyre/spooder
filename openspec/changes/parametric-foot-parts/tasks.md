@@ -9,8 +9,8 @@ All commands run in `hardware/parametric-reference-parts/` unless they start wit
 
 ## 2. Foot Left and Foot Right
 
-- [ ] 2.1 Model the foot half in `aecert-hexapod-v1/parts/_feet.py`, the flexure as a path with named start, turns, pitch, run length, turn radius and beam widths (design.md, "The flexure"), and declare Foot Left in `foot_left.py`. Verify `build.py --check` passes Foot Left against its STL as in 1.1, and `grep -cE '^FLEXURE_[A-Z_]+ *=' aecert-hexapod-v1/parts/_feet.py` counts at least the six named flexure dimensions.
-- [ ] 2.2 Declare Foot Right in `foot_right.py` as Foot Left's solid mirrored across `Plane.YZ.offset(MIRROR_X)` and moved by `RIGHT_OFFSET_Y`, both measured from the two STLs' bounding boxes (design.md, "Foot Right"). Verify `build.py --check` passes Foot Right against its own STL as in 1.1.
+- [x] 2.1 Model the foot half in `aecert-hexapod-v1/parts/_feet.py`, the flexure as a path with named start, turns, pitch, run length, turn radius and beam widths (design.md, "The flexure"), and declare Foot Left in `foot_left.py`. Verify `build.py --check` passes Foot Left against its STL as in 1.1, and `grep -cE '^FLEXURE_[A-Z_]+ *=' aecert-hexapod-v1/parts/_feet.py` counts at least the six named flexure dimensions.
+- [x] 2.2 Declare Foot Right in `foot_right.py` as Foot Left's solid mirrored across `Plane.YZ.offset(MIRROR_X)` and moved by `RIGHT_OFFSET_Y`, both measured from the two STLs' bounding boxes (design.md, "Foot Right"). Verify `build.py --check` passes Foot Right against its own STL as in 1.1.
 
 ## 3. Exceptions, documentation and tests
 
