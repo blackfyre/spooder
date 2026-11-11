@@ -126,3 +126,22 @@ The Aecert source SHALL include the coxa group: Coxa Horn Connector, Coxa Horn S
 #### Scenario: Recorded coxa geometry compared
 - **WHEN** a value of the coxa link geometry recorded in `hardware/aecert-hexapod-v1/README.md` differs from the built part's by more than 0.05 mm
 - **THEN** the source README marks it as a disagreement, with the recorded value, the model's value and the part
+
+### Requirement: The femur group
+The Aecert source SHALL include the femur group: Femur Horn Side, Femur Bearing Side and Femur Support, each built from features in its STL's own coordinates, passing the gates (with only documented per-part exceptions) and exported as STEP. The femur's axis-to-axis length, the distance between the two bore axes of each femur side plate, SHALL be one named constant from which both side plates place their bores, and the unit tests SHALL check it against the bore axes found on the built solids.
+
+#### Scenario: Femur group built
+- **WHEN** the build is run
+- **THEN** it checks and exports Femur Horn Side, Femur Bearing Side and Femur Support, each against its STL in `hardware/aecert-hexapod-v1/stl/`, and each STEP file passes the FreeCAD and solidcraft import checks where the tool is installed, and reports `SKIPPED` where it is not
+
+#### Scenario: A femur part is missing
+- **WHEN** any of the three femur parts is not declared in the Aecert source's parts folder
+- **THEN** the unit tests fail naming the missing part
+
+#### Scenario: Axis-to-axis length checked
+- **WHEN** the unit tests build Femur Horn Side and Femur Bearing Side
+- **THEN** each side's two bore axes, found from the solid's cylindrical faces, lie the named axis-to-axis length apart, and a bore placed elsewhere fails the test
+
+#### Scenario: Axis-to-axis length changed
+- **WHEN** the unit tests rebuild Femur Horn Side and Femur Bearing Side with the named axis-to-axis length changed
+- **THEN** both sides' bore axes lie the changed length apart, and a side that does not place its bores from the named length fails the test
