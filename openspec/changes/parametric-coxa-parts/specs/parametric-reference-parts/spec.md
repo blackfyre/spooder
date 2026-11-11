@@ -1,15 +1,23 @@
 ## ADDED Requirements
 
 ### Requirement: The coxa group
-The Aecert source SHALL include the coxa group: Coxa Horn Connector, Coxa Horn Side, Coxa Bearing Connector and Coxa Bearing Side, each modelled from features with named, sourced dimensions in its STL's own coordinates, each passing the gates under the global limits (or a documented per-part exception where the STL's own chord error exceeds 0.15 mm, or for a named feature that feature-based modelling cannot match, with its size), and each exported as STEP that passes the FreeCAD and solidcraft import checks. The source README SHALL compare the built parts with the coxa link geometry that `hardware/aecert-hexapod-v1/README.md` records (the tongues' insert holes 21.5 mm from the coxa axis, the 8.05 mm ring, the ears 30.10 mm either side of the 28.5 mm hole pair's middle, the 68.25 × 48 mm side plates) and state each disagreement with its measured value.
+The Aecert source SHALL include the coxa group: Coxa Horn Connector, Coxa Horn Side, Coxa Bearing Connector and Coxa Bearing Side, each modelled from features with named, sourced dimensions in its STL's own coordinates, each passing the gates under the global limits (or a documented per-part exception where the STL's own chord error exceeds 0.15 mm, or for a named feature that feature-based modelling cannot match, with its size), and each exported as STEP that passes the FreeCAD and solidcraft import checks where the tool is installed. The source README SHALL compare the built parts with the coxa link geometry that `hardware/aecert-hexapod-v1/README.md` records (the tongues' insert holes 21.5 mm from the coxa axis, the 8.05 mm ring, the ears 30.10 mm either side of the 28.5 mm hole pair's middle, the 68.25 × 48 mm side plates), giving for each value the recorded value and the model's, and state each disagreement. The unit tests SHALL check that the four coxa parts are declared and that the model's values in that comparison match the built solids.
 
 #### Scenario: Coxa group built
 - **WHEN** the build is run
-- **THEN** it checks and exports the four coxa parts, each against its STL in `hardware/aecert-hexapod-v1/stl/`, and every FreeCAD and solidcraft import check of them passes
+- **THEN** it checks and exports the four coxa parts, each against its STL in `hardware/aecert-hexapod-v1/stl/`, and each STEP file passes the FreeCAD and solidcraft import checks where the tool is installed, and reports `SKIPPED` where it is not
+
+#### Scenario: A coxa part is missing
+- **WHEN** any of the four coxa parts is not declared in the Aecert source's parts folder
+- **THEN** the unit tests fail naming the missing part
+
+#### Scenario: Coxa comparison matches the built parts
+- **WHEN** the unit tests build the four coxa parts
+- **THEN** each value of the recorded coxa link geometry, measured on the built solids, matches the model's value that the source README's coxa comparison states to 0.01 mm, the comparison's recorded values match those in `hardware/aecert-hexapod-v1/README.md`, each difference above 0.05 mm is marked as a disagreement and no other is, and a part changed so that a compared value moves fails the test
 
 #### Scenario: Recorded coxa geometry compared
 - **WHEN** a value of the coxa link geometry recorded in `hardware/aecert-hexapod-v1/README.md` differs from the built part's by more than 0.05 mm
-- **THEN** the source README states the recorded value, the model's value and the part
+- **THEN** the source README marks it as a disagreement, with the recorded value, the model's value and the part
 
 ## MODIFIED Requirements
 

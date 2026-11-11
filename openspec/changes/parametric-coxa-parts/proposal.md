@@ -7,6 +7,7 @@ The parametric reference parts (`hardware/parametric-reference-parts/`, change `
 ## What Changes
 
 - **The coxa group** in `hardware/parametric-reference-parts/aecert-hexapod-v1/parts/`: Coxa Horn Connector, Coxa Horn Side, Coxa Bearing Connector and Coxa Bearing Side, each built from features with named, sourced dimensions measured from its STL with trimesh, in the STL's own coordinates, and each passing the global gates. The two sides and the two connectors are not mirrors of each other (their STL volumes differ: 11 494.6 against 13 940.4 mm³ for the sides, 7 606.8 against 6 712.3 mm³ for the connectors), so each part is modelled on its own; shared shapes go in `parts/_coxa.py`.
+- **A group test**, `hardware/parametric-reference-parts/test_coxa.py` (discovered by the existing `build.py --test`), that fails when a coxa part is not declared and measures the recorded coxa link geometry on the built solids against the source README's comparison table.
 - **STEP files** for the four parts in `aecert-hexapod-v1/step/`, each passing the FreeCAD and solidcraft import checks.
 - **The source README** (`aecert-hexapod-v1/README.md`) gains a coxa group table, the comparison of the built parts with the coxa link geometry that `hardware/aecert-hexapod-v1/README.md` records, and, beside the sentence that upstream states no licence, that the author knows about Spooder's derived models and has raised no concerns (informal, not a licence). The coxa line leaves "Groups still to model".
 - **A `CHANGELOG.md` line.**
@@ -28,7 +29,7 @@ None.
 
 ## Impact
 
-- **New:** four part files and `_coxa.py` in `hardware/parametric-reference-parts/aecert-hexapod-v1/parts/`, four STEP files in its `step/`.
+- **New:** four part files and `_coxa.py` in `hardware/parametric-reference-parts/aecert-hexapod-v1/parts/`, four STEP files in its `step/`, and the group test `hardware/parametric-reference-parts/test_coxa.py` (run by the existing `build.py --test`).
 - **Changed:** `hardware/parametric-reference-parts/aecert-hexapod-v1/README.md` (licence sentence, coxa section, groups still to model), `CHANGELOG.md`.
 - **Unchanged:** the shared tooling, the frame group, firmware, desktop and CI.
 - **Risk:** low. Nothing runs on the robot; the gates tie each solid to its STL.
