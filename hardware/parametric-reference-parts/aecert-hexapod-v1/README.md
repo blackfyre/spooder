@@ -91,7 +91,7 @@ Limits: volume 0.5 %, maximum deviation 0.20 mm, 95th percentile 0.05 mm, boundi
 
 ## Feet group
 
-The measured values are from `build.py --check` on 2026-11-11.
+Every part passes the global gates (`../README.md`, "Gates and tolerances"); none declares an exception. Their STLs' chord error (`build.py --chord-error`) is 0.003 mm each, well under the 0.15 mm above which a tessellation exception is needed, and every feature is a flat, a 35° or 45° face, or a circular round or arc, so none needs a freeform exception. The measured values are from `build.py --check` on 2026-11-11.
 
 | Part | Part file | STL | STEP | Volume | Max deviation | 95th percentile | Exception |
 |---|---|---|---|---|---|---|---|
@@ -102,7 +102,22 @@ The measured values are from `build.py --check` on 2026-11-11.
 
 Limits: volume 0.5 %, maximum deviation 0.20 mm, 95th percentile 0.05 mm, bounding box 0.15 mm (every part within 0.003 mm).
 
-- Foot Left: the foot half in `parts/_feet.py`, its serpentine flexure built from the `FLEXURE_` dimensions; Foot Right is Foot Left's solid mirrored and moved (`parts/foot_right.py`).
+- Foot Left: the foot half in `parts/_feet.py`, a plate with a block at the low-y end, the serpentine flexure, and a raised boss with a screw hole and a round post at the high-y end; a tented channel runs along y under the plate, crossed by a tented pocket in the block. Its sides that look straight are arcs (r 194.42 and r 296.47), and its chamfers are cut as the sides' tapered outline, not as OpenCascade chamfers.
+- The flexure is a path along x, not a set of slots, so retuning the spring is a change of these constants in `parts/_feet.py`, which rebuilds both feet:
+
+  | Constant | Value | Meaning |
+  |---|---|---|
+  | `FLEXURE_START_X`, `FLEXURE_START_Y` | 104.765, 64.811 mm | where the path starts: the first beam's lower side, at the plate's left side |
+  | `FLEXURE_TURNS` | 17 | turns, alternately right and left, the first on the right (18 beams) |
+  | `FLEXURE_PITCH` | 1.5 mm | from one beam to the next |
+  | `FLEXURE_RUN_LENGTH` | 16.714 mm | a beam's run, the plate's width |
+  | `FLEXURE_TURN_RADIUS` | 0.875 mm | the turns' outer corners |
+  | `FLEXURE_BEAM_WIDTH` | 1.0 mm | the beams along the runs |
+  | `FLEXURE_TURN_WIDTH` | 2.0 mm | the turns, from the side to where the cut ends |
+  | `FLEXURE_BLOCK_GAP` | 0.75 mm | the first cut, between the block and the first beam |
+
+  The cuts' width (pitch less beam width, 0.5 mm) and their end rounds (half that width) follow from these, so a retuned beam width still builds a valid solid.
+- Foot Right is not modelled on its own: its STL is Foot Left's reflected across x and moved 1.069 mm towards −y, which a mirror plane cannot express, so its part file mirrors Foot Left's solid across `Plane.YZ.offset(MIRROR_X)` (x = 124.4452) and moves it by `RIGHT_OFFSET_Y` (−1.0691 mm), both measured from the two STLs' bounding boxes. A retuned flexure changes both feet.
 - Foot Shaft: a hexagonal shaft (flats 4 mm apart, 45° sides meeting 4.5 mm from the axis, those points rounded 0.8 mm), a half-hexagon pin with a slanted end, an upright collar and a 5 mm tongue.
 - Foot Tip: a 10.4 mm cylinder whose top edge is a 4.5 mm round, turned as one profile, with an octagonal socket 5.15 mm deep in its underside.
 
@@ -111,5 +126,4 @@ Limits: volume 0.5 %, maximum deviation 0.20 mm, 95th percentile 0.05 mm, boundi
 Each is a later change adding its part files, its STEP files, its table here and a `CHANGELOG.md` line:
 
 - **Tibia:** Tibia Left and Tibia Right (a mirrored pair), Tibia Support.
-- **Feet:** Foot Left and Foot Right (Foot Shaft and Foot Tip are in the feet group above).
 - **Plates:** Leg Parts A, Leg Parts B and Foot Left Right, arrangements of the single parts.

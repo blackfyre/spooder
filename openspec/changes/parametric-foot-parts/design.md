@@ -91,6 +91,8 @@ That the README rows name each exception's feature and absolute limit is already
 - Foot Left needs no exception: every feature in its sections is a flat, a 45° or 35° face, or a circular round or arc. Its boss's two sides, which look straight, are arcs of r 194.42 and r 296.47 (their vertices fit circles to 0.0002 mm), and are modelled as such. The STL's chamfers stop at rounds by carrying the chamfered sides' cut on past them (the rounds keep their unchamfered shape where the cut leaves them), so they are modelled as cuts of the sides' tapered outline inside a bounded box, not as OpenCascade chamfers.
 - Foot Left and Foot Right get their rows in the feet group's table in task group 2, as Foot Shaft and Foot Tip did in task group 1, so that `build.py --test` keeps passing; task 3.2 completes the section.
 - `MIRROR_X` and `RIGHT_OFFSET_Y` are given to 0.0001 mm, from the STLs' bounding boxes (both pairs of faces agree to that).
+- No foot declares an exception (task 3.1): `build.py --chord-error` gives 0.003 mm for each foot STL, far under 0.15 mm, and all four pass the global gates, so the folder README's sentence "No part declares an exception yet." stays. The exception and README-amount tests then hold trivially for the real feet; they were shown to fail by adding a `deviation_max` exception to Foot Shaft, once without a freeform reason and once with one on a gate that passes.
+- The delivery workflow names task group 3 "Export and documentation", the title it had before the tasks were reordered into groups 3 (exceptions, documentation and tests) and 4 (export). Its stage for group 3 delivers both, as one commit, so the export is not left without a stage.
 
 ## Follow-ups
 
