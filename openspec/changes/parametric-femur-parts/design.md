@@ -51,6 +51,8 @@ Each part's STL chord error is measured with `build.py --chord-error` once its p
 - The femur line is removed from "Groups still to model" in the source README, as part of the group's own section.
 - Named, documented dimensions are held to the frame group's convention (module-level constants, each with its measurement in a comment) and checked in review, as the foundation does; a source-level check would be shared tooling, which this change does not touch.
 - The dimensions in the context table are from this proposal's probe; the part files re-measure and record each constant with its source.
+- **Parabolic rounds are features, not exceptions** (found while applying task group 1). Femur Support's widening sides and the two rounded ends of the plates' web recess are not circular: a circle fits their vertices only to 0.081 mm (Support) and 0.07 mm (recess), while a parabola fits them to 0.006 mm and 0.005 mm. A quadratic Bézier is exactly a parabola, so each is modelled as one (control point at the tangents' intersection, which for the recess is the corner of a square round the middle hole), and every femur part passes the global gates without an exception.
+- **The femur table goes in with the parts** (task group 1, ahead of task 2.1). The existing `Documentation` unit test fails `build.py --test` for any declared part without a row in its source README, so task 1.3's Verify (`build.py --test` passes) needs the femur group's table rows. Group 1 adds the section heading and the table with the measured values; task 2.1 completes the section's prose, removes the femur line from "Groups still to model" and adds the `CHANGELOG.md` line.
 
 ## Follow-ups
 

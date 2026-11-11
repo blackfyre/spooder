@@ -73,6 +73,16 @@ The coxa link geometry that `hardware/aecert-hexapod-v1/README.md` records, meas
 
 The plate's width is 48.025 mm to the top of its ears (r 4.025 round holes 25.5 mm beyond the pair's middle, and 18.5 mm to the plate's other edge), within 0.05 mm of the recorded 48.
 
+## Femur group
+
+Every part passes the global gates; none declares an exception. The measured values are from `build.py --check` on 2026-11-11.
+
+| Part | Part file | STL | STEP | Volume | Max deviation | 95th percentile | Exception |
+|---|---|---|---|---|---|---|---|
+| Femur Horn Side | `parts/femur_horn_side.py` | `hardware/aecert-hexapod-v1/stl/Femur Horn Side.stl` | `step/Femur Horn Side.step` | 0.000 % | 0.026 mm | 0.004 mm | none |
+| Femur Bearing Side | `parts/femur_bearing_side.py` | `hardware/aecert-hexapod-v1/stl/Femur Bearing Side.stl` | `step/Femur Bearing Side.step` | 0.013 % | 0.032 mm | 0.004 mm | none |
+| Femur Support | `parts/femur_support.py` | `hardware/aecert-hexapod-v1/stl/Femur Support.stl` | `step/Femur Support.step` | 0.022 % | 0.035 mm | 0.013 mm | none |
+
 ## Groups still to model
 
 Each is a later change adding its part files, its STEP files, its table here and a `CHANGELOG.md` line:
