@@ -103,6 +103,8 @@ The board has no pull-ups on GPIO19–21 or 26–28. Check for clashes before cl
 
 Three boot paths, chosen once in `app_main` before either radio starts (`bridge_boot_mode_select`, the decision in `core/wifi_drive/drive_mode`). The bridge never runs WiFi and Bluetooth together, and leaves a path only by restarting.
 
+The boot mode has one representation, `drive_mode::Mode`, from the decision to every branch: `bridge_boot_mode_select` converts it with the exhaustive `toBootMode()` to the C mirror `bridge_boot_mode` (each value pinned by `static_assert`) for `app_main`'s exhaustive `switch`, and each path starts the link with `robot_link::start(drive_mode::Mode)`, whose branches are exhaustive `switch` statements without `default:`. The stop the command frames carry is one shared rule, `handheld_controller::commandStop(mode, controller, toggle)`: the GPIO35 toggle alone in Bluetooth drive and setup mode, and in WiFi drive also the handheld's flag, kept through a lapse. The link computes it only in `commandedStop()`, for the frames and for `robot_link::status()`, and the virtual robot's WiFi bridge calls the same rule.
+
 ```mermaid
 flowchart TD
   A[app_main] --> B{RTC magic and software restart?}
@@ -137,7 +139,7 @@ One radio at a time: WiFi drive is a boot path of its own and never starts Bluet
 | Context | Core | Work |
 |---|---|---|
 | WiFi, lwIP | 0 | the access point `spooder-drive-XXXX` (WPA2, channel 1, 192.168.4.1, one station; password in NVS `spooder`/`drive_pass`, separate from setup mode's) |
-| `robot_link` task, priority 5 | 1 | as in Bluetooth drive, but the desired state is `handheld_controller::desired(now)` judged every period, its e-stop flag ORed with the GPIO35 toggle; the robot's raw frames go into `relay_queue` (8 frames, never waiting: a full ring drops and counts) |
+| `robot_link` task, priority 5 | 1 | as in Bluetooth drive, but the desired state is `handheld_controller::desired(now)` judged every period, its stop `handheld_controller::commandStop` (the handheld's flag ORed with the GPIO35 toggle); the robot's raw frames go into `relay_queue` (8 frames, never waiting: a full ring drops and counts) |
 | `udp` task, priority 2 | 1 | UDP port 52040: `recvfrom` with a one-window timeout, each datagram stamped on receipt inside the link lock and passed to `handheld_controller::accept`; at most 8 per 20 ms window, the rest left in lwIP's mailbox (`CONFIG_LWIP_UDP_RECVMBOX_SIZE=6`, below the budget); then the relay, `sendto(MSG_DONTWAIT)` to `relayTarget` |
 | `wifi-drive` task, priority 1 | 1 | the screen, the logo hold into setup mode, the page button, the switch notice, the outcome counts on the console |
 

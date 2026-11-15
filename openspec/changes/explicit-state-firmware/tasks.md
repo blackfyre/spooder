@@ -13,8 +13,8 @@
 
 ## 3. Virtual robot and documentation
 
-- [ ] 3.1 Make `WifiBridge::beforeTick` use `handheld_controller::commandStop(drive_mode::Mode::Wifi, ...)` (D3). Verify `mise run virtual-robot` and `mise run e2e` (whose handheld tests run through the virtual WiFi bridge) pass.
-- [ ] 3.2 Record the change in `CHANGELOG.md` under Unreleased (Changed), and name `robot_link::start(drive_mode::Mode)` and the shared stop in `firmware/bridge/CLAUDE.md` and the boot-path section of `.claude/skills/spooder-firmware-shape/SKILL.md`. Verify `openspec validate explicit-state-firmware` passes and `grep -rn "startPortal\|startHandheld" firmware .claude/skills CHANGELOG.md` finds nothing outside the changelog entry.
+- [x] 3.1 Make `WifiBridge::beforeTick` use `handheld_controller::commandStop(drive_mode::Mode::Wifi, ...)` (D3). Verify `mise run virtual-robot` and `mise run e2e` (whose handheld tests run through the virtual WiFi bridge) pass.
+- [x] 3.2 Record the change in `CHANGELOG.md` under Unreleased (Changed), and name `robot_link::start(drive_mode::Mode)` and the shared stop in `firmware/bridge/CLAUDE.md` and the boot-path section of `.claude/skills/spooder-firmware-shape/SKILL.md`. Verify `openspec validate explicit-state-firmware` passes and `grep -rn "startPortal\|startHandheld" firmware .claude/skills CHANGELOG.md` finds nothing outside the changelog entry.
 
 ## 4. Hardware check
 

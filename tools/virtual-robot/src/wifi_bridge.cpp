@@ -168,7 +168,7 @@ void WifiBridge::beforeTick(uint32_t nowMs, bool gpioStop, std::vector<uint8_t> 
     track(nowMs);
   }
 
-  bool stop = gpioStop || handheld_controller::emergencyStop(controller_);
+  bool stop = handheld_controller::commandStop(drive_mode::Mode::Wifi, controller_, gpioStop);
   protocol::Command c = gamepad_mapping::toCommand(handheld_controller::desired(controller_, nowMs), stop);
   uint8_t frame[protocol::MAX_FRAME_SIZE];
   int n = protocol::encodeCommand(c, seq_++, frame);
