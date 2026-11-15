@@ -10,5 +10,5 @@
 
 ## 3. Documentation and gates
 
-- [ ] 3.1 Update `desktop/CLAUDE.md` (the `internal/udplink` entry) and `CHANGELOG.md` under Unreleased (Fixed). Verify by reading them against the spec delta.
-- [ ] 3.2 Run `openspec validate explicit-state-handheld --strict`, `mise run handheld-test`, `mise run handheld-build`, `mise run e2e --wifi-bridge` and `mise run handheld-package`. Verify all pass.
+- [x] 3.1 Update `desktop/CLAUDE.md` (the `internal/udplink` entry) and `CHANGELOG.md` under Unreleased (Fixed). Verify by reading them against the spec delta.
+- [x] 3.2 Run `openspec validate explicit-state-handheld --strict`, `mise run handheld-test`, `mise run handheld-build`, `mise run e2e --wifi-bridge` and `mise run handheld-package`. Verify all pass. (`handheld-test` and `handheld-build` ran in an amd64 container: see design.md, Assumptions.)

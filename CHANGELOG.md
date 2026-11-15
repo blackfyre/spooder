@@ -146,6 +146,7 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 ### Fixed
 
 - **The `--port` path preselected again after a picked port is unplugged.** The calibrator's port selection is now one explicit state (none, preselected, picked): once the operator's picked port leaves the list, the selection falls back to a preselection at once (the `--port` path, else a Servo 2040), so the path is preselected when it appears, instead of the fallback counting as a pick for good. `desktop/CLAUDE.md` gains the explicit-state rule for the calibrator's Go code.
+- **Handheld leave after a rejoin.** A leave in progress when `wlan0` rejoined the network could miss that the robot's frames were numbered afresh: the robot frame accepted between the rejoin's rebaseline and its separate queue drain was discarded, and the leave kept comparing new telemetry against its reference from before the press, so genuine Sleep confirmations were rejected until the 3 s timeout. The link now rebaselines its receiver and drains its event queue under one lock, and numbers its baselines (`Event.Baseline`, `Quality.Baseline`); the leave records the press's baseline and newest sequence number and orders telemetry by baseline, then sequence number, so a later baseline counts as sent after the press and a frame late in its own numbering still does not count. Only the pak changes.
 
 ### Suspended
 
