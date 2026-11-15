@@ -10,4 +10,4 @@
 
 ## 3. Gates
 
-- [ ] 3.1 Verify `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run handheld-test`, `mise run handheld-build`, `mise run handheld-package`, `mise run e2e` and `mise run e2e --wifi-bridge` pass
+- [x] 3.1 Verify `mise run lint`, `mise run test`, `mise run build` (with and without `--serial`), `mise run build-bridge`, `mise run desktop-test`, `mise run desktop-build`, `mise run handheld-test`, `mise run handheld-build`, `mise run handheld-package` and `mise run e2e` (which includes the handheld's end-to-end tests against the virtual robot's `--wifi-bridge`) pass

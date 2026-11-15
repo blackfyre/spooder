@@ -52,6 +52,7 @@ The user decided to keep the behaviour and correct the specification. The `Input
 - The golden file's own comment ("Sleep on Y returns to the mode requested before it") describes its steps correctly as they stand and is left untouched, as the brief requires the file unchanged.
 - `handheld-controller` needs no delta: its requirement refers to gamepad-control and its sleep-request behaviour does not change.
 - No hardware check is needed: behaviour is pinned by the golden file in both languages and the bridge build compiles the mapping.
+- Task 3.1 named `mise run e2e --wifi-bridge` beside `mise run e2e`, but `--wifi-bridge` is the virtual robot's option, not the `e2e` task's (`go test` rejects it as an undefined flag), and `mise run e2e` already runs the handheld's end-to-end tests against `virtual-robot --wifi-bridge` (`desktop/handheld/e2e`). The task now names `mise run e2e` only.
 
 ## Risks
 
