@@ -231,6 +231,8 @@ static void composeHeader(const Inputs &in, Header &h)
   const protocol::Telemetry &t = in.telemetry;
   if (!in.telemetryFresh)
     none(h.mode, "");
+  else if (t.flags & protocol::TELEMETRY_BODY_STOPPED)
+    text(h.mode, Tone::Normal, "STOPPED"); // the mode and gait are the last ones: hidden
   else if (t.gesture != 0)
     text(h.mode, Tone::Normal, "PERFORM " DOT " %s", name(GESTURE_LABELS, 6, t.gesture));
   else
@@ -514,10 +516,12 @@ void composeSetup(const SetupInputs &in, Line out[LINE_COUNT])
 
   setShort(out[6], in.emergencyStop ? Tone::Bad : Tone::Normal, in.emergencyStop ? "E-STOP" : "E-stop: off");
 
-  // The body mode, red while any fault is latched; nothing while the link is
-  // down, as on the normal screen.
+  // The body mode, or Stopped while the body is not running, red while any
+  // fault is latched; nothing while the link is down, as on the normal screen.
   if (in.telemetryFresh)
-    setShort(out[7], in.telemetry.faults ? Tone::Bad : Tone::Normal, name(BODY_MODES, 6, in.telemetry.bodyMode));
+    setShort(out[7], in.telemetry.faults ? Tone::Bad : Tone::Normal,
+             (in.telemetry.flags & protocol::TELEMETRY_BODY_STOPPED) ? "Stopped"
+                                                                     : name(BODY_MODES, 6, in.telemetry.bodyMode));
 }
 
 } // namespace status_screen

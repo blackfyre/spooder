@@ -127,7 +127,7 @@ struct Inputs
 
 struct Header
 {
-  Text mode;    // body mode and gait, or the gesture playing
+  Text mode;    // body mode and gait, the gesture playing, or STOPPED
   Text gamepad; // connection and battery; in WiFi drive, the handheld
   Text link;    // link state
 };
@@ -206,7 +206,8 @@ struct SetupInputs
 
 /**
  * @brief The setup screen: SETUP MODE, network name, password, address,
- * portal client, link state, e-stop and, while the link is up, the body mode.
+ * portal client, link state, e-stop and, while the link is up, the body mode
+ * (Stopped while the body is not running).
  */
 void composeSetup(const SetupInputs &in, Line out[LINE_COUNT]);
 

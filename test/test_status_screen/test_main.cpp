@@ -937,6 +937,104 @@ void test_pages_without_the_simulation_flag_are_unchanged()
   }
 }
 
+// The status-display delta's stopped body: an emergency stop while walking
+// leaves bodyMode Walk with the flag set; the header and the setup screen's
+// body cell show the body stopped, not Walk, and show Walk again once the
+// flag clears (the body restarted).
+static Inputs stoppedWalking()
+{
+  Inputs in = healthy();
+  in.telemetry.outputsOn = false;
+  in.telemetry.flags = protocol::TELEMETRY_BRIDGE_IN_CONTROL | protocol::TELEMETRY_BRIDGE_LINK_UP |
+                       protocol::TELEMETRY_BODY_STOPPED;
+  return in;
+}
+
+void test_stopped_body_hides_the_mode_in_the_header()
+{
+  for (Page p : {Page::Drive, Page::Power, Page::Link})
+  {
+    Inputs in = stoppedWalking();
+    composePage(in, p, view);
+    TEST_ASSERT_EQUAL_STRING("STOPPED", view.header.mode.text);
+    TEST_ASSERT_TRUE(view.header.mode.tone == Tone::Normal);
+    TEST_ASSERT_NULL(strstr(view.header.mode.text, "WALK"));
+
+    in.telemetry.flags &= (uint8_t)~protocol::TELEMETRY_BODY_STOPPED;
+    composePage(in, p, view);
+    TEST_ASSERT_EQUAL_STRING("WALK \xc2\xb7 WAVE", view.header.mode.text);
+  }
+}
+
+void test_stopped_body_hides_a_gesture_and_needs_fresh_telemetry()
+{
+  // A stopped body plays no gesture (the robot sends 0), but the flag wins
+  // whatever the frame says.
+  Inputs in = stoppedWalking();
+  in.telemetry.bodyMode = 5;
+  in.telemetry.gesture = protocol::GESTURE_SAY_HI;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_EQUAL_STRING("STOPPED", view.header.mode.text);
+  // With the link lost, the placeholder, as for any robot value.
+  in.telemetryFresh = false;
+  composePage(in, Page::Drive, view);
+  TEST_ASSERT_EQUAL_STRING("--", view.header.mode.text);
+}
+
+// The bridge redraws a region only when a field's text or tone changes
+// (display.cpp compares them as here); the same flagged telemetry composes
+// the same header and setup lines, so a second refresh redraws nothing.
+static void assertSameText(const Text &a, const Text &b)
+{
+  TEST_ASSERT_EQUAL_STRING(a.text, b.text);
+  TEST_ASSERT_TRUE(a.tone == b.tone);
+}
+
+void test_same_stopped_telemetry_composes_the_same_view()
+{
+  Inputs in = stoppedWalking();
+  composePage(in, Page::Drive, view);
+  Header first = view.header;
+  composePage(in, Page::Drive, view);
+  assertSameText(first.mode, view.header.mode);
+  assertSameText(first.gamepad, view.header.gamepad);
+  assertSameText(first.link, view.header.link);
+
+  SetupInputs s = setupHealthy();
+  s.telemetry.flags = protocol::TELEMETRY_BODY_STOPPED;
+  Line again[LINE_COUNT];
+  composeSetup(s, out);
+  composeSetup(s, again);
+  for (int i = 0; i < LINE_COUNT; i++)
+  {
+    TEST_ASSERT_EQUAL_STRING(out[i].text, again[i].text);
+    TEST_ASSERT_TRUE(out[i].tone == again[i].tone);
+  }
+}
+
+void test_setup_screen_shows_a_stopped_body()
+{
+  SetupInputs in = setupHealthy();
+  in.telemetry.bodyMode = 2;
+  in.telemetry.flags = protocol::TELEMETRY_BODY_STOPPED;
+  composeSetup(in, out);
+  TEST_ASSERT_EQUAL_STRING("Stopped", out[7].text);
+  TEST_ASSERT_TRUE(out[7].tone == Tone::Normal);
+  in.telemetry.faults = protection::EMERGENCY_STOP;
+  composeSetup(in, out);
+  TEST_ASSERT_EQUAL_STRING("Stopped", out[7].text);
+  TEST_ASSERT_TRUE(out[7].tone == Tone::Bad); // red while a fault is latched
+  in.telemetry.faults = 0;
+  in.telemetry.flags = 0;
+  composeSetup(in, out);
+  TEST_ASSERT_EQUAL_STRING("Walk", out[7].text);
+  in.telemetryFresh = false;
+  in.telemetry.flags = protocol::TELEMETRY_BODY_STOPPED;
+  composeSetup(in, out);
+  TEST_ASSERT_EQUAL_STRING("", out[7].text);
+  assertSetupLinesFit();
+}
+
 // The example power limits (power_limits.example.h), as diagnostics report
 // them.
 static const supply_band::Limits EXAMPLE_LIMITS = {4800, 5200, 6800, 6000, 9000};
@@ -1051,6 +1149,10 @@ int main()
   RUN_TEST(test_simulation_supply_fault_is_named_beside_sim);
   RUN_TEST(test_sim_beside_each_fault_and_source_state_fits);
   RUN_TEST(test_pages_without_the_simulation_flag_are_unchanged);
+  RUN_TEST(test_stopped_body_hides_the_mode_in_the_header);
+  RUN_TEST(test_stopped_body_hides_a_gesture_and_needs_fresh_telemetry);
+  RUN_TEST(test_same_stopped_telemetry_composes_the_same_view);
+  RUN_TEST(test_setup_screen_shows_a_stopped_body);
   RUN_TEST(test_supply_values_by_band);
   RUN_TEST(test_power_values_by_band);
   return UNITY_END();

@@ -10,7 +10,7 @@
 
 ## 3. Stopped body on the bridge screen
 
-- [ ] 3.1 In `core/status/status_screen.cpp`, show `STOPPED` in the header's mode text and `Stopped` in the setup screen's body cell while fresh telemetry has `TELEMETRY_BODY_STOPPED` (design D4). Verify with host tests in `test/test_status_screen` that telemetry with body mode Walk and the flag set shows `STOPPED` and not `WALK` in the header, and the setup cell shows `Stopped`, and that the same telemetry without the flag shows `WALK`; that a second refresh with the same flagged telemetry redraws nothing; that `mise run test`, `mise run build-bridge` pass; and that `mise run bridge-screenshots` leaves `docs/images/bridge-*.png` unchanged.
+- [x] 3.1 In `core/status/status_screen.cpp`, show `STOPPED` in the header's mode text and `Stopped` in the setup screen's body cell while fresh telemetry has `TELEMETRY_BODY_STOPPED` (design D4). Verify with host tests in `test/test_status_screen` that telemetry with body mode Walk and the flag set shows `STOPPED` and not `WALK` in the header, and the setup cell shows `Stopped`, and that the same telemetry without the flag shows `WALK`; that a second refresh with the same flagged telemetry redraws nothing; that `mise run test`, `mise run build-bridge` pass; and that `mise run bridge-screenshots` leaves `docs/images/bridge-*.png` unchanged.
 
 ## 4. Stopped body on the desktop and the handheld
 
