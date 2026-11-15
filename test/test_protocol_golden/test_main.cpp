@@ -1,6 +1,6 @@
-// Golden frame vectors for protocol version 3: a fixed set of frames of every
+// Golden frame vectors for protocol version 4: a fixed set of frames of every
 // type, encoded by the C++ encoder and compared with
-// test/golden/protocol_v3.txt, which other implementations (the desktop
+// test/golden/protocol_v4.txt, which other implementations (the desktop
 // calibrator) test against. After a deliberate protocol change, regenerate
 // the file with `SPOODER_WRITE_GOLDEN=1 mise run test` and review the diff.
 #include <unity.h>
@@ -15,7 +15,7 @@ using namespace protocol;
 void setUp() {}
 void tearDown() {}
 
-static const char *const HEADER = "# Spooder link protocol version 3: golden frames.\n"
+static const char *const HEADER = "# Spooder link protocol version 4: golden frames.\n"
                                   "# Generated from the C++ encoder by test/test_protocol_golden; regenerate with\n"
                                   "# SPOODER_WRITE_GOLDEN=1 mise run test after a deliberate protocol change.\n"
                                   "#\n"
@@ -294,6 +294,20 @@ static void buildGolden(Text &t)
   f.telemetry.bridgeDiscardedFrames = 1;
   addFrame(t, "telemetry_bench_simulation", f);
 
+  // An emergency stop while walking stopped the body: the body-stopped flag,
+  // output off, no gesture, and Walk with its gait as the last mode.
+  f = frame(FrameType::Telemetry, 50);
+  f.telemetry.bodyMode = 2; // Walk
+  f.telemetry.gait = 2;
+  f.telemetry.faults = 0x0020; // EMERGENCY_STOP
+  f.telemetry.voltageMv = 6030;
+  f.telemetry.currentMa = 120;
+  f.telemetry.validFrames = 2210;
+  f.telemetry.flags = TELEMETRY_BRIDGE_IN_CONTROL | TELEMETRY_BRIDGE_LINK_UP | TELEMETRY_BRIDGE_GAMEPAD |
+                      TELEMETRY_BODY_STOPPED;
+  f.telemetry.bridgeValidFrames = 2210;
+  addFrame(t, "telemetry_body_stopped_walk", f);
+
   f = frame(FrameType::CalibrationSet, 1);
   f.calibrationSet = {1, 0, 9000, 500, 2500, 0};
   addFrame(t, "calibration_set_default_joint0", f);
@@ -339,7 +353,7 @@ static void buildGolden(Text &t)
   addFrame(t, "calibration_report_extremes", f);
 
   // Frames a decoder must discard: version 2 (with a valid CRC and the
-  // version 2 command length) and a bad CRC.
+  // version 2 command length), version 3 and a bad CRC.
   uint8_t bytes[MAX_FRAME_SIZE];
   Frame v2 = frame(FrameType::Command, 3);
   v2.command.mode = 1;
@@ -353,6 +367,19 @@ static void buildGolden(Text &t)
   bytes[n - 2] = (uint8_t)(crc & 0xFF);
   bytes[n - 1] = (uint8_t)(crc >> 8);
   addRejected(t, "reject_version_2_command", bytes, n);
+
+  // The previous version, 3, with the same command layout and a valid CRC:
+  // what a peer not yet reflashed sends.
+  Frame v3 = frame(FrameType::Command, 5);
+  v3.command.mode = 2;
+  v3.command.flags = FLAG_CONTROLLER_CONNECTED;
+  v3.command.modeRequestCounter = 1;
+  n = encode(v3, bytes);
+  bytes[1] = 3;
+  crc = crc16(bytes + 1, n - 3);
+  bytes[n - 2] = (uint8_t)(crc & 0xFF);
+  bytes[n - 1] = (uint8_t)(crc >> 8);
+  addRejected(t, "reject_version_3_command", bytes, n);
 
   Frame bad = frame(FrameType::CalibrationSet, 4);
   bad.calibrationSet = {5, 3, 100, 500, 2500, 0};
@@ -418,7 +445,7 @@ static void goldenPath(char *out, int size)
   const char *file = __FILE__;
   const char *cut = strstr(file, "test/test_protocol_golden/");
   int prefix = cut ? (int)(cut - file) : 0;
-  snprintf(out, size, "%.*stest/golden/protocol_v3.txt", prefix, file);
+  snprintf(out, size, "%.*stest/golden/protocol_v4.txt", prefix, file);
 }
 
 void test_golden_vectors()
@@ -433,14 +460,14 @@ void test_golden_vectors()
   if (write && write[0] == '1')
   {
     FILE *f = fopen(path, "wb");
-    TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot write test/golden/protocol_v3.txt");
+    TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot write test/golden/protocol_v4.txt");
     fwrite(t.buf, 1, t.len, f);
     fclose(f);
   }
 
   static char golden[sizeof(t.buf)];
   FILE *f = fopen(path, "rb");
-  TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot read test/golden/protocol_v3.txt");
+  TEST_ASSERT_NOT_NULL_MESSAGE(f, "cannot read test/golden/protocol_v4.txt");
   int n = (int)fread(golden, 1, sizeof(golden) - 1, f);
   fclose(f);
   golden[n] = 0;

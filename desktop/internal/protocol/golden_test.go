@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-// goldenPath is test/golden/protocol_v3.txt, written by the C++ encoder
+// goldenPath is test/golden/protocol_v4.txt, written by the C++ encoder
 // (test/test_protocol_golden).
-var goldenPath = filepath.Join("..", "..", "..", "test", "golden", "protocol_v3.txt")
+var goldenPath = filepath.Join("..", "..", "..", "test", "golden", "protocol_v4.txt")
 
 type vector struct {
 	name   string
@@ -165,5 +165,33 @@ func TestGoldenBenchSimulation(t *testing.T) {
 	}
 	if got.Flags != TelemetrySimulated || got.Faults != 1<<6 {
 		t.Errorf("flags %#x faults %#x, want %#x and 0x40", got.Flags, got.Faults, TelemetrySimulated)
+	}
+}
+
+// The body-stopped vector: flag bit 6 with the last mode and gait (Walk,
+// Ripple), output off, the emergency stop latched and no gesture.
+func TestGoldenBodyStopped(t *testing.T) {
+	if TelemetryBodyStopped != 0x40 {
+		t.Fatalf("TelemetryBodyStopped %#x, want 0x40", TelemetryBodyStopped)
+	}
+	var found *vector
+	vectors := readVectors(t)
+	for i := range vectors {
+		if vectors[i].name == "telemetry_body_stopped_walk" {
+			found = &vectors[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("no telemetry_body_stopped_walk vector")
+	}
+	var d Decoder
+	frames := decodeAll(&d, found.frame)
+	if len(frames) != 1 || d.Discarded() != 0 {
+		t.Fatalf("decoded %d frames, %d discarded", len(frames), d.Discarded())
+	}
+	got := frames[0].Telemetry
+	wantFlags := TelemetryBridgeInControl | TelemetryBridgeLinkUp | TelemetryBridgeGamepad | TelemetryBodyStopped
+	if got.Flags != wantFlags || got.BodyMode != 2 || got.Gait != 2 || got.OutputsOn || got.Faults != 1<<5 || got.Gesture != 0 {
+		t.Errorf("telemetry %+v, want flags %#x, Walk, Ripple, output off, emergency stop, no gesture", got, wantFlags)
 	}
 }

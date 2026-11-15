@@ -1,7 +1,7 @@
 // Package protocol is the Go implementation of the Spooder link protocol,
-// version 2: frame layout, CRC, encoders and an incremental decoder. It
+// version 4: frame layout, CRC, encoders and an incremental decoder. It
 // mirrors core/protocol/protocol.{h,cpp} byte for byte; both are pinned by
-// test/golden/protocol_v3.txt.
+// test/golden/protocol_v4.txt.
 //
 // Frame:
 //
@@ -17,7 +17,7 @@ package protocol
 
 const (
 	Start   = 0xA5
-	Version = 3
+	Version = 4
 )
 
 // FrameType is the frame's type byte.
@@ -107,6 +107,10 @@ const (
 	// Bench simulation: no servo moves; output and supply readings are
 	// modelled.
 	TelemetrySimulated uint8 = 1 << 5
+	// The body is not running: before its first start and after a fault
+	// stops it, until it restarts. The body mode and gait are then its last
+	// ones, not live.
+	TelemetryBodyStopped uint8 = 1 << 6
 )
 
 // Telemetry is sent by the robot to every link, every 100 ms.

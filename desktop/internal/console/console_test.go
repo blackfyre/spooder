@@ -16,8 +16,8 @@ import (
 	"github.com/blackfyre/spooder/desktop/internal/protocol"
 )
 
-// goldenPath is test/golden/protocol_v3.txt, written by the C++ encoder.
-var goldenPath = filepath.Join("..", "..", "..", "test", "golden", "protocol_v3.txt")
+// goldenPath is test/golden/protocol_v4.txt, written by the C++ encoder.
+var goldenPath = filepath.Join("..", "..", "..", "test", "golden", "protocol_v4.txt")
 
 type vector struct {
 	name     string
@@ -77,6 +77,7 @@ func TestFormatGoldenVectors(t *testing.T) {
 		"telemetry_perform_say_hi":             "telemetry #30  Perform  gait Tri  output on  6.05 V  2.10 A  faults none  link 0 ok 0 bad  source bridge  bridge down  gesture say hi",
 		"telemetry_usb_bridge_link_up":         "telemetry #31  Stand  gait Tri  output on  6.06 V  0.00 A  faults none  link 420 ok 0 bad  source USB  bridge up (no gamepad) 3143 ok 2 bad",
 		"telemetry_bench_simulation":           "telemetry #40  Walk  gait Wave  output on  SIM  6.00 V  2.16 A  faults supply in simulation  link 812 ok 3 bad  source none  bridge down",
+		"telemetry_body_stopped_walk":          "telemetry #50  Walk  gait Ripple  output off  6.03 V  0.12 A  faults emergency stop  link 2210 ok 0 bad  source bridge  bridge up (gamepad) 2210 ok 0 bad",
 		"telemetry_conflict":                   "telemetry #128  Sleep  gait Tri  output off  0.00 V  0.00 A  faults emergency stop  link 0 ok 0 bad  source conflict (bridge and USB)  bridge down",
 		"telemetry_extremes":                   "telemetry #255  mode 255  gait 255  output on  SIM  65.53 V  65.53 A  faults overcurrent, sustained current, undervoltage, brown-out, overvoltage, emergency stop, supply in simulation, fault bit 7, fault bit 8, fault bit 9, fault bit 10, fault bit 11, fault bit 12, fault bit 13, fault bit 14, fault bit 15  link 65535 ok 65535 bad  source conflict (bridge and USB)  bridge up (gamepad) 65535 ok 65535 bad  gesture 255  tof 65535 mm (status 255)  pitch -327.68 deg roll 327.67 deg",
 		"calibration_set_default_joint0":       "calibration_set seq=1 requestId=1 joint=0 offsetCentideg=9000 pulse0Us=500 pulse180Us=2500 flags=0",

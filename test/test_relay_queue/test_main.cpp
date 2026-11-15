@@ -21,7 +21,7 @@ void tearDown() {}
 
 void test_golden_frames_come_out_byte_for_byte_in_order()
 {
-  TEST_ASSERT_TRUE_MESSAGE(golden_frames::load(__FILE__, golden), "cannot read test/golden/protocol_v3.txt");
+  TEST_ASSERT_TRUE_MESSAGE(golden_frames::load(__FILE__, golden), "cannot read test/golden/protocol_v4.txt");
   // Every frame type is there, the largest (a calibration report) too.
   bool types[7] = {};
   for (int i = 0; i < golden.count; i++)

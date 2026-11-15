@@ -18,10 +18,10 @@ import (
 	"github.com/blackfyre/spooder/desktop/internal/session"
 )
 
-// golden reads one frame of test/golden/protocol_v3.txt by name.
+// golden reads one frame of test/golden/protocol_v4.txt by name.
 func golden(t *testing.T, name string) []byte {
 	t.Helper()
-	f, err := os.Open(filepath.Join("..", "..", "..", "test", "golden", "protocol_v3.txt"))
+	f, err := os.Open(filepath.Join("..", "..", "..", "test", "golden", "protocol_v4.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,8 +120,8 @@ func (b *bridge) commands(t *testing.T) []struct {
 	}
 	for _, a := range b.arrivals {
 		f, ok := classify(a.bytes)
-		if !ok || f.Type != protocol.TypeCommand || len(a.bytes) != protocol.CommandFrameSize || a.bytes[1] != 3 {
-			t.Fatalf("datagram %x is not one version 3 command frame", a.bytes)
+		if !ok || f.Type != protocol.TypeCommand || len(a.bytes) != protocol.CommandFrameSize || a.bytes[1] != protocol.Version {
+			t.Fatalf("datagram %x is not one version %d command frame", a.bytes, protocol.Version)
 		}
 		out = append(out, struct {
 			at time.Duration

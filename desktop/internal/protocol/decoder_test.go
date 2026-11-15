@@ -207,6 +207,7 @@ func TestBadHeadersAreRejected(t *testing.T) {
 	for name, b := range map[string][]byte{
 		"version 1":           withHeaderByte(1, 1),
 		"version 2":           withHeaderByte(1, 2),
+		"version 3":           withHeaderByte(1, 3), // the previous version
 		"next version":        withHeaderByte(1, Version+1),
 		"unknown type":        withHeaderByte(2, 6), // the first type after pose
 		"inconsistent length": inconsistent,

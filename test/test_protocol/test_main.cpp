@@ -439,12 +439,15 @@ void test_version_1_frame_is_rejected()
 {
   uint8_t buf[MAX_FRAME_SIZE];
   Frame previous;
-  int n = commandWithVersion(2, buf); // the previous version is rejected too
+  int n = commandWithVersion(VERSION - 1, buf); // the previous version, 3, is rejected too
+  TEST_ASSERT_EQUAL(3, VERSION - 1);
+  TEST_ASSERT_EQUAL(0, feedAndCount(buf, n, previous));
+  n = commandWithVersion(2, buf);
   TEST_ASSERT_EQUAL(0, feedAndCount(buf, n, previous));
   n = commandWithVersion(1, buf);
   Frame f;
   TEST_ASSERT_EQUAL(0, feedAndCount(buf, n, f));
-  TEST_ASSERT_EQUAL(2, dec.discardedFrames());
+  TEST_ASSERT_EQUAL(3, dec.discardedFrames());
 }
 
 void test_unknown_version_is_rejected()
@@ -545,7 +548,7 @@ void test_back_to_back_frames()
 void test_raw_bytes_of_every_golden_frame()
 {
   static golden_frames::Set golden;
-  TEST_ASSERT_TRUE_MESSAGE(golden_frames::load(__FILE__, golden), "cannot read test/golden/protocol_v3.txt");
+  TEST_ASSERT_TRUE_MESSAGE(golden_frames::load(__FILE__, golden), "cannot read test/golden/protocol_v4.txt");
   TEST_ASSERT_EQUAL_INT(0, dec.frameLength());
   const uint8_t garbage[] = {0x00, START, 0x7F, START, VERSION, 0xEE, 0x13};
   for (int i = 0; i < golden.count; i++)
@@ -573,7 +576,7 @@ void test_raw_bytes_of_every_golden_frame()
 void test_bench_simulation_vector_decodes_every_other_field()
 {
   static golden_frames::Set golden;
-  TEST_ASSERT_TRUE_MESSAGE(golden_frames::load(__FILE__, golden), "cannot read test/golden/protocol_v3.txt");
+  TEST_ASSERT_TRUE_MESSAGE(golden_frames::load(__FILE__, golden), "cannot read test/golden/protocol_v4.txt");
   const golden_frames::Frame *g = nullptr;
   for (int i = 0; i < golden.count; i++)
     if (strcmp(golden.frames[i].name, "telemetry_bench_simulation") == 0)
@@ -604,6 +607,33 @@ void test_bench_simulation_vector_decodes_every_other_field()
   // The bits themselves, copied unchanged.
   TEST_ASSERT_EQUAL_UINT8(TELEMETRY_SIMULATED, t.flags);
   TEST_ASSERT_EQUAL_UINT16(0x0040, t.faults);
+}
+
+// The body-stopped vector: flag bit 6 with the last mode and gait (Walk,
+// Ripple), output off, the emergency stop latched and no gesture.
+void test_body_stopped_vector_carries_the_flag_and_the_last_mode()
+{
+  static golden_frames::Set golden;
+  TEST_ASSERT_TRUE_MESSAGE(golden_frames::load(__FILE__, golden), "cannot read test/golden/protocol_v4.txt");
+  const golden_frames::Frame *g = nullptr;
+  for (int i = 0; i < golden.count; i++)
+    if (strcmp(golden.frames[i].name, "telemetry_body_stopped_walk") == 0)
+      g = &golden.frames[i];
+  TEST_ASSERT_NOT_NULL_MESSAGE(g, "no telemetry_body_stopped_walk vector");
+  dec = Decoder();
+  Frame f;
+  TEST_ASSERT_EQUAL_INT(1, feedAndCount(g->bytes, g->length, f));
+  TEST_ASSERT_EQUAL(FrameType::Telemetry, f.type);
+  const Telemetry &t = f.telemetry;
+  TEST_ASSERT_EQUAL_UINT8(0x40, TELEMETRY_BODY_STOPPED);
+  TEST_ASSERT_EQUAL_UINT8(TELEMETRY_BRIDGE_IN_CONTROL | TELEMETRY_BRIDGE_LINK_UP | TELEMETRY_BRIDGE_GAMEPAD |
+                              TELEMETRY_BODY_STOPPED,
+                          t.flags);
+  TEST_ASSERT_EQUAL_UINT8(2, t.bodyMode);
+  TEST_ASSERT_EQUAL_UINT8(2, t.gait);
+  TEST_ASSERT_FALSE(t.outputsOn);
+  TEST_ASSERT_EQUAL_UINT16(0x0020, t.faults);
+  TEST_ASSERT_EQUAL_UINT8(0, t.gesture);
 }
 
 void test_raw_bytes_follow_each_returned_frame()
@@ -660,6 +690,7 @@ int main()
   RUN_TEST(test_back_to_back_frames);
   RUN_TEST(test_raw_bytes_of_every_golden_frame);
   RUN_TEST(test_bench_simulation_vector_decodes_every_other_field);
+  RUN_TEST(test_body_stopped_vector_carries_the_flag_and_the_last_mode);
   RUN_TEST(test_raw_bytes_follow_each_returned_frame);
   return UNITY_END();
 }

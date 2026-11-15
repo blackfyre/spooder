@@ -43,6 +43,38 @@ void test_no_frame_yet_requests_sleep_and_stale()
   TEST_ASSERT_FALSE(in.clearRequested);
 }
 
+// A front-end of the previous protocol version (3), not yet reflashed: its
+// command frames, with valid CRCs, are discarded by the decoder, so the link
+// is never seen and the robot is asked to sleep (the mismatched-version
+// scenario: a lost link).
+void test_previous_version_frames_alone_leave_the_link_unseen()
+{
+  protocol::Decoder dec;
+  for (int i = 0; i < 100; i++) // 2 s of frames
+  {
+    uint8_t buf[protocol::MAX_FRAME_SIZE];
+    int n = protocol::encodeCommand(frame(RequestedMode::Walk, 0, (uint8_t)(i / 10)), (uint8_t)i, buf);
+    buf[1] = protocol::VERSION - 1;
+    uint16_t crc = protocol::crc16(buf + 1, n - 3);
+    buf[n - 2] = (uint8_t)(crc & 0xFF);
+    buf[n - 1] = (uint8_t)(crc >> 8);
+    now += 20;
+    for (int b = 0; b < n; b++)
+      dec.push(buf[b]);
+    protocol::Frame f;
+    while (dec.next(f))
+      if (f.type == protocol::FrameType::Command)
+        accept(r, f.command, now);
+    Input in = take(r);
+    TEST_ASSERT_FALSE(in.linkSeen);
+    TEST_ASSERT_TRUE(in.command.mode == RequestedMode::Sleep);
+    TEST_ASSERT_FALSE(isFresh(in, now));
+  }
+  TEST_ASSERT_EQUAL_UINT8(3, protocol::VERSION - 1);
+  TEST_ASSERT_EQUAL_UINT32(0, dec.validFrames());
+  TEST_ASSERT_TRUE(dec.discardedFrames() >= 100); // a resync can discard a false start too
+}
+
 void test_command_is_stamped_with_arrival_time()
 {
   Input in = tick(frame(RequestedMode::Walk));
@@ -269,6 +301,7 @@ int main()
   RUN_TEST(test_pose_in_calibration_pose);
   RUN_TEST(test_pose_rounds_and_saturates);
   RUN_TEST(test_no_frame_yet_requests_sleep_and_stale);
+  RUN_TEST(test_previous_version_frames_alone_leave_the_link_unseen);
   RUN_TEST(test_command_is_stamped_with_arrival_time);
   RUN_TEST(test_newest_frame_wins);
   RUN_TEST(test_lost_frame_loses_nothing);

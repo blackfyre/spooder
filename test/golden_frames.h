@@ -1,7 +1,7 @@
 #ifndef TEST_GOLDEN_FRAMES_H
 #define TEST_GOLDEN_FRAMES_H
 
-// Reads the valid frames of test/golden/protocol_v3.txt (name and bytes),
+// Reads the valid frames of test/golden/protocol_v4.txt (name and bytes),
 // for tests that need real frames of every type. Header-only: each test
 // program that includes it gets its own copy.
 #include <stdint.h>
@@ -34,7 +34,7 @@ inline void path(const char *file, char *out, int size)
   for (const char *at = strstr(file, "test/test_"); at; at = strstr(at + 1, "test/test_"))
     cut = at;
   int prefix = cut ? (int)(cut - file) : 0;
-  snprintf(out, size, "%.*stest/golden/protocol_v3.txt", prefix, file);
+  snprintf(out, size, "%.*stest/golden/protocol_v4.txt", prefix, file);
 }
 
 inline int hexDigit(char c)

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Name is the frame type's name in test/golden/protocol_v3.txt.
+// Name is the frame type's name in test/golden/protocol_v4.txt.
 func (t FrameType) Name() string {
 	switch t {
 	case TypeCommand:
@@ -26,7 +26,7 @@ func (t FrameType) Name() string {
 }
 
 // Fields lists a decoded frame's fields as name=value, in the order and
-// spelling of test/golden/protocol_v3.txt: the header fields, then the
+// spelling of test/golden/protocol_v4.txt: the header fields, then the
 // payload fields in payload order, values in decimal.
 func Fields(f Frame) []string {
 	out := []string{"version=" + strconv.Itoa(Version), "type=" + f.Type.Name(), "seq=" + strconv.Itoa(int(f.Seq))}

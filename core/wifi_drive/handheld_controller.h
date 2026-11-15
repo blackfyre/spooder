@@ -49,7 +49,7 @@ enum class Outcome : uint8_t
 {
   Accepted,
   RateLimited, // beyond the window's budget, not decoded
-  Malformed,   // not exactly one valid version 3 command frame
+  Malformed,   // not exactly one valid version 4 command frame
   OtherSender, // while another sender's session is live
   Stale,       // late or repeated
   Jump,        // the sequence jumped ahead: the session ended

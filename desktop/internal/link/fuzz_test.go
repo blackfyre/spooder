@@ -22,8 +22,8 @@ import (
 // line flushing are the real ones (design D4). The seed corpus runs in every
 // `go test`; `mise run fuzz` adds random inputs.
 
-// goldenPath is test/golden/protocol_v3.txt, the seed source (design D2).
-var goldenPath = filepath.Join("..", "..", "..", "test", "golden", "protocol_v3.txt")
+// goldenPath is test/golden/protocol_v4.txt, the seed source (design D2).
+var goldenPath = filepath.Join("..", "..", "..", "test", "golden", "protocol_v4.txt")
 
 // goldenFrame is one line of the golden file: its frame bytes, and whether
 // the decoder accepts it.

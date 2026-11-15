@@ -3,7 +3,7 @@
 
 // The link between the robot and its front-ends (the gamepad bridge on UART1,
 // a computer on USB): frame layout, CRC, encoders and an incremental decoder,
-// shared by both firmwares. test/golden/protocol_v3.txt pins the encoding.
+// shared by both firmwares. test/golden/protocol_v4.txt pins the encoding.
 // Hardware-free: compiled for both boards and for host tests.
 //
 // Frame:
@@ -21,7 +21,7 @@ namespace protocol
 {
 
 constexpr uint8_t START = 0xA5;
-constexpr uint8_t VERSION = 3;
+constexpr uint8_t VERSION = 4;
 
 enum class FrameType : uint8_t
 {
@@ -99,6 +99,9 @@ constexpr uint8_t TELEMETRY_BRIDGE_LINK_UP = 1u << 3;
 constexpr uint8_t TELEMETRY_BRIDGE_GAMEPAD = 1u << 4;
 // Bench simulation: no servo moves; output and supply readings are modelled.
 constexpr uint8_t TELEMETRY_SIMULATED = 1u << 5;
+// The body is not running: before its first start and after a fault stops it,
+// until it restarts. The body mode and gait are then its last ones, not live.
+constexpr uint8_t TELEMETRY_BODY_STOPPED = 1u << 6;
 
 // Robot to every link, every 100 ms.
 struct Telemetry

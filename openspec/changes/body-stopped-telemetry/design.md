@@ -62,6 +62,7 @@ Flash both boards from the same build, rebuild the desktop calibrator and the ha
 - The mismatched-version scenario rests on three checks: the golden rejected version 3 vector (every decoder), the C++ and Go decoders' previous-version rejection tests, and a link receiver test that version 3 command frames alone leave the link unseen, so the robot requests Sleep. The bridge's own link-loss display after 1 s without valid telemetry is existing behaviour (status-display, Link loss shown) and is not retested here.
 - The robot's status line is not specified by any capability (leg-actuation only requires its slew-limit change to leave it unchanged); its `body` word becomes `not started`, `running` or `stopped`, checked by a host test.
 - link-fuzzing names the golden file, so it gets a MODIFIED delta for `protocol_v4.txt`; no other main spec or active change's spec names it.
+- `reject_version_3_command` is a version 4 command frame (the layout is unchanged from version 3) with the version byte 3 and its CRC recomputed; the stopped vector `telemetry_body_stopped_walk` is an emergency stop while walking on the bridge link (Walk, Ripple, output off, no gesture). Until task group 4 changes the console's formatting, `spooder-monitor --frames` prints that vector as Walk, and the console's golden line and transcript record that.
 - `tools/bridge-screenshots` sets no telemetry flags, so its images show a running body and stay unchanged.
 
 ## Follow-ups
