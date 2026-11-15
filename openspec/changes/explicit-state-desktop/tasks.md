@@ -1,0 +1,5 @@
+## 1. Explicit port selection
+
+- [ ] 1.1 Add the explicit-state rule for Go to `desktop/CLAUDE.md` (Rules: one enum-like type with one transition function and its guards; no bool duplicating a state; no nil, zero time or empty string as a state; `desktop/` without `desktop/handheld/`), worded as in design D1. Verify by reading it against D1, and that `grep -n "transition function" desktop/CLAUDE.md` finds it
+- [ ] 1.2 Replace `picked` in `desktop/internal/ui/window.go` with `portChoice` (`None`, `Preselected`, `Picked`) written only through one transition method used by `setPorts` and the port click (design D2), and add a window test in `window_test.go` that picks a port, unplugs it while the `--port` path is absent, then adds the path, and expects the path preselected. Verify that the test fails before the change and passes after it, with `go test ./internal/ui/` in `desktop/`
+- [ ] 1.3 Record the fix under Unreleased in `CHANGELOG.md`. Verify by reading it, and that `mise run desktop-test`, `mise run desktop-build` and `mise run e2e` pass
