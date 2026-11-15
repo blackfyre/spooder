@@ -78,6 +78,39 @@ struct Desired
   uint8_t gestureRequestCounter; // incremented on every gesture request
 };
 
+// The mapping's mode request: the reachable combinations of a base mode
+// (Stand or Walk) with the Sleep and Calibrate toggles. Sleep keeps the mode
+// it returns to; leaving Calibrate returns to Stand.
+enum class ModeState : uint8_t
+{
+  Stand,
+  Walk,
+  SleepFromStand,
+  SleepFromWalk,
+  Calibrate,
+};
+
+// The inputs that change the mode request: a fresh connection, a miscHome
+// press (Home), a y press (Sleep) and the completed miscBack + miscHome hold.
+enum class ModeEvent : uint8_t
+{
+  Connect,
+  Home,
+  Sleep,
+  CalibrateHold,
+};
+
+/**
+ * @brief The mode request after @p event in state @p s: the mapping's one
+ * transition function.
+ */
+ModeState next(ModeState s, ModeEvent event);
+
+/**
+ * @brief The requested mode of state @p s.
+ */
+RequestedMode requestedMode(ModeState s);
+
 // The gait selected at start-up: the robot's (gait::START_GAIT, Wave).
 constexpr uint8_t START_GAIT = static_cast<uint8_t>(gait::START_GAIT);
 
@@ -94,10 +127,8 @@ struct Mapper
   uint8_t gesture = 0;
   uint8_t gestureRequestCounter = 0;
 
-  // Mode request: base mode plus the Sleep and Calibrate toggles.
-  RequestedMode baseMode = RequestedMode::Stand;
-  bool sleeping = false;
-  bool calibrating = false;
+  // Mode request, changed only through applyModeEvent().
+  ModeState modeState = ModeState::Stand;
 
   // Input history.
   bool wasConnected = false;
@@ -111,6 +142,12 @@ struct Mapper
   bool clearFired = false;
   uint32_t clearSinceMs = 0;
 };
+
+/**
+ * @brief Applies @p event to @p m's mode request (next()), advancing the
+ * mode-request counter for every event but Connect.
+ */
+void applyModeEvent(Mapper &m, ModeEvent event);
 
 /**
  * @brief Advances the mapping by one pad sample taken at @p nowMs.

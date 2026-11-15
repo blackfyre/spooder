@@ -1,5 +1,6 @@
 #include <unity.h>
 #include <math.h>
+#include <stdio.h>
 #include "gamepad_mapping/gamepad_mapping.h"
 #include "movement/gait.h"
 
@@ -509,6 +510,73 @@ void test_l2_layer_suppresses_the_buttons_own_functions()
   TEST_ASSERT_EQUAL(before.gestureRequestCounter + 3, last.gestureRequestCounter);
 }
 
+// --- Mode state transitions (design D2 of explicit-state-core) ---
+
+void test_mode_transition_table()
+{
+  using S = ModeState;
+  using E = ModeEvent;
+  static const S STATES[] = {S::Stand, S::Walk, S::SleepFromStand, S::SleepFromWalk, S::Calibrate};
+  static const E EVENTS[] = {E::Connect, E::Home, E::Sleep, E::CalibrateHold};
+  // EXPECTED[state][event], rows and columns in the order above.
+  static const S EXPECTED[5][4] = {
+      {S::Stand, S::Walk, S::SleepFromStand, S::Calibrate}, {S::Stand, S::Stand, S::SleepFromWalk, S::Calibrate},
+      {S::Stand, S::SleepFromWalk, S::Stand, S::Calibrate}, {S::Stand, S::SleepFromStand, S::Walk, S::Calibrate},
+      {S::Stand, S::Stand, S::SleepFromStand, S::Stand},
+  };
+  for (int i = 0; i < 5; i++)
+    for (int j = 0; j < 4; j++)
+    {
+      char msg[32];
+      snprintf(msg, sizeof msg, "state %d event %d", i, j);
+      TEST_ASSERT_EQUAL_INT_MESSAGE((int)EXPECTED[i][j], (int)next(STATES[i], EVENTS[j]), msg);
+    }
+}
+
+void test_requested_mode_of_each_state()
+{
+  TEST_ASSERT_TRUE(requestedMode(ModeState::Stand) == RequestedMode::Stand);
+  TEST_ASSERT_TRUE(requestedMode(ModeState::Walk) == RequestedMode::Walk);
+  TEST_ASSERT_TRUE(requestedMode(ModeState::SleepFromStand) == RequestedMode::Sleep);
+  TEST_ASSERT_TRUE(requestedMode(ModeState::SleepFromWalk) == RequestedMode::Sleep);
+  TEST_ASSERT_TRUE(requestedMode(ModeState::Calibrate) == RequestedMode::Calibrate);
+}
+
+void test_mode_events_step_the_counter_except_connect()
+{
+  static const ModeEvent EVENTS[] = {ModeEvent::Connect, ModeEvent::Home, ModeEvent::Sleep, ModeEvent::CalibrateHold};
+  static const int STEP[] = {0, 1, 1, 1};
+  for (int j = 0; j < 4; j++)
+  {
+    Mapper fresh;
+    fresh.modeRequestCounter = 255; // the step wraps, as the counter does
+    applyModeEvent(fresh, EVENTS[j]);
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)(255 + STEP[j]), fresh.modeRequestCounter);
+    TEST_ASSERT_EQUAL_INT((int)next(ModeState::Stand, EVENTS[j]), (int)fresh.modeState);
+  }
+}
+
+void test_calibrate_hold_completes_with_y_pressed()
+{
+  uint8_t before = last.modeRequestCounter;
+  TEST_ASSERT_TRUE(last.mode == RequestedMode::Stand);
+  pad.misc |= MISC_HOME | MISC_BACK;
+  tick(); // the hold starts
+  for (int i = 1; i < (int)(COMBO_HOLD_MS / 20); i++)
+    tick();
+  TEST_ASSERT_TRUE(last.mode == RequestedMode::Stand); // not yet 1 s
+  pad.buttons |= BUTTON_Y;
+  tick(); // the hold reaches 1 s as y is pressed
+  TEST_ASSERT_TRUE(last.mode == RequestedMode::Sleep);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(before + 2), last.modeRequestCounter);
+  pad.misc = 0;
+  pad.buttons = 0;
+  tick();
+  pressButton(BUTTON_Y);
+  TEST_ASSERT_TRUE(last.mode == RequestedMode::Stand);
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(before + 3), last.modeRequestCounter);
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -525,6 +593,10 @@ int main()
   RUN_TEST(test_calibrate_combo_fires_once_per_hold);
   RUN_TEST(test_leaving_calibrate_returns_to_stand_even_from_walk);
   RUN_TEST(test_combination_has_priority_over_home_toggle);
+  RUN_TEST(test_mode_transition_table);
+  RUN_TEST(test_requested_mode_of_each_state);
+  RUN_TEST(test_mode_events_step_the_counter_except_connect);
+  RUN_TEST(test_calibrate_hold_completes_with_y_pressed);
   RUN_TEST(test_shoulders_change_gait_and_wrap);
   RUN_TEST(test_dpad_steps_height_and_speed_within_range);
   RUN_TEST(test_x_toggles_stride);

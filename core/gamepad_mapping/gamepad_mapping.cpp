@@ -90,13 +90,74 @@ static bool comboFired(bool down, bool &held, bool &fired, uint32_t &sinceMs, ui
   return false;
 }
 
-static RequestedMode requestedMode(const Mapper &m)
+ModeState next(ModeState s, ModeEvent event)
 {
-  if (m.calibrating)
-    return RequestedMode::Calibrate;
-  if (m.sleeping)
+  switch (event)
+  {
+  case ModeEvent::Connect:
+    return ModeState::Stand;
+  case ModeEvent::Home:
+    // Toggles Stand and Walk, also the mode Sleep returns to; leaves
+    // Calibrate for Stand.
+    switch (s)
+    {
+    case ModeState::Stand:
+      return ModeState::Walk;
+    case ModeState::Walk:
+      return ModeState::Stand;
+    case ModeState::SleepFromStand:
+      return ModeState::SleepFromWalk;
+    case ModeState::SleepFromWalk:
+      return ModeState::SleepFromStand;
+    case ModeState::Calibrate:
+      return ModeState::Stand;
+    }
+    break;
+  case ModeEvent::Sleep:
+    // Toggles Sleep; Sleep from Calibrate returns to Stand.
+    switch (s)
+    {
+    case ModeState::Stand:
+      return ModeState::SleepFromStand;
+    case ModeState::Walk:
+      return ModeState::SleepFromWalk;
+    case ModeState::SleepFromStand:
+      return ModeState::Stand;
+    case ModeState::SleepFromWalk:
+      return ModeState::Walk;
+    case ModeState::Calibrate:
+      return ModeState::SleepFromStand;
+    }
+    break;
+  case ModeEvent::CalibrateHold:
+    // Toggles Calibrate, also from Sleep; leaving it returns to Stand.
+    return s == ModeState::Calibrate ? ModeState::Stand : ModeState::Calibrate;
+  }
+  return s;
+}
+
+RequestedMode requestedMode(ModeState s)
+{
+  switch (s)
+  {
+  case ModeState::Stand:
+    return RequestedMode::Stand;
+  case ModeState::Walk:
+    return RequestedMode::Walk;
+  case ModeState::SleepFromStand:
+  case ModeState::SleepFromWalk:
     return RequestedMode::Sleep;
-  return m.baseMode;
+  case ModeState::Calibrate:
+    return RequestedMode::Calibrate;
+  }
+  return RequestedMode::Sleep;
+}
+
+void applyModeEvent(Mapper &m, ModeEvent event)
+{
+  m.modeState = next(m.modeState, event);
+  if (event != ModeEvent::Connect)
+    m.modeRequestCounter++;
 }
 
 Desired update(Mapper &m, const PadState &pad, uint32_t nowMs)
@@ -114,9 +175,7 @@ Desired update(Mapper &m, const PadState &pad, uint32_t nowMs)
       // A fresh connection starts in Stand; buttons already held do not count
       // as presses.
       m.wasConnected = true;
-      m.baseMode = RequestedMode::Stand;
-      m.sleeping = false;
-      m.calibrating = false;
+      applyModeEvent(m, ModeEvent::Connect);
       m.prevButtons = pad.buttons;
       m.prevDpad = pad.dpad;
       m.prevMisc = pad.misc;
@@ -136,20 +195,9 @@ Desired update(Mapper &m, const PadState &pad, uint32_t nowMs)
     bool backHeld = (pad.misc & MISC_BACK) != 0;
     bool calibrateDown = backHeld && (pad.misc & MISC_HOME);
     if (comboFired(calibrateDown, m.calibrateHeld, m.calibrateFired, m.calibrateSinceMs, nowMs))
-    {
-      m.calibrating = !m.calibrating;
-      m.sleeping = false;
-      m.baseMode = RequestedMode::Stand; // leaving Calibrate returns to Stand
-      m.modeRequestCounter++;
-    }
+      applyModeEvent(m, ModeEvent::CalibrateHold);
     else if ((miscPressed & MISC_HOME) && !backHeld)
-    {
-      if (m.calibrating)
-        m.calibrating = false; // leaving Calibrate returns to Stand (set on entry)
-      else
-        m.baseMode = m.baseMode == RequestedMode::Walk ? RequestedMode::Stand : RequestedMode::Walk;
-      m.modeRequestCounter++;
-    }
+      applyModeEvent(m, ModeEvent::Home);
 
     // The gesture layer: while L2 is held, a, b, x, y and R2 request
     // gestures instead of their own functions.
@@ -174,20 +222,10 @@ Desired update(Mapper &m, const PadState &pad, uint32_t nowMs)
       pressed &= (uint16_t)~(BUTTON_A | BUTTON_B | BUTTON_X | BUTTON_Y | BUTTON_R2);
     }
 
+    // After the Calibrate hold in the same sample, so a y press as the hold
+    // completes enters Calibrate and leaves it for Sleep.
     if (pressed & BUTTON_Y)
-    {
-      if (m.calibrating)
-      {
-        // Sleep from Calibrate; leaving Sleep then returns to Stand.
-        m.calibrating = false;
-        m.sleeping = true;
-      }
-      else
-      {
-        m.sleeping = !m.sleeping;
-      }
-      m.modeRequestCounter++;
-    }
+      applyModeEvent(m, ModeEvent::Sleep);
 
     if (pressed & BUTTON_R1)
       m.gait = (uint8_t)((m.gait + 1) % gait::GAIT_COUNT);
@@ -235,7 +273,7 @@ Desired update(Mapper &m, const PadState &pad, uint32_t nowMs)
   }
 
   d.controllerConnected = pad.connected;
-  d.mode = pad.connected ? requestedMode(m) : RequestedMode::Sleep;
+  d.mode = pad.connected ? requestedMode(m.modeState) : RequestedMode::Sleep;
   d.height = m.height;
   d.speed = m.speed;
   d.gait = m.gait;

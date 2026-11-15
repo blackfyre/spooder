@@ -84,21 +84,9 @@ func (h *Handheld) Begin(nowMs uint32) {
 	h.maskHeld = true
 }
 
-// RequestSleep sets the mapper's Sleep toggle, advancing the mode-request
-// counter once unless Sleep is already requested. For the start of a run, a
-// return from suspend and a leave (design D5). The mode Sleep returns to is
-// reset to Stand, as at a bridge session's start, so Y then leaves Sleep for
-// Stand even when the robot was walking before.
-func (h *Handheld) RequestSleep() {
-	m := &h.mapper
-	m.baseMode = ModeStand
-	if m.requestedMode() == ModeSleep {
-		return
-	}
-	m.calibrating = false
-	m.sleeping = true
-	m.modeRequestCounter++
-}
+// RequestSleep requests Sleep through the mapper (Mapper.RequestSleep): for
+// the start of a run, a return from suspend and a leave (design D5).
+func (h *Handheld) RequestSleep() { h.mapper.RequestSleep() }
 
 // SetNeutral makes the mapping see a connected pad at rest (during a leave)
 // or, when turned off, the controls again, with those held at that moment

@@ -63,6 +63,34 @@ const (
 	ModeCalibrate
 )
 
+// ModeState is gamepad_mapping::ModeState: the mapping's mode request, the
+// reachable combinations of a base mode (Stand or Walk) with the Sleep and
+// Calibrate toggles. Sleep keeps the mode it returns to; leaving Calibrate
+// returns to Stand.
+type ModeState uint8
+
+const (
+	ModeStateStand ModeState = iota
+	ModeStateWalk
+	ModeStateSleepFromStand
+	ModeStateSleepFromWalk
+	ModeStateCalibrate
+)
+
+// ModeEvent is gamepad_mapping::ModeEvent, plus the handheld's sleep request
+// (ModeEventSleepRequest), which only the Go port has.
+type ModeEvent uint8
+
+const (
+	ModeEventConnect ModeEvent = iota
+	ModeEventHome
+	ModeEventSleep
+	ModeEventCalibrateHold
+	// ModeEventSleepRequest is Mapper.RequestSleep: Sleep returning to
+	// Stand, from any state.
+	ModeEventSleepRequest
+)
+
 // StrideMode is StrideMode in core/movement/movement_command.h.
 type StrideMode uint8
 
@@ -118,9 +146,8 @@ type Mapper struct {
 	gesture               uint8
 	gestureRequestCounter uint8
 
-	baseMode    RequestedMode
-	sleeping    bool
-	calibrating bool
+	// Changed only through applyModeEvent.
+	modeState ModeState
 
 	wasConnected     bool
 	prevButtons      uint16
@@ -136,7 +163,7 @@ type Mapper struct {
 
 // NewMapper returns a Mapper with the C++ member initialisers.
 func NewMapper() Mapper {
-	return Mapper{speed: StartSpeed, gait: StartGait, stride: StrideDynamic, stickMode: StickSteer, baseMode: ModeStand}
+	return Mapper{speed: StartSpeed, gait: StartGait, stride: StrideDynamic, stickMode: StickSteer, modeState: ModeStateStand}
 }
 
 // sqrtf is C's sqrtf: the float64 square root of a float32 rounds to the
@@ -233,15 +260,89 @@ func comboFired(down bool, held, fired *bool, sinceMs *uint32, nowMs uint32) boo
 	return false
 }
 
-func (m *Mapper) requestedMode() RequestedMode {
-	if m.calibrating {
+// next is gamepad_mapping::next, the mapping's one transition function,
+// with the sleep request added.
+func next(s ModeState, e ModeEvent) ModeState {
+	switch e {
+	case ModeEventConnect:
+		return ModeStateStand
+	case ModeEventHome:
+		// Toggles Stand and Walk, also the mode Sleep returns to; leaves
+		// Calibrate for Stand.
+		switch s {
+		case ModeStateStand:
+			return ModeStateWalk
+		case ModeStateWalk, ModeStateCalibrate:
+			return ModeStateStand
+		case ModeStateSleepFromStand:
+			return ModeStateSleepFromWalk
+		case ModeStateSleepFromWalk:
+			return ModeStateSleepFromStand
+		}
+	case ModeEventSleep:
+		// Toggles Sleep; Sleep from Calibrate returns to Stand.
+		switch s {
+		case ModeStateStand, ModeStateCalibrate:
+			return ModeStateSleepFromStand
+		case ModeStateWalk:
+			return ModeStateSleepFromWalk
+		case ModeStateSleepFromStand:
+			return ModeStateStand
+		case ModeStateSleepFromWalk:
+			return ModeStateWalk
+		}
+	case ModeEventCalibrateHold:
+		// Toggles Calibrate, also from Sleep; leaving it returns to Stand.
+		if s == ModeStateCalibrate {
+			return ModeStateStand
+		}
+		return ModeStateCalibrate
+	case ModeEventSleepRequest:
+		return ModeStateSleepFromStand
+	}
+	return s
+}
+
+// requestedMode is gamepad_mapping::requestedMode.
+func requestedMode(s ModeState) RequestedMode {
+	switch s {
+	case ModeStateStand:
+		return ModeStand
+	case ModeStateWalk:
+		return ModeWalk
+	case ModeStateCalibrate:
 		return ModeCalibrate
 	}
-	if m.sleeping {
-		return ModeSleep
-	}
-	return m.baseMode
+	return ModeSleep
 }
+
+// stepsCounter reports whether event e in state s advances the mode-request
+// counter: every event but Connect, and the sleep request only when Sleep is
+// not already requested.
+func stepsCounter(s ModeState, e ModeEvent) bool {
+	switch e {
+	case ModeEventConnect:
+		return false
+	case ModeEventSleepRequest:
+		return requestedMode(s) != ModeSleep
+	}
+	return true
+}
+
+// applyModeEvent is gamepad_mapping::applyModeEvent.
+func (m *Mapper) applyModeEvent(e ModeEvent) {
+	if stepsCounter(m.modeState, e) {
+		m.modeRequestCounter++
+	}
+	m.modeState = next(m.modeState, e)
+}
+
+// RequestSleep requests Sleep, advancing the mode-request counter once
+// unless Sleep is already requested. The mode Sleep returns to is Stand, as
+// at a bridge session's start, so Y then leaves Sleep for Stand even when the
+// robot was walking before. Not in the C++ mapping (design D3 of
+// explicit-state-core).
+func (m *Mapper) RequestSleep() { m.applyModeEvent(ModeEventSleepRequest) }
 
 var gestureButtons = []struct {
 	button  uint16
@@ -266,9 +367,7 @@ func (m *Mapper) Update(pad PadState, nowMs uint32) Desired {
 			// A fresh connection starts in Stand; buttons already held do
 			// not count as presses.
 			m.wasConnected = true
-			m.baseMode = ModeStand
-			m.sleeping = false
-			m.calibrating = false
+			m.applyModeEvent(ModeEventConnect)
 			m.prevButtons = pad.Buttons
 			m.prevDpad = pad.Dpad
 			m.prevMisc = pad.Misc
@@ -289,19 +388,9 @@ func (m *Mapper) Update(pad PadState, nowMs uint32) Desired {
 		backHeld := pad.Misc&MiscBack != 0
 		calibrateDown := backHeld && pad.Misc&MiscHome != 0
 		if comboFired(calibrateDown, &m.calibrateHeld, &m.calibrateFired, &m.calibrateSinceMs, nowMs) {
-			m.calibrating = !m.calibrating
-			m.sleeping = false
-			m.baseMode = ModeStand // leaving Calibrate returns to Stand
-			m.modeRequestCounter++
+			m.applyModeEvent(ModeEventCalibrateHold)
 		} else if miscPressed&MiscHome != 0 && !backHeld {
-			if m.calibrating {
-				m.calibrating = false // leaving Calibrate returns to Stand (set on entry)
-			} else if m.baseMode == ModeWalk {
-				m.baseMode = ModeStand
-			} else {
-				m.baseMode = ModeWalk
-			}
-			m.modeRequestCounter++
+			m.applyModeEvent(ModeEventHome)
 		}
 
 		// The gesture layer: while L2 is held, a, b, x, y and R2 request
@@ -316,15 +405,10 @@ func (m *Mapper) Update(pad PadState, nowMs uint32) Desired {
 			pressed &^= ButtonA | ButtonB | ButtonX | ButtonY | ButtonR2
 		}
 
+		// After the Calibrate hold in the same sample, so a y press as the
+		// hold completes enters Calibrate and leaves it for Sleep.
 		if pressed&ButtonY != 0 {
-			if m.calibrating {
-				// Sleep from Calibrate; leaving Sleep then returns to Stand.
-				m.calibrating = false
-				m.sleeping = true
-			} else {
-				m.sleeping = !m.sleeping
-			}
-			m.modeRequestCounter++
+			m.applyModeEvent(ModeEventSleep)
 		}
 
 		if pressed&ButtonR1 != 0 {
@@ -395,7 +479,7 @@ func (m *Mapper) Update(pad PadState, nowMs uint32) Desired {
 
 	d.ControllerConnected = pad.Connected
 	if pad.Connected {
-		d.Mode = m.requestedMode()
+		d.Mode = requestedMode(m.modeState)
 	} else {
 		d.Mode = ModeSleep
 	}
