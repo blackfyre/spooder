@@ -180,8 +180,8 @@ Every byte that arrives from outside the board is untrusted: link and USB frames
 
 ## State and constants
 
-- **Mode-dependent behaviour is an explicit state machine:** one `enum class`, one transition function with its guards. Examples are `body::Mode` with `resolveMode()`, and protection's latched-fault bitmask.
-- **No flags that duplicate a state.**
+- **Mode-dependent behaviour is an explicit state machine:** one `enum class`, one transition function with its guards. Examples are `body::Mode` with `resolveMode()`, `gamepad_mapping::ModeState` with `next()` (the only writer is `applyModeEvent()`; its Go port in `desktop/handheld/internal/padmap` has the same states and transition function), and protection's latched-fault bitmask.
+- **No flags that duplicate a state**, and no timestamp, counter or sentinel standing for one; no state written from outside its transition function (`REVIEW.md`: implicit state machine).
 - The desktop calibrator's Go code follows the same rule in its Go form (a named integer type with `iota` constants and one transition function), stated in `desktop/CLAUDE.md` (*Explicit state*).
 - **Hardware constants are named:** pins come from `servo2040::*`; limits come from `config.h`/`power_limits.h`. Tunable rates are `constexpr` in the module that owns them.
 - **Safety limits are configuration, not code:**
