@@ -13,7 +13,7 @@ Several unarchived changes modify the same capabilities (`add-bench-simulation` 
 - Every front-end that shows the body mode shows a stopped body as stopped.
 
 **Non-Goals:**
-- Telling "not started" from "stopped after a fault" on the link: one flag covers both; the console status line and the LEDs can tell them apart, the front-ends need not.
+- Telling "not started" from "stopped after a fault" on the link: one flag covers both; only the robot's console status line tells them apart (the LEDs show both as the same blue breathing), and the front-ends need not.
 - Any change to when the body stops or restarts.
 - Any change to the frame layout or to other frames.
 
@@ -21,7 +21,7 @@ Several unarchived changes modify the same capabilities (`add-bench-simulation` 
 
 ### D1. `enum class RunState : uint8_t { NotStarted, Running, Stopped }` in `protection::Supervisor`
 
-`Supervisor::bodyRunning` becomes `RunState runState = RunState::NotStarted`. `supervise` moves Running to Stopped where it sets `stopBody`, and NotStarted or Stopped to Running where it sets `startBody`; the start and stop conditions are unchanged. `Decision::runBody` stays (it equals `runState == Running` after the call) so the tick's step guard reads as before. A helper `bool bodyRunning(const Supervisor &)` is not added: callers compare with `RunState::Running`.
+`Supervisor::bodyRunning` becomes `RunState runState = RunState::NotStarted`. `supervise` moves Running to Stopped where it sets `stopBody`, and NotStarted or Stopped to Running where it sets `startBody`; the start and stop conditions are unchanged. A fault before the first start leaves NotStarted unchanged: Stopped is entered only from Running. `Decision::runBody` stays (it equals `runState == Running` after the call) so the tick's step guard reads as before. A helper `bool bodyRunning(const Supervisor &)` is not added: callers compare with `RunState::Running`.
 
 Alternative: keep the bool and add a separate "started once" bool. Rejected: two bools allow an impossible combination and the brief asks for an explicit state.
 
@@ -31,17 +31,17 @@ Alternative: keep the bool and add a separate "started once" bool. Rejected: two
 
 ### D3. Protocol version 4, golden file renamed
 
-`protocol::VERSION = 4` and Go's `protocol.Version = 4`. The golden file is regenerated (`SPOODER_WRITE_GOLDEN=1 mise run test`) and renamed `test/golden/protocol_v4.txt`, as its name carries the version; every reference (`test/golden_frames.h`, `test/test_protocol_golden`, `desktop/internal/protocol/golden_test.go`, `fields.go` and `protocol.go`, `desktop/internal/link/fuzz_test.go`, `desktop/internal/console/console_test.go`, `desktop/internal/wifiprobe/probe_test.go`, `test/CLAUDE.md`, `tools/CLAUDE.md`, `desktop/CLAUDE.md`) is renamed with it. One golden telemetry vector with `TELEMETRY_BODY_STOPPED` is added. The diff is reviewed: only the version byte, the CRCs and the new vector may change.
+`protocol::VERSION = 4` and Go's `protocol.Version = 4`. The golden file is regenerated (`SPOODER_WRITE_GOLDEN=1 mise run test`) and renamed `test/golden/protocol_v4.txt`, as its name carries the version; every reference (`test/golden_frames.h`, `test/test_protocol_golden`, `desktop/internal/protocol/golden_test.go`, `fields.go` and `protocol.go`, `desktop/internal/link/fuzz_test.go`, `desktop/internal/console/console_test.go`, `desktop/internal/wifiprobe/probe_test.go`, `test/CLAUDE.md`, `tools/CLAUDE.md`, `desktop/CLAUDE.md`) is renamed with it. One golden telemetry vector with `TELEMETRY_BODY_STOPPED` is added, and a rejected vector `reject_version_3_command` (the previous version, with a valid CRC) beside `reject_version_2_command`, so every implementation proves it discards the version a not yet reflashed peer sends. The diff is reviewed: only the header's version, the version byte, the CRCs and the two new vectors may change.
 
 ### D4. Front-ends hide the mode while the flag is set
 
-- Bridge (`core/status/status_screen`): the header's mode text is `STOPPED` (normal tone) instead of `MODE · GAIT` or `PERFORM · gesture`; the setup screen's body cell shows `Stopped`, red while a fault is latched as today. The bridge firmware itself needs no code change beyond the rebuild.
-- Desktop: `session.Snapshot` gains `Stopped bool` from the flag; `bodyText` returns `Stopped` when it is set; the charts' mode lane builds its snapshot with `Stopped` from the sample's flags; the console's `formatTelemetry` and the WiFi drive probe's telemetry summary (`desktop/internal/wifiprobe`) print `Stopped` in place of the body mode.
+- Bridge (`core/status/status_screen`): the header's mode text is `STOPPED` (normal tone) instead of `MODE · GAIT` or `PERFORM · gesture`; the setup screen's body cell shows `Stopped` (its mode names are in that case), red while a fault is latched as today. The change is in `core/status`; `firmware/bridge/` needs no source change beyond the rebuild. The header region is redrawn only when its text changes, as today, so the screen's 20 ms budget is unaffected.
+- Desktop: `session.Snapshot` gains `Stopped bool` from the flag; `bodyText` returns `Stopped` when it is set; the charts' mode lane builds its snapshot with `Stopped` from the sample's flags. The frames pane (`protocol.Summary`) is a raw field dump and keeps `bodyMode=` and `flags=` as received. The robot console's `formatTelemetry` (`spooder-monitor --frames`) prints `Stopped` in place of the body mode and gait, and its throttle treats a change of the flag as a change, like mode; the WiFi drive probe's telemetry summary (`desktop/internal/wifiprobe`, a development tool without a capability requirement) prints `Stopped` in place of the body mode.
 - Handheld: `Robot.Body` is `Stopped` when the flag is set, so the gesture guard (`rb.Body != "Stand" && rb.Body != "Perform"`) already treats it as unavailable; `confirms()` also returns true for the flag.
 
 ### D5. Spec deltas are ADDED requirements only
 
-To avoid conflicting MODIFIED deltas with the unarchived changes above, each capability gets a new requirement. The older requirements that name a protocol version (diagnostics-telemetry's "version 3", pose-telemetry's "version 2" and "reserved in protocol version 3") describe the version that introduced those frames and fields, which stays true; they are not reworded here.
+To avoid conflicting MODIFIED deltas with the unarchived changes above, each capability gets a new requirement. Four unarchived changes name version 3 as the version frames carry or keep: `add-wifi-drive` (wifi-drive: the bridge accepts only version 3 handheld frames), `add-handheld-controller` and `handheld-network-check` (handheld-controller: the handheld sends version 3) and `add-bench-simulation` (the version stays 3). Their capabilities are not in the main specs yet, so a MODIFIED delta cannot target them; the controller-link requirement instead states that version 4 applies in their place, and that the interoperation promised between version 3 builds (relay-pose-diagnostics' "bridge built before or after this change", pose-telemetry's reserved bytes "of either age") holds among version 4 builds and not across versions, and the code (one `VERSION` constant in C++ and one in Go, used by the bridge, the handheld and the probe alike) follows it. The older requirements that name a protocol version (diagnostics-telemetry's "version 3", pose-telemetry's "version 2" and "reserved in protocol version 3") describe the version that introduced those frames and fields, which stays true; they are not reworded here.
 
 ## Risks / Trade-offs
 
@@ -59,9 +59,13 @@ Flash both boards from the same build, rebuild the desktop calibrator and the ha
 - The flag uses the run state after this tick's `supervise`, so the frame sent on the tick a fault stops the body already has it.
 - usb-link and diagnostics-telemetry need no delta: the telemetry carried on USB is the same frame specified in controller-link, and no diagnostics behaviour changes (D5).
 - The handheld's requirement is ADDED to `handheld-controller`, the capability `add-handheld-controller` introduces; archiving either change first merges cleanly.
+- The mismatched-version scenario rests on three checks: the golden rejected version 3 vector (every decoder), the C++ and Go decoders' previous-version rejection tests, and a link receiver test that version 3 command frames alone leave the link unseen, so the robot requests Sleep. The bridge's own link-loss display after 1 s without valid telemetry is existing behaviour (status-display, Link loss shown) and is not retested here.
+- The robot's status line is not specified by any capability (leg-actuation only requires its slew-limit change to leave it unchanged); its `body` word becomes `not started`, `running` or `stopped`, checked by a host test.
+- link-fuzzing names the golden file, so it gets a MODIFIED delta for `protocol_v4.txt`; no other main spec or active change's spec names it.
 - `tools/bridge-screenshots` sets no telemetry flags, so its images show a running body and stay unchanged.
 
 ## Follow-ups
 
+- Reword the version 3 sentences of wifi-drive, handheld-controller and bench-simulation to version 4 once their changes are archived, dropping the precedence sentence from controller-link.
 - Reword the version-numbered sentences in diagnostics-telemetry and pose-telemetry once `relay-pose-diagnostics` and `add-bench-simulation` are archived, if a single "current version" statement is wanted.
 - The bridge's WiFi drive relay forwards frames without showing a body mode; if it gains one, it follows D4.

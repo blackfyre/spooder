@@ -10,3 +10,7 @@ While fresh telemetry reports the body stopped, the handheld's screen SHALL show
 #### Scenario: Leaving while stopped
 - **WHEN** Menu is pressed and the next two newer telemetry frames report the body stopped
 - **THEN** the leave is confirmed and the handheld exits without waiting the full 3 s
+
+#### Scenario: No gestures while stopped
+- **WHEN** fresh telemetry reports the body stopped with Stand or Perform as its last mode
+- **THEN** the handheld treats gestures as unavailable, as for any body neither standing nor performing
