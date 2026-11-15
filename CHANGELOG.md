@@ -143,6 +143,10 @@ All notable changes to Spooder are recorded here. The format follows [Keep a Cha
 
 - The Nano RP2040 Connect firmware (it remains in the history).
 
+### Fixed
+
+- **The `--port` path preselected again after a picked port is unplugged.** The calibrator's port selection is now one explicit state (none, preselected, picked): once the operator's picked port leaves the list, the selection falls back to a preselection at once (the `--port` path, else a Servo 2040), so the path is preselected when it appears, instead of the fallback counting as a pick for good. `desktop/CLAUDE.md` gains the explicit-state rule for the calibrator's Go code.
+
 ### Suspended
 
 - I²C body sensing (VL6180X range, LSM6DSO IMU), until the sensor boards are found.

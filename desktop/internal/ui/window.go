@@ -101,8 +101,8 @@ type window struct {
 	snap  session.Snapshot
 
 	ports      []link.PortInfo
-	portSel    int  // index into ports, -1 for none
-	picked     bool // the operator chose a port (not a preselection)
+	portSel    int        // index into ports, -1 for none; written only by choosePort
+	portChoice portChoice // how portSel was chosen; written only by choosePort
 	portsCh    chan []link.PortInfo
 	portClicks []widget.Clickable
 	portList   layout.List
@@ -183,7 +183,8 @@ func newWindow(env Env) (*window, error) {
 	th.Shaper = text.NewShaper(text.NoSystemFonts(), text.WithCollection(faces))
 	th.Face = fonts.Text
 	th.TextSize = sizeText
-	w := &window{env: env, th: th, looks: make(chan appearance.Settings, 4), portsCh: make(chan []link.PortInfo, 1), portSel: -1}
+	w := &window{env: env, th: th, looks: make(chan appearance.Settings, 4), portsCh: make(chan []link.PortInfo, 1)}
+	w.choosePort(portsListed, -1) // no ports yet: none selected
 	w.charts.window = defaultChartWindow
 	w.charts.list.Axis = layout.Vertical
 	w.editorList.Axis = layout.Vertical
@@ -224,8 +225,80 @@ func (w *window) receive() {
 	}
 }
 
-// setPorts replaces the port list, keeping the selection on the same
-// device, or preselecting the --port port, else a Servo 2040.
+// portChoice is how the selected port was chosen.
+type portChoice int
+
+const (
+	portNone        portChoice = iota // no port selected: none listed, or none qualifies
+	portPreselected                   // the app chose: the --port path, else a Servo 2040
+	portPicked                        // the operator clicked it
+)
+
+func (c portChoice) String() string {
+	switch c {
+	case portNone:
+		return "none"
+	case portPreselected:
+		return "preselected"
+	case portPicked:
+		return "picked"
+	}
+	return "unknown"
+}
+
+// portEvent is what moves the port choice.
+type portEvent int
+
+const (
+	portClicked portEvent = iota // the operator clicked a port button
+	portsListed                  // a new port list replaced w.ports
+)
+
+// choosePort is the only writer of portSel and portChoice. For
+// portClicked, i is the clicked port; for portsListed, i is where the
+// previous selection is found again in the new list (-1 if it is not).
+func (w *window) choosePort(ev portEvent, i int) {
+	switch ev {
+	case portClicked:
+		// A pick needs a listed port, and is ignored while connected.
+		if w.device == nil && i >= 0 && i < len(w.ports) {
+			w.portSel, w.portChoice = i, portPicked
+		}
+		return
+	case portsListed:
+		// The operator's pick, or while connected the current selection
+		// (whatever its state), is kept while it is listed.
+		kept := w.portChoice == portPicked || (w.device != nil && w.portChoice != portNone)
+		if kept && i >= 0 && i < len(w.ports) {
+			w.portSel = i
+			return
+		}
+		// Otherwise a preselection at once, so the --port path wins
+		// whenever it is listed.
+		if sel := w.preselect(); sel >= 0 {
+			w.portSel, w.portChoice = sel, portPreselected
+		} else {
+			w.portSel, w.portChoice = -1, portNone
+		}
+	}
+}
+
+// preselect returns the --port path's index in w.ports, else a Servo
+// 2040's, else -1.
+func (w *window) preselect() int {
+	if w.env.Port != "" {
+		for i, p := range w.ports {
+			if p.Name == w.env.Port {
+				return i
+			}
+		}
+	}
+	return link.Preselect(w.ports)
+}
+
+// setPorts replaces the port list, keeping the operator's pick (or the
+// connected selection) on the same device, or preselecting the --port
+// port, else a Servo 2040.
 func (w *window) setPorts(ports []link.PortInfo) {
 	var selected *link.PortInfo
 	if w.portSel >= 0 && w.portSel < len(w.ports) {
@@ -233,32 +306,20 @@ func (w *window) setPorts(ports []link.PortInfo) {
 		selected = &p
 	}
 	if slices.Equal(ports, w.ports) {
-		return // keep the buttons, and any press in progress on them
+		return // keep the buttons, any press in progress on them, and the choice
 	}
 	w.ports = ports
 	w.portClicks = make([]widget.Clickable, len(ports))
-	w.portSel = -1
-	// A preselection is made again, so the --port path wins once it
-	// appears; the operator's own pick, or the connected device, is kept.
-	if selected != nil && (w.picked || w.device != nil) {
+	found := -1
+	if selected != nil {
 		for i, p := range ports {
 			if link.SameDevice(*selected, p) {
-				w.portSel = i
+				found = i
 				break
 			}
 		}
 	}
-	if w.portSel < 0 && w.env.Port != "" {
-		for i, p := range ports {
-			if p.Name == w.env.Port {
-				w.portSel = i
-				break
-			}
-		}
-	}
-	if w.portSel < 0 {
-		w.portSel = link.Preselect(ports)
-	}
+	w.choosePort(portsListed, found)
 }
 
 func (w *window) loop(win *app.Window) error {
@@ -611,9 +672,8 @@ func (w *window) handle(gtx layout.Context) {
 		}
 	}
 	for i := range w.portClicks {
-		if w.portClicks[i].Clicked(gtx) && w.device == nil {
-			w.portSel = i
-			w.picked = true
+		if w.portClicks[i].Clicked(gtx) {
+			w.choosePort(portClicked, i)
 		}
 	}
 	if w.connect.Clicked(gtx) {

@@ -184,6 +184,68 @@ func TestExplicitPortIsPreselectedAheadOfAServo2040(t *testing.T) {
 	}
 }
 
+// explicitPortWindow is a window started with --port for a path that is
+// absent, listing the given ports.
+func explicitPortWindow(t *testing.T, path string, ports []link.PortInfo) (*window, *input.Router, *fakeLink) {
+	t.Helper()
+	fl := &fakeLink{}
+	w, err := newWindow(Env{
+		Session: session.New(func() time.Time { return clock }, nil),
+		Link:    fl,
+		Ports:   func() ([]link.PortInfo, error) { return ports, nil },
+		Port:    path,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.setPorts(ports)
+	router := new(input.Router)
+	frame(w, router)
+	return w, router, fl
+}
+
+// Spec "Explicit port", scenario "Picked port unplugged": once the picked
+// port is gone, the selection is a preselection again at once, so the
+// --port path is preselected when it appears.
+func TestVanishedPickFallsBackToPreselection(t *testing.T) {
+	explicit := link.PortInfo{Name: "/tmp/virtual-robot/usb"}
+	other := link.PortInfo{Name: "/dev/ttyS0"}
+	w, router, _ := explicitPortWindow(t, explicit.Name, []link.PortInfo{other, servo})
+	if w.portSel != 1 || w.portChoice != portPreselected {
+		t.Fatalf("start: selected %d, %v", w.portSel, w.portChoice)
+	}
+	w.portClicks[0].Click()
+	frame(w, router)
+	if w.portSel != 0 || w.portChoice != portPicked {
+		t.Fatalf("pick: selected %d, %v", w.portSel, w.portChoice)
+	}
+	// The picked port is unplugged; the path is still absent.
+	w.setPorts([]link.PortInfo{servo})
+	if w.portSel != 0 || w.portChoice != portPreselected {
+		t.Fatalf("after the unplug: selected %d, %v", w.portSel, w.portChoice)
+	}
+	// The path appears: it is preselected over the Servo 2040.
+	w.setPorts([]link.PortInfo{servo, explicit})
+	if w.portSel != 1 || w.portChoice != portPreselected {
+		t.Fatalf("after the path appeared: selected %d, %v", w.portSel, w.portChoice)
+	}
+}
+
+// Design D3: while connected, the current selection stays when the --port
+// path appears.
+func TestConnectedSelectionStaysWhenThePathAppears(t *testing.T) {
+	explicit := link.PortInfo{Name: "/tmp/virtual-robot/usb"}
+	w, router, fl := explicitPortWindow(t, explicit.Name, []link.PortInfo{servo})
+	click(w, router, &w.connect)
+	if len(fl.connected) != 1 || fl.connected[0] != servo {
+		t.Fatalf("connected %+v", fl.connected)
+	}
+	w.setPorts([]link.PortInfo{servo, explicit})
+	if w.portSel != 0 {
+		t.Fatalf("selected %d while connected to the Servo 2040", w.portSel)
+	}
+}
+
 // Space toggles the e-stop whether or not the app is in control, and even
 // after Tab presses (which would otherwise focus a button).
 func TestSpaceIsTheEmergencyStop(t *testing.T) {

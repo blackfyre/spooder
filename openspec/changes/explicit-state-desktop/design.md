@@ -31,6 +31,7 @@ The robot's firmware already has the rule this change brings to Go: `spooder-fir
 - While connected, the selection behaves as today: it stays while it is listed; if the connected device vanishes, the preselection rule picks a fallback, and that fallback stays when the device comes back (the link reconnects by serial number regardless of the selection). The defect is only about a pick while disconnected, so the connected case is kept, not corrected (follow-up F9).
 - After a vanished pick, the selection counts as a preselection, not as no selection: the operator sees the same fallback port as at start-up.
 - The brief's other items are independent of the port selection; this change delivers the smallest coherent part (the rule and D3 of the brief), as the workflow asks.
+- `choosePort` takes the event (`portClicked` with the clicked index, `portsListed` with the previous selection's index in the new list, -1 if gone) rather than a target state, so the guards (a pick only while disconnected; keep only a pick, or any selection while connected; else preselect) live in it and not at its callers. The window's constructor also goes through it, to start at `None`.
 - The WiFi probe defect (brief D4) is left for a follow-up because it has no requirement in the main specifications: the probe belongs to `add-wifi-drive`, whose `wifi-drive` capability is not archived yet, so a delta for it here could not be archived cleanly.
 
 ## Follow-ups
