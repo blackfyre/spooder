@@ -90,7 +90,7 @@ void setup()
   Console.printf("spooder bridge, Bluepad32 %s\n", BP32.firmwareVersion());
   display::setup(build_identity::ID); // logo first
   pinMode(SETUP_BUTTON_PIN, INPUT_PULLUP);
-  robot_link::start();
+  robot_link::start(drive_mode::Mode::Bluetooth);
   display::bootMessage("Robot link: UART1 26/27");
   BP32.setup(&onConnected, &onDisconnected);
   // No virtual devices (mouse emulation from touchpads).

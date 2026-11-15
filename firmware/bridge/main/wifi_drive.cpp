@@ -29,6 +29,33 @@ namespace
 {
 constexpr gpio_num_t SWITCH_PIN = GPIO_NUM_32; // to ground; open is Bluetooth drive
 constexpr uint32_t SWITCH_SETTLE_US = 1000;    // the pull-up charging the pin
+
+// The C mirror of drive_mode::Mode for app_main. With no default case, a new
+// drive mode fails the build (-Wswitch) until it is mirrored.
+constexpr enum bridge_boot_mode toBootMode(drive_mode::Mode m)
+{
+  switch (m)
+  {
+  case drive_mode::Mode::Bluetooth:
+    return BRIDGE_BOOT_BLUETOOTH;
+  case drive_mode::Mode::Wifi:
+    return BRIDGE_BOOT_WIFI;
+  case drive_mode::Mode::Setup:
+    return BRIDGE_BOOT_SETUP;
+  }
+  return BRIDGE_BOOT_BLUETOOTH; // unreachable: every mode is named above
+}
+
+// Each C value is pinned to its drive mode, by the conversion and by value.
+static_assert(toBootMode(drive_mode::Mode::Bluetooth) == BRIDGE_BOOT_BLUETOOTH &&
+                  (int)BRIDGE_BOOT_BLUETOOTH == (int)drive_mode::Mode::Bluetooth,
+              "BRIDGE_BOOT_BLUETOOTH mirrors drive_mode::Mode::Bluetooth");
+static_assert(toBootMode(drive_mode::Mode::Wifi) == BRIDGE_BOOT_WIFI &&
+                  (int)BRIDGE_BOOT_WIFI == (int)drive_mode::Mode::Wifi,
+              "BRIDGE_BOOT_WIFI mirrors drive_mode::Mode::Wifi");
+static_assert(toBootMode(drive_mode::Mode::Setup) == BRIDGE_BOOT_SETUP &&
+                  (int)BRIDGE_BOOT_SETUP == (int)drive_mode::Mode::Setup,
+              "BRIDGE_BOOT_SETUP mirrors drive_mode::Mode::Setup");
 } // namespace
 
 bool drive_switch_closed(void)
@@ -46,15 +73,7 @@ enum bridge_boot_mode bridge_boot_mode_select(bool setupRequested)
   io.intr_type = GPIO_INTR_DISABLE;
   gpio_config(&io);
   esp_rom_delay_us(SWITCH_SETTLE_US);
-  switch (drive_mode::select(setupRequested, drive_switch_closed()))
-  {
-  case drive_mode::Mode::Setup:
-    return BRIDGE_BOOT_SETUP;
-  case drive_mode::Mode::Wifi:
-    return BRIDGE_BOOT_WIFI;
-  default:
-    return BRIDGE_BOOT_BLUETOOTH;
-  }
+  return toBootMode(drive_mode::select(setupRequested, drive_switch_closed()));
 }
 
 // --- WiFi drive -----------------------------------------------------------------
@@ -201,10 +220,8 @@ static void driveTask(void *)
 
     static robot_link::HandheldView view;
     robot_link::handheldView(view);
+    // Its emergency stop is the one the command frames carry.
     robot_link::Status link = robot_link::status();
-    // The screen shows the e-stop the command frames carry: the bridge's
-    // own toggle or the handheld's flag.
-    link.emergencyStop = link.emergencyStop || view.emergencyStop;
 
     display::Drive drive = {};
     drive.mode = drive_mode::Mode::Wifi;
@@ -234,7 +251,7 @@ void wifi_drive_start(void)
 
   display::setup(build_identity::ID); // logo first
   pinMode(SETUP_BUTTON_PIN, INPUT_PULLUP);
-  robot_link::startHandheld(); // command frames from here on
+  robot_link::start(drive_mode::Mode::Wifi); // command frames from here on
   display::bootMessage("Robot link: UART1 26/27");
 
   uint8_t mac[6];

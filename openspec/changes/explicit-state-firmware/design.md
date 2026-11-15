@@ -66,6 +66,7 @@ The function statics become a small pure state machine next to the decoder it se
 - `add-wifi-drive` is not archived, so its `wifi-drive` capability is not in `openspec/specs/`; this change states the e-stop rule against `status-display` (the screen) and leaves `wifi-drive` alone. Its existing e-stop requirement is unchanged and is what `commandStop` implements.
 - Reflashing only the bridge is enough: no frame changes, so `protocol::VERSION` stays 3.
 - The brief's line numbers were checked at `631491b` and match.
+- D1's helpers are `relays()` (WiFi drive) and `syncsCalibration()` (setup mode: it both sends calibration sets and follows the reports, so it is named for both); `portalRequestMode`'s parameter is renamed `requested` so it does not shadow the file-scope `mode`.
 
 ## Risks / Trade-offs
 

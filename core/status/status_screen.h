@@ -104,7 +104,7 @@ struct Inputs
 {
   bool gamepadConnected;
   uint8_t gamepadBattery; // Bluepad32's level, 0 = not reported
-  bool emergencyStop;     // the bridge's own e-stop toggle
+  bool emergencyStop;     // the stop the command frames carry (handheld_controller::commandStop)
   gamepad_mapping::Desired desired;
   bool telemetryFresh; // robot values are current only while fresh
   protocol::Telemetry telemetry;

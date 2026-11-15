@@ -25,6 +25,9 @@ extern "C"
 {
 #endif
 
+// The C mirror of drive_mode::Mode (core/wifi_drive/drive_mode.h), for
+// app_main: one value per drive mode, equal to it, pinned by static_assert
+// in wifi_drive.cpp.
 enum bridge_boot_mode
 {
   BRIDGE_BOOT_BLUETOOTH,

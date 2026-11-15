@@ -351,7 +351,7 @@ void setup_mode_start(void)
   access_point::joinCode(ssid, password, joinCode, sizeof(joinCode));
 
   display::setupStart(joinCode);
-  robot_link::startPortal();
+  robot_link::start(drive_mode::Mode::Setup);
 
   WiFi.persistent(false); // nothing of the WiFi configuration goes to flash
   WiFi.mode(WIFI_AP);

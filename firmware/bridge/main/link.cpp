@@ -33,17 +33,55 @@ static bool haveReport;
 static uint32_t reportAtMs;
 static protocol::CalibrationReport report;
 static supply_band::Limits supplyLimits;
-// Setup mode only. portalMode and handheldMode are set before the task
-// starts and never change afterwards.
-static bool portalMode;
+// The boot mode: set by start() before the task starts and never changed
+// afterwards, so it needs no lock.
+static drive_mode::Mode mode;
+// Setup mode only.
 static portal_controller::Controller portal;
 static calibration_sync::Sync calibration;
 // WiFi drive only.
-static bool handheldMode;
 static handheld_controller::Controller handheld;
 static relay_queue::Queue relay;
 
+// Owned by the link task.
 static protocol::Decoder decoder;
+static protocol::RxGap rxGap;
+
+// WiFi drive relays every frame the link decodes to the handheld.
+static bool relays()
+{
+  switch (mode)
+  {
+  case drive_mode::Mode::Bluetooth:
+  case drive_mode::Mode::Setup:
+    return false;
+  case drive_mode::Mode::Wifi:
+    return true;
+  }
+  return false; // unreachable: every mode is named above
+}
+
+// Setup mode sends the portal's calibration edits and follows the reports.
+static bool syncsCalibration()
+{
+  switch (mode)
+  {
+  case drive_mode::Mode::Bluetooth:
+  case drive_mode::Mode::Wifi:
+    return false;
+  case drive_mode::Mode::Setup:
+    return true;
+  }
+  return false; // unreachable: every mode is named above
+}
+
+// The emergency stop the command frames carry (handheld_controller::
+// commandStop). The one place the link computes it, for the frames and for
+// status(), so both read the same rule. Call with the lock held.
+static bool commandedStop()
+{
+  return handheld_controller::commandStop(mode, handheld, emergencyStop);
+}
 
 static void initialDesired()
 {
@@ -75,15 +113,19 @@ static void sendCommand(uint8_t seq)
   // stalled web server cannot keep the controller connected; in WiFi drive
   // the handheld's liveness, so a stalled UDP task cannot either. The time
   // is taken inside the lock, so no poll or datagram can be stamped after it.
-  bool stop = emergencyStop;
-  if (portalMode)
-    desired = portal_controller::desired(portal, millis());
-  else if (handheldMode)
+  // In Bluetooth drive loop() hands the desired state over (setDesired).
+  switch (mode)
   {
+  case drive_mode::Mode::Bluetooth:
+    break;
+  case drive_mode::Mode::Setup:
+    desired = portal_controller::desired(portal, millis());
+    break;
+  case drive_mode::Mode::Wifi:
     desired = handheld_controller::desired(handheld, millis());
-    stop = stop || handheld_controller::emergencyStop(handheld);
+    break;
   }
-  protocol::Command c = gamepad_mapping::toCommand(desired, stop);
+  protocol::Command c = gamepad_mapping::toCommand(desired, commandedStop());
   portEXIT_CRITICAL(&lock);
   uint8_t frame[protocol::MAX_FRAME_SIZE];
   int n = protocol::encodeCommand(c, seq, frame);
@@ -111,7 +153,7 @@ static void takeFrames(uint32_t now)
   protocol::Frame f;
   while (decoder.next(f))
   {
-    if (handheldMode)
+    if (relays())
     {
       // Every valid frame, byte for byte, while a session is live. A full
       // relay drops the frame (counted): this never waits.
@@ -133,7 +175,7 @@ static void takeFrames(uint32_t now)
       report = f.calibrationReport;
       haveReport = true;
       reportAtMs = now;
-      if (portalMode)
+      if (syncsCalibration())
         calibration_sync::onReport(calibration, f.calibrationReport);
       portEXIT_CRITICAL(&lock);
     }
@@ -152,10 +194,8 @@ static void takeFrames(uint32_t now)
 
 static void receive()
 {
-  static uint32_t lastByteMs = 0;
-  static bool idleHandled = true;
   uint32_t now = millis();
-  if (handheldMode)
+  if (relays())
   {
     // Before the drain: the bytes waiting arrived since the previous poll.
     portENTER_CRITICAL(&lock);
@@ -163,11 +203,7 @@ static void receive()
     portEXIT_CRITICAL(&lock);
   }
   int avail = Serial1.available();
-  if (avail > 0)
-  {
-    lastByteMs = now;
-    idleHandled = false;
-  }
+  bool idle = protocol::update(rxGap, avail > 0, now, RX_IDLE_MS);
   // Decode after every byte: the decoder holds one frame at most, and a poll
   // can bring a telemetry frame and a calibration report together.
   while (avail-- > 0)
@@ -175,15 +211,14 @@ static void receive()
     decoder.push((uint8_t)Serial1.read());
     takeFrames(now);
   }
-  if (!idleHandled && now - lastByteMs >= RX_IDLE_MS)
+  if (idle)
   {
     decoder.idle();
-    idleHandled = true;
     takeFrames(now);
   }
 
   portENTER_CRITICAL(&lock);
-  if (handheldMode)
+  if (relays())
     relay_queue::endPoll(relay, decoder.pending() == 0);
   validFrames = decoder.validFrames();
   discardedFrames = decoder.discardedFrames();
@@ -198,7 +233,7 @@ static void linkTask(void *)
   {
     sampleEmergencyStop();
     sendCommand(seq++);
-    if (portalMode)
+    if (syncsCalibration())
       sendCalibration(seq++, millis());
     receive();
     // Fixed-rate: a late wake-up does not shift later frames.
@@ -218,24 +253,9 @@ static void startTask()
   xTaskCreatePinnedToCore(linkTask, "link", 4096, nullptr, 5, nullptr, ARDUINO_RUNNING_CORE);
 }
 
-void start()
+void start(drive_mode::Mode bootMode)
 {
-  portalMode = false;
-  handheldMode = false;
-  startTask();
-}
-
-void startPortal()
-{
-  portalMode = true;
-  handheldMode = false;
-  startTask();
-}
-
-void startHandheld()
-{
-  portalMode = false;
-  handheldMode = true;
+  mode = bootMode;
   startTask();
 }
 
@@ -254,7 +274,7 @@ Status status()
   s.telemetryFresh = haveTelemetry && nowMs - telemetryAtMs <= TELEMETRY_TIMEOUT_MS;
   s.telemetryAgeMs = haveTelemetry ? nowMs - telemetryAtMs : 0;
   s.telemetry = telemetry;
-  s.emergencyStop = emergencyStop;
+  s.emergencyStop = commandedStop();
   s.validFrames = validFrames;
   s.discardedFrames = discardedFrames;
   s.haveReport = haveReport;
@@ -272,10 +292,10 @@ void portalPoll()
   portEXIT_CRITICAL(&lock);
 }
 
-bool portalRequestMode(RequestedMode mode)
+bool portalRequestMode(RequestedMode requested)
 {
   portENTER_CRITICAL(&lock);
-  bool taken = portal_controller::requestMode(portal, mode, millis());
+  bool taken = portal_controller::requestMode(portal, requested, millis());
   portEXIT_CRITICAL(&lock);
   return taken;
 }
@@ -348,7 +368,6 @@ void handheldView(HandheldView &out)
   handheld_controller::Controller c = handheld;
   out.state = handheld_controller::state(c, nowMs);
   out.desired = handheld_controller::desired(c, nowMs);
-  out.emergencyStop = handheld_controller::emergencyStop(c);
   for (int i = 0; i < handheld_controller::OUTCOME_COUNT; i++)
     out.counts[i] = handheld_controller::count(c, (handheld_controller::Outcome)i);
   out.relayDropped = relay_queue::dropped(relay);

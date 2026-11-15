@@ -33,18 +33,28 @@ int app_main(void)
   // Spooder: the boot mode is decided once, before either radio starts.
   // Setup mode and WiFi drive skip BTstack and Bluepad32 entirely, so
   // Bluetooth never starts; the bridge leaves either only by restarting.
+  // With no default case, a new boot mode fails the build (-Wswitch) until
+  // it has a path here. Bluetooth drive breaks out to BTstack and Bluepad32
+  // below.
   enum bridge_boot_mode boot = bridge_boot_mode_select(setup_mode_requested());
-  if (boot != BRIDGE_BOOT_BLUETOOTH)
+  switch (boot)
   {
-    if (boot == BRIDGE_BOOT_SETUP)
-      setup_mode_start();
-    else
-      wifi_drive_start();
+  case BRIDGE_BOOT_SETUP:
+    setup_mode_start();
 #if !CONFIG_AUTOSTART_ARDUINO
     return 0;
 #else
     return;
 #endif
+  case BRIDGE_BOOT_WIFI:
+    wifi_drive_start();
+#if !CONFIG_AUTOSTART_ARDUINO
+    return 0;
+#else
+    return;
+#endif
+  case BRIDGE_BOOT_BLUETOOTH:
+    break;
   }
 
   // hci_dump_open(NULL, HCI_DUMP_STDOUT);

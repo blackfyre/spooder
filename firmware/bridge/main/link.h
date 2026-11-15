@@ -5,17 +5,24 @@
 // A dedicated task sends a command frame every 20 ms and decodes telemetry,
 // so screen redraws in loop() cannot delay command frames.
 //
-// In setup mode (startPortal) the task takes its desired state from the
+// The boot mode (drive_mode::Mode), given to start(), decides where the
+// commands come from. In Bluetooth drive loop() hands them over with
+// setDesired().
+//
+// In setup mode the task takes its desired state from the
 // portal controller, evaluated at each period so a lapsed portal heartbeat
 // counts at once, and sends at most one calibration set per period after the
 // command frame. The HTTP handlers reach both only through the portal
 // functions below.
 //
-// In WiFi drive (startHandheld) the task takes its desired state from the
-// handheld controller, judged at each period so a stalled UDP task counts
-// as a lapse at once, ORs the handheld's e-stop flag with its own toggle,
-// and queues every frame it decodes for the relay to the handheld. The UDP
+// In WiFi drive the task takes its desired state from the handheld
+// controller, judged at each period so a stalled UDP task counts as a lapse
+// at once, and queues every frame it decodes for the relay to the handheld. The UDP
 // task reaches both only through the handheld functions below.
+//
+// The emergency stop the frames carry follows one rule for every mode
+// (handheld_controller::commandStop): the GPIO35 toggle, and in WiFi drive
+// also the handheld's flag. status() reports that same stop.
 #include <stdint.h>
 #include "gamepad_mapping/gamepad_mapping.h"
 #include "protocol/protocol.h"
@@ -34,7 +41,9 @@ struct Status
   bool telemetryFresh;           // a valid telemetry frame within the timeout
   protocol::Telemetry telemetry; // the newest one (meaningful when fresh)
   uint32_t telemetryAgeMs;       // since the newest one arrived
-  bool emergencyStop;            // the bridge's own e-stop toggle
+  // The emergency stop the command frames carry (handheld_controller::
+  // commandStop): the GPIO35 toggle, in WiFi drive or the handheld's flag.
+  bool emergencyStop;
   uint32_t validFrames;
   uint32_t discardedFrames;
   // The newest calibration report (the robot sends them in Calibrate). The
@@ -49,22 +58,14 @@ struct Status
 };
 
 /**
- * @brief Starts UART1 and the link task. Until the first setDesired(), frames
- * request Sleep with no controller connected.
- */
-void start();
-
-/**
- * @brief Starts UART1 and the link task in setup mode: commands come from
+ * @brief Starts UART1 and the link task in boot mode @p mode, once. In
+ * Bluetooth drive commands come from setDesired(); until the first, frames
+ * request Sleep with no controller connected. In setup mode they come from
  * the portal controller, and calibration edits go out as calibration sets.
+ * In WiFi drive they come from the handheld controller, and the robot's
+ * frames are queued for the relay.
  */
-void startPortal();
-
-/**
- * @brief Starts UART1 and the link task in WiFi drive: commands come from
- * the handheld controller, and the robot's frames are queued for the relay.
- */
-void startHandheld();
+void start(drive_mode::Mode mode);
 
 /**
  * @brief Hands the newest desired state to the link task (normal operation).
@@ -133,7 +134,6 @@ struct HandheldView
 {
   handheld_controller::State state;
   gamepad_mapping::Desired desired; // what the command frames request
-  bool emergencyStop;               // the handheld's e-stop flag
   uint32_t counts[handheld_controller::OUTCOME_COUNT];
   uint32_t relayDropped; // robot frames dropped because the relay was full
 };
@@ -144,7 +144,8 @@ struct HandheldView
 void handheldView(HandheldView &out);
 
 /**
- * @brief The link state now. Freshness is judged inside the lock, against a
+ * @brief The link state now, one snapshot under the lock: the emergency
+ * stop with it is the one the next command frame carries. Freshness is judged inside the lock, against a
  * time taken there, so a telemetry frame stamped by the link task between
  * the caller's clock read and this call cannot look stale.
  */
