@@ -45,7 +45,7 @@ Each is its own change, under the rule this change adds:
 - **Text pane (F6).** `anchored`, `dragging`, `held`, `atEnd`, `haveBase`, `held` written in four places: {Following, Dragging, Holding}.
 - **Calibration table (F7).** `haveReport`, `haveLastID`, `seeded`, `pending` nil plus `sent`.
 - **Export pane (F8).** `plan`, `status`, `failed`: an `exportPhase`.
-- **Connected device (F9).** `w.device` duplicating the link lifecycle: derive it from the link status.
+- **Connected device (F9).** `w.device` duplicating the link lifecycle: derive it from the link status. Disconnecting does not re-run the preselection, so a selection kept only because the app was connected stays after Disconnect even when the `--port` path is listed (pre-existing, found in this change's review); a disconnect event in `choosePort` closes it.
 - **Remaining UI flags (F10).** `copied`/`noticeAt`/`notice` zero values; the CSV save's `saving` + `done`; `hoverOn`/`hoverAt`/`hoverT`; the console printer's `printedAny`/`lastKey` not reset on reconnect.
 
 ## Risks
