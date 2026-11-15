@@ -1,6 +1,7 @@
 #include "link.h"
 
 #include <Arduino.h>
+#include <stdlib.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "setup/portal_controller.h"
@@ -58,7 +59,7 @@ static bool relays()
   case drive_mode::Mode::Wifi:
     return true;
   }
-  return false; // unreachable: every mode is named above
+  abort(); // unreachable: every mode is named above; no fallback mode
 }
 
 // Setup mode sends the portal's calibration edits and follows the reports.
@@ -72,7 +73,7 @@ static bool syncsCalibration()
   case drive_mode::Mode::Setup:
     return true;
   }
-  return false; // unreachable: every mode is named above
+  abort(); // unreachable: every mode is named above; no fallback mode
 }
 
 // The emergency stop the command frames carry (handheld_controller::

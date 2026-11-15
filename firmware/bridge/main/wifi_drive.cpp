@@ -9,6 +9,7 @@
 #include <esp_rom_sys.h>
 #include <lwip/sockets.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -43,7 +44,7 @@ constexpr enum bridge_boot_mode toBootMode(drive_mode::Mode m)
   case drive_mode::Mode::Setup:
     return BRIDGE_BOOT_SETUP;
   }
-  return BRIDGE_BOOT_BLUETOOTH; // unreachable: every mode is named above
+  abort(); // unreachable: every mode is named above; no fallback boot mode
 }
 
 // Each C value is pinned to its drive mode, by the conversion and by value.

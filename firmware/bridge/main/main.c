@@ -5,6 +5,7 @@
 #include "sdkconfig.h"
 
 #include <stddef.h>
+#include <stdlib.h>
 
 // BTstack related
 #include <btstack_port_esp32.h>
@@ -34,8 +35,9 @@ int app_main(void)
   // Setup mode and WiFi drive skip BTstack and Bluepad32 entirely, so
   // Bluetooth never starts; the bridge leaves either only by restarting.
   // With no default case, a new boot mode fails the build (-Wswitch) until
-  // it has a path here. Bluetooth drive breaks out to BTstack and Bluepad32
-  // below.
+  // it has a path here. Only Bluetooth drive goes on to BTstack and
+  // Bluepad32 below; a value no case names (memory corruption) aborts, so the
+  // bridge restarts instead of falling into a radio path.
   enum bridge_boot_mode boot = bridge_boot_mode_select(setup_mode_requested());
   switch (boot)
   {
@@ -54,8 +56,11 @@ int app_main(void)
     return;
 #endif
   case BRIDGE_BOOT_BLUETOOTH:
-    break;
+    goto bluetooth_drive;
   }
+  abort();
+
+bluetooth_drive:
 
   // hci_dump_open(NULL, HCI_DUMP_STDOUT);
 

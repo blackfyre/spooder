@@ -42,7 +42,7 @@ struct Status
   protocol::Telemetry telemetry; // the newest one (meaningful when fresh)
   uint32_t telemetryAgeMs;       // since the newest one arrived
   // The emergency stop the command frames carry (handheld_controller::
-  // commandStop): the GPIO35 toggle, in WiFi drive or the handheld's flag.
+  // commandStop): the GPIO35 toggle and, in WiFi drive, the handheld's flag.
   bool emergencyStop;
   uint32_t validFrames;
   uint32_t discardedFrames;
