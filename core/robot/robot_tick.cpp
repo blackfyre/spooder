@@ -299,12 +299,26 @@ static void reportFaults(uint16_t faults, const protection::Reading &r, Hardware
       logf(hw, "fault latched: %s (%.2f A, %.2f V)\n", faultName(bit), r.currentA, r.voltageV);
 }
 
+static const char *runStateName(protection::RunState state)
+{
+  switch (state)
+  {
+  case protection::RunState::NotStarted:
+    return "not started";
+  case protection::RunState::Running:
+    return "running";
+  case protection::RunState::Stopped:
+    return "stopped";
+  }
+  return "?";
+}
+
 static void reportStatus(const RobotState &s, const protection::Reading &r, const protection::Result &p, bool outputsOn,
-                         bool bodyRunning, bool simulated, Hardware &hw)
+                         bool simulated, Hardware &hw)
 {
   logf(hw, "supply %.2f A (avg %.2f A), %.2f V%s; output %s; body %s, mode %d; faults 0x%02x%s\n", r.currentA,
        p.averageCurrentA, r.voltageV, p.supplyValid ? "" : " (out of range or absent)", outputsOn ? "on" : "off",
-       bodyRunning ? "running" : "stopped", (int)s.body.mode, p.faults, simulated ? "; SIMULATION" : "");
+       runStateName(s.supervisor.runState), (int)s.body.mode, p.faults, simulated ? "; SIMULATION" : "");
 }
 
 static void reportBench(BenchEvent event, Hardware &hw)
@@ -562,15 +576,19 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
     hw.applyServos(limitOutput(s, elapsedMs), s.applied, s.legsOn);
   }
 
-  hw.showLeds(ledState(s, now, prot, run.runBody, reading.currentA, input.source, in.bench.indication));
+  // The run state after this tick's supervise: the flag, the gesture, the
+  // LEDs and the status line all derive from it.
+  const bool running = s.supervisor.runState == protection::RunState::Running;
+  hw.showLeds(ledState(s, now, prot, running, reading.currentA, input.source, in.bench.indication));
 
   if (links)
   {
     if (++s.telemetryTick >= TELEMETRY_EVERY_TICKS)
     {
       s.telemetryTick = 0;
-      uint8_t flags = input.telemetryFlags | (in.bench.simulated ? protocol::TELEMETRY_SIMULATED : 0);
-      sendTelemetry(s, reading, prot, hw.servosOn(), flags, run.runBody ? body::playingGesture(s.body) : 0, hw);
+      uint8_t flags = input.telemetryFlags | (in.bench.simulated ? protocol::TELEMETRY_SIMULATED : 0) |
+                      (running ? 0 : protocol::TELEMETRY_BODY_STOPPED);
+      sendTelemetry(s, reading, prot, hw.servosOn(), flags, running ? body::playingGesture(s.body) : 0, hw);
     }
     if (s.telemetryTick == POSE_TICK)
       sendPose(s, link_receiver::makePose(s.body, hw.servoPulses(), hw.servosOn()), hw);
@@ -590,7 +608,7 @@ void tick(RobotState &s, const Inputs &in, uint32_t now, Hardware &hw)
 
   if (input.printReadings || now - s.lastStatusMs >= STATUS_PERIOD_MS)
   {
-    reportStatus(s, reading, prot, hw.servosOn(), run.runBody, in.bench.simulated, hw);
+    reportStatus(s, reading, prot, hw.servosOn(), in.bench.simulated, hw);
     reportBackstop(s, hw);
     s.lastStatusMs = now;
   }

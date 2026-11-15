@@ -11,6 +11,9 @@
 //   starting drives the servos, so Sleep must never start a stopped body.
 // - Faults that only force Sleep keep the body running; it folds and wakes
 //   through the normal Sleep path once a new request arrives.
+// The run state is NotStarted from power-up until the body first starts
+// (a fault before then leaves it NotStarted), Running while it runs, and
+// Stopped from the tick an inhibiting fault stops it until it restarts.
 // Hardware-free: compiled for the board and for host tests.
 #include <stdint.h>
 #include "movement/movement_command.h"
@@ -20,17 +23,24 @@
 namespace protection
 {
 
+enum class RunState : uint8_t
+{
+  NotStarted, // from power-up until the body first starts
+  Running,
+  Stopped, // stopped by a fault that inhibits output, until it restarts
+};
+
 struct Supervisor
 {
   ResumeGate gate = {};
-  bool bodyRunning = false;
+  RunState runState = RunState::NotStarted;
 };
 
 struct Decision
 {
   bool startBody;     // initialise the body (boot sequence) this tick
   bool stopBody;      // the body stopped this tick: switch servo output off
-  bool runBody;       // step the body this tick
+  bool runBody;       // step the body this tick (runState == Running)
   RequestedMode mode; // mode to give the body
 };
 

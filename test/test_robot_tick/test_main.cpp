@@ -128,6 +128,11 @@ static uint32_t tickUs;               // the previous tick's working time each t
 static bool usbHost;                  // a host has the USB console open
 static robot_tick::BenchInputs bench; // this tick's bench simulation input (event: once)
 
+static bool bodyRunning()
+{
+  return state.supervisor.runState == protection::RunState::Running;
+}
+
 void setUp()
 {
   state = RobotState();
@@ -250,7 +255,7 @@ static void standOnUsb()
   tick(); // the first frame after a gap only sets the counter baselines
   request(usb(), RequestedMode::Stand);
   ticks(100); // 2 s: settle, Initialise, Stand
-  TEST_ASSERT_TRUE(state.supervisor.bodyRunning);
+  TEST_ASSERT_TRUE(bodyRunning());
   TEST_ASSERT_TRUE(board.on);
 }
 
@@ -734,7 +739,7 @@ void test_stale_command_never_starts_the_body()
   ticks(60); // 1.2 s: the command is now older than COMMAND_TIMEOUT_MS
   supply = {0.5f, 6.0f};
   ticks(100);
-  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  TEST_ASSERT_FALSE(bodyRunning());
   TEST_ASSERT_EQUAL(0, board.applies);
   TEST_ASSERT_FALSE(has(board.logs, "output allowed"));
 }
@@ -785,10 +790,156 @@ void test_clear_does_nothing_while_the_stop_is_signalled_and_restart_needs_a_req
   usb().clearCounter++;
   ticks(30);
   TEST_ASSERT_EQUAL_HEX16(0, state.protection.faults);
-  TEST_ASSERT_FALSE(state.supervisor.bodyRunning); // the same Stand request again is not a new one
+  TEST_ASSERT_FALSE(bodyRunning()); // the same Stand request again is not a new one
   request(usb(), RequestedMode::Stand);
   ticks(2);
-  TEST_ASSERT_TRUE(state.supervisor.bodyRunning);
+  TEST_ASSERT_TRUE(bodyRunning());
+}
+
+// --- body run state (body-stopped-telemetry) --------------------------------------
+
+static bool bodyStopped(const protocol::Frame &f)
+{
+  return (f.telemetry.flags & protocol::TELEMETRY_BODY_STOPPED) != 0;
+}
+
+// The status lines logged since the last clear of the logs.
+static std::vector<std::string> statusLines()
+{
+  std::vector<std::string> v;
+  for (const std::string &l : board.logs)
+    if (l.compare(0, 7, "supply ") == 0)
+      v.push_back(l);
+  return v;
+}
+
+// Ticks until the next telemetry frame has gone out on both links.
+static void untilTelemetry()
+{
+  int before = countOf(Link::Bridge, protocol::FrameType::Telemetry);
+  for (int i = 0; i < TELEMETRY_EVERY_TICKS && countOf(Link::Bridge, protocol::FrameType::Telemetry) == before; i++)
+    tick();
+  TEST_ASSERT_EQUAL(before + 1, countOf(Link::Bridge, protocol::FrameType::Telemetry));
+}
+
+void test_body_stopped_before_the_first_start()
+{
+  ticks(STATUS_PERIOD_MS / LOOP_PERIOD_MS + 1); // the supply settles; no request
+  TEST_ASSERT_TRUE(state.supervisor.runState == protection::RunState::NotStarted);
+  for (int l = 0; l < LINK_COUNT; l++)
+  {
+    TEST_ASSERT_TRUE(countOf((Link)l, protocol::FrameType::Telemetry) > 0);
+    for (const SentFrame &f : board.frames[l])
+      if (f.frame.type == protocol::FrameType::Telemetry)
+        TEST_ASSERT_TRUE(bodyStopped(f.frame));
+  }
+  TEST_ASSERT_FALSE(board.leds.bodyRunning);
+  std::vector<std::string> lines = statusLines();
+  TEST_ASSERT_TRUE(lines.size() >= 1);
+  for (const std::string &l : lines)
+    TEST_ASSERT_TRUE(l.find("; body not started, mode ") != std::string::npos);
+}
+
+void test_emergency_stop_while_walking_sets_body_stopped_until_the_restart()
+{
+  standOnUsb();
+  usb().translateY = 100;
+  usb().gait = (uint8_t)gait::Gait::Ripple;
+  request(usb(), RequestedMode::Walk);
+  ticks(100);
+  TEST_ASSERT_TRUE(state.body.mode == body::Mode::Walk);
+  TEST_ASSERT_TRUE(state.body.currentGait == gait::Gait::Ripple);
+  for (int l = 0; l < LINK_COUNT; l++)
+    TEST_ASSERT_FALSE(bodyStopped(*lastOf((Link)l, protocol::FrameType::Telemetry)));
+  TEST_ASSERT_TRUE(board.leds.bodyRunning);
+  board.logs.clear();
+  ticks(STATUS_PERIOD_MS / LOOP_PERIOD_MS + 1);
+  TEST_ASSERT_TRUE(statusLines().back().find("; body running, mode ") != std::string::npos);
+
+  usb().estop = true;
+  untilTelemetry();
+  TEST_ASSERT_TRUE(state.supervisor.runState == protection::RunState::Stopped);
+  for (int l = 0; l < LINK_COUNT; l++)
+  {
+    const protocol::Frame *t = lastOf((Link)l, protocol::FrameType::Telemetry);
+    TEST_ASSERT_TRUE(bodyStopped(*t));
+    TEST_ASSERT_EQUAL(0, t->telemetry.gesture);
+    TEST_ASSERT_EQUAL((int)body::Mode::Walk, t->telemetry.bodyMode);
+    TEST_ASSERT_EQUAL((int)gait::Gait::Ripple, t->telemetry.gait);
+  }
+  TEST_ASSERT_FALSE(board.leds.bodyRunning);
+  board.logs.clear();
+  ticks(STATUS_PERIOD_MS / LOOP_PERIOD_MS + 1);
+  TEST_ASSERT_TRUE(statusLines().back().find("; body stopped, mode ") != std::string::npos);
+
+  // Cleared, without a new mode request: still stopped on every frame.
+  usb().estop = false;
+  usb().clearCounter++;
+  ticks(30);
+  TEST_ASSERT_EQUAL_HEX16(0, state.protection.faults);
+  size_t from[LINK_COUNT];
+  for (int l = 0; l < LINK_COUNT; l++)
+    from[l] = board.frames[l].size();
+  ticks(50);
+  for (int l = 0; l < LINK_COUNT; l++)
+    for (size_t i = from[l]; i < board.frames[l].size(); i++)
+      if (board.frames[l][i].frame.type == protocol::FrameType::Telemetry)
+      {
+        TEST_ASSERT_TRUE(bodyStopped(board.frames[l][i].frame));
+        TEST_ASSERT_EQUAL_HEX16(0, board.frames[l][i].frame.telemetry.faults);
+      }
+  TEST_ASSERT_FALSE(board.leds.bodyRunning);
+
+  // The restart: the first telemetry frame from the restart tick on is clear.
+  for (int l = 0; l < LINK_COUNT; l++)
+    from[l] = board.frames[l].size();
+  board.logs.clear();
+  request(usb(), RequestedMode::Walk);
+  int restartTick = -1;
+  for (int i = 0; i < 10 && restartTick < 0; i++)
+  {
+    tick();
+    if (has(board.logs, "output allowed: starting movement"))
+      restartTick = board.tickNo;
+  }
+  TEST_ASSERT_TRUE(restartTick > 0);
+  untilTelemetry();
+  for (int l = 0; l < LINK_COUNT; l++)
+  {
+    const protocol::Frame *first = nullptr;
+    for (size_t i = from[l]; i < board.frames[l].size() && !first; i++)
+      if (board.frames[l][i].frame.type == protocol::FrameType::Telemetry && board.frames[l][i].tick >= restartTick)
+        first = &board.frames[l][i].frame;
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_FALSE(bodyStopped(*first));
+  }
+  TEST_ASSERT_TRUE(board.leds.bodyRunning);
+}
+
+void test_sleep_only_fault_keeps_body_stopped_clear()
+{
+  standOnUsb();
+  usb().translateY = 100;
+  request(usb(), RequestedMode::Walk);
+  ticks(50);
+  TEST_ASSERT_TRUE(state.body.mode == body::Mode::Walk);
+  size_t from[LINK_COUNT];
+  for (int l = 0; l < LINK_COUNT; l++)
+    from[l] = board.frames[l].size();
+  supply = {0.5f, 5.0f}; // below minV, above the brown-out voltage
+  ticks(150);
+  TEST_ASSERT_TRUE(state.protection.faults & protection::UNDERVOLTAGE);
+  TEST_ASSERT_TRUE(bodyRunning());
+  bool sawSleep = false;
+  for (int l = 0; l < LINK_COUNT; l++)
+    for (size_t i = from[l]; i < board.frames[l].size(); i++)
+      if (board.frames[l][i].frame.type == protocol::FrameType::Telemetry)
+      {
+        TEST_ASSERT_FALSE(bodyStopped(board.frames[l][i].frame));
+        sawSleep |= board.frames[l][i].frame.telemetry.bodyMode == (uint8_t)body::Mode::Sleep;
+      }
+  TEST_ASSERT_TRUE(sawSleep);
+  TEST_ASSERT_TRUE(state.body.mode == body::Mode::Sleep);
 }
 
 // --- arbitration -------------------------------------------------------------------
@@ -1030,7 +1181,7 @@ void test_serial_input_mode()
     in.serial.printReadings = i == 10;
     robot_tick::tick(state, in, now, board);
   }
-  TEST_ASSERT_TRUE(state.supervisor.bodyRunning);
+  TEST_ASSERT_TRUE(bodyRunning());
   TEST_ASSERT_TRUE(board.leds.input == led_pattern::Input::Serial);
   TEST_ASSERT_EQUAL(0, (int)board.frames[0].size() + (int)board.frames[1].size());
   int n = 0;
@@ -1083,7 +1234,7 @@ void test_fault_mid_gesture_stops_reporting_the_gesture()
   bridge().active = true;
   bridge().estop = true; // the e-stop stops the body mid-gesture
   ticks(10);
-  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  TEST_ASSERT_FALSE(bodyRunning());
   const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
   TEST_ASSERT_NOT_NULL(t);
   TEST_ASSERT_EQUAL(0, t->telemetry.gesture);
@@ -1099,7 +1250,7 @@ void test_emergency_stop_preempts_held_ball_in_the_arrival_tick()
   bridge().active = true;
   bridge().estop = true;
   tick();
-  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  TEST_ASSERT_FALSE(bodyRunning());
   TEST_ASSERT_TRUE(board.inhibited);
   TEST_ASSERT_FALSE(board.on);
   TEST_ASSERT_TRUE(state.body.perform.stage == gesture::Stage::Holding);
@@ -1187,7 +1338,7 @@ static void simulateWithStandHeld()
   tick();
   request(usb(), RequestedMode::Stand);
   ticks(20);
-  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  TEST_ASSERT_FALSE(bodyRunning());
   enterSimulation();
 }
 
@@ -1197,7 +1348,7 @@ static void standInSimulation()
   ticks(30);
   request(usb(), RequestedMode::Stand);
   ticks(100);
-  TEST_ASSERT_TRUE(state.supervisor.bodyRunning);
+  TEST_ASSERT_TRUE(bodyRunning());
   TEST_ASSERT_EQUAL((int)body::Mode::Stand, (int)state.body.mode);
 }
 
@@ -1239,10 +1390,10 @@ void test_simulation_accepts_the_modelled_supply_after_500_ms_and_waits_for_a_re
   TEST_ASSERT_TRUE(board.leds.supplyAccepted);
   // The Stand held from before the entry starts nothing.
   ticks(20);
-  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  TEST_ASSERT_FALSE(bodyRunning());
   request(usb(), RequestedMode::Stand);
   tick();
-  TEST_ASSERT_TRUE(state.supervisor.bodyRunning);
+  TEST_ASSERT_TRUE(bodyRunning());
   TEST_ASSERT_TRUE(has(board.logs, "output allowed: starting movement"));
   ticks(100);
   TEST_ASSERT_EQUAL((int)body::Mode::Stand, (int)state.body.mode);
@@ -1276,7 +1427,7 @@ void test_simulation_supply_fault_latches_stops_the_body_and_survives_a_clear()
   bench.supplyFault = true; // a real supply measured
   tick();
   TEST_ASSERT_TRUE(state.protection.faults & protection::SIMULATION_SUPPLY);
-  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  TEST_ASSERT_FALSE(bodyRunning());
   TEST_ASSERT_TRUE(has(board.logs, "fault latched: simulation supply"));
   TEST_ASSERT_TRUE(has(board.logs, "movement stopped"));
   TEST_ASSERT_FALSE(board.model().on);
@@ -1286,7 +1437,7 @@ void test_simulation_supply_fault_latches_stops_the_body_and_survives_a_clear()
   request(usb(), RequestedMode::Stand);
   ticks(50);
   TEST_ASSERT_TRUE(state.protection.faults & protection::SIMULATION_SUPPLY);
-  TEST_ASSERT_FALSE(state.supervisor.bodyRunning);
+  TEST_ASSERT_FALSE(bodyRunning());
   const protocol::Frame *t = lastOf(Link::Usb, protocol::FrameType::Telemetry);
   TEST_ASSERT_EQUAL_HEX16(protection::SIMULATION_SUPPLY, t->telemetry.faults & protection::SIMULATION_SUPPLY);
   TEST_ASSERT_FALSE(t->telemetry.outputsOn);
@@ -1370,6 +1521,9 @@ int main()
   RUN_TEST(test_command_going_stale_puts_the_body_to_sleep);
   RUN_TEST(test_emergency_stop_acts_in_the_tick_its_frame_arrives);
   RUN_TEST(test_clear_does_nothing_while_the_stop_is_signalled_and_restart_needs_a_request);
+  RUN_TEST(test_body_stopped_before_the_first_start);
+  RUN_TEST(test_emergency_stop_while_walking_sets_body_stopped_until_the_restart);
+  RUN_TEST(test_sleep_only_fault_keeps_body_stopped_clear);
   RUN_TEST(test_conflict_between_links_sleeps_and_is_reported);
   RUN_TEST(test_calibration_set_rejected_outside_calibrate);
   RUN_TEST(test_calibration_set_accepted_in_calibrate_and_applied_at_the_rate_limit);

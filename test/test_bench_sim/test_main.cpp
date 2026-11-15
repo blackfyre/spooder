@@ -384,6 +384,11 @@ protected:
 };
 
 static robot_tick::RobotState robot;
+
+static bool bodyRunning()
+{
+  return robot.supervisor.runState == protection::RunState::Running;
+}
 static HookBoard hookBoard;
 static uint32_t tickMs;
 static uint8_t usbSeq;
@@ -455,7 +460,7 @@ void test_before_entry_every_call_reaches_the_hooks()
   requestMode(RequestedMode::Stand);
   for (int i = 0; i < 100; i++)
     robotTick({0.5f, 6.0f}, false);
-  TEST_ASSERT_TRUE(robot.supervisor.bodyRunning);
+  TEST_ASSERT_TRUE(bodyRunning());
   TEST_ASSERT_TRUE(hookBoard.realIsOn);
   TEST_ASSERT_TRUE(hookBoard.servosOn());
   TEST_ASSERT_EQUAL_PTR(hookBoard.pulses, hookBoard.servoPulses());
@@ -505,13 +510,13 @@ void test_no_real_output_in_simulation_through_every_mode()
   requestMode(RequestedMode::Stand);
   for (int i = 0; i < 20; i++)
     robotTick({0, 0}, false); // USB only: nothing starts
-  TEST_ASSERT_FALSE(robot.supervisor.bodyRunning);
+  TEST_ASSERT_FALSE(bodyRunning());
   hookBoard.enterSimulation();
   pendingEvent = BenchEvent::Entered;
   hookBoard.hooks.clear();
 
   simTicks(30); // the modelled supply settles (500 ms); the old request starts nothing
-  TEST_ASSERT_FALSE(robot.supervisor.bodyRunning);
+  TEST_ASSERT_FALSE(bodyRunning());
   requestMode(RequestedMode::Stand);
   // Legs switch on two per tick in the model.
   int seen[4] = {};
@@ -522,7 +527,7 @@ void test_no_real_output_in_simulation_through_every_mode()
     if (legs >= 0 && legs <= 6 && legs % 2 == 0)
       seen[legs / 2] = seen[legs / 2] ? seen[legs / 2] : i + 1;
   }
-  TEST_ASSERT_TRUE(robot.supervisor.bodyRunning);
+  TEST_ASSERT_TRUE(bodyRunning());
   TEST_ASSERT_EQUAL((int)body::Mode::Stand, (int)robot.body.mode);
   TEST_ASSERT_TRUE(hookBoard.servosOn());
   TEST_ASSERT_TRUE(seen[1] > 0 && seen[2] == seen[1] + 1 && seen[3] == seen[2] + 1);
@@ -597,24 +602,24 @@ void test_no_real_output_in_simulation_through_every_mode()
   simTicks(5);
   TEST_ASSERT_EQUAL(0, robot.protection.faults);
   simTicks(30);
-  TEST_ASSERT_FALSE(robot.supervisor.bodyRunning); // no new request yet
+  TEST_ASSERT_FALSE(bodyRunning()); // no new request yet
   requestMode(RequestedMode::Stand);
   // Recovery runs the boot sequence: Initialise, then Stand.
   bool sawInitialise = false, sawStandAfter = false;
   for (int i = 0; i < 100; i++)
   {
     simTicks(1);
-    if (robot.supervisor.bodyRunning && robot.body.mode == body::Mode::Initialise)
+    if (bodyRunning() && robot.body.mode == body::Mode::Initialise)
       sawInitialise = true;
     else if (sawInitialise && robot.body.mode == body::Mode::Stand)
       sawStandAfter = true;
-    else if (robot.supervisor.bodyRunning)
+    else if (bodyRunning())
       TEST_ASSERT_TRUE(sawInitialise); // nothing but Initialise first
   }
   TEST_ASSERT_TRUE(sawInitialise);
   TEST_ASSERT_TRUE(sawStandAfter);
   TEST_ASSERT_EQUAL((int)body::Mode::Stand, (int)robot.body.mode);
-  TEST_ASSERT_TRUE(robot.supervisor.bodyRunning);
+  TEST_ASSERT_TRUE(bodyRunning());
   TEST_ASSERT_TRUE(hookBoard.servosOn());
 
   TEST_ASSERT_EQUAL(0, count(hookBoard.hooks, "apply"));

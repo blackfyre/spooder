@@ -302,8 +302,8 @@ static bool command(char *line)
   {
     protection::Reading r = supply.read(board.servos);
     say("status t=%u mode=%s running=%d output=%s faults=0x%02x supply=%.2f current=%.2f", nowMs,
-        MODE_NAMES[(int)robot.body.mode], robot.supervisor.bodyRunning ? 1 : 0, board.servos.on ? "on" : "off",
-        robot.protection.faults, r.voltageV, r.currentA);
+        MODE_NAMES[(int)robot.body.mode], robot.supervisor.runState == protection::RunState::Running ? 1 : 0,
+        board.servos.on ? "on" : "off", robot.protection.faults, r.voltageV, r.currentA);
   }
   else
     say("error unknown command: %s (see --help)", argv[0]);

@@ -136,7 +136,7 @@ mise run monitor-bridge                       # Bluepad32 console; type `help`
 
 **Serial (USB):**
 - `spooder robot: build <id>` on the first tick and each time a USB host connects after none was (so a console opened after boot sees it), before any other line of that tick. `<id>` is `git describe --always --dirty --abbrev=12` of the checkout built from (`-dirty`: uncommitted changes to tracked files; `unknown`: no git), with any byte outside printable ASCII shown as `?` and cut at 40 characters (so a long annotated tag can hide the hash and `-dirty`); compare it with the checkout, under the same rules, to tell a stale or mismatched flash;
-- once per second: `supply <A> A (avg <A> A), <V> V; output on|off; body running|stopped, mode <n>; faults 0x..`, ending `; SIMULATION` in bench simulation (the readings are then the modelled ones);
+- once per second: `supply <A> A (avg <A> A), <V> V; output on|off; body not started|running|stopped, mode <n>; faults 0x..`, ending `; SIMULATION` in bench simulation (the readings are then the modelled ones);
 - `output allowed: starting movement` when the body starts (boot, or restart after a fault);
 - `movement stopped: waiting for the fault to clear and a new request` when a fault cuts output;
 - `fault latched: <name> (<A> A, <V> V)` once per fault (`simulation supply` for the simulation supply fault);

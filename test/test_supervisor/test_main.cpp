@@ -113,6 +113,48 @@ void test_sleep_only_fault_keeps_body_running_asleep()
   TEST_ASSERT_FALSE(d.startBody); // woke through Sleep, not restarted
 }
 
+// Design D1: NotStarted until the first start, even through a fault that
+// latches and clears before it; Running; Stopped only from Running.
+void test_run_state_follows_start_and_fault_stop()
+{
+  TEST_ASSERT_TRUE(sv.runState == RunState::NotStarted);
+  supervise(sv, SETTLING, RequestedMode::Stand, 0);
+  TEST_ASSERT_TRUE(sv.runState == RunState::NotStarted);
+  // An output-inhibiting fault latches before the first start, then clears.
+  supervise(sv, result(false, OVERVOLTAGE, OVERVOLTAGE), RequestedMode::Stand, 0);
+  TEST_ASSERT_TRUE(sv.runState == RunState::NotStarted);
+  supervise(sv, result(false, OVERVOLTAGE), RequestedMode::Stand, 0);
+  TEST_ASSERT_TRUE(sv.runState == RunState::NotStarted);
+  for (int i = 0; i < 5; i++)
+    supervise(sv, HEALTHY, RequestedMode::Stand, 0);
+  TEST_ASSERT_TRUE(sv.runState == RunState::NotStarted);
+  // The first start.
+  Decision d = supervise(sv, HEALTHY, RequestedMode::Stand, 1);
+  TEST_ASSERT_TRUE(d.startBody);
+  TEST_ASSERT_TRUE(sv.runState == RunState::Running);
+  d = supervise(sv, HEALTHY, RequestedMode::Walk, 2);
+  TEST_ASSERT_TRUE(sv.runState == RunState::Running);
+  // An output-inhibiting fault stops it.
+  d = supervise(sv, result(false, EMERGENCY_STOP, EMERGENCY_STOP), RequestedMode::Walk, 2);
+  TEST_ASSERT_TRUE(d.stopBody);
+  TEST_ASSERT_TRUE(sv.runState == RunState::Stopped);
+  supervise(sv, SETTLING, RequestedMode::Walk, 2); // cleared, supply settling
+  for (int i = 0; i < 5; i++)
+    supervise(sv, HEALTHY, RequestedMode::Walk, 2); // no new request
+  TEST_ASSERT_TRUE(sv.runState == RunState::Stopped);
+  // The restart.
+  d = supervise(sv, HEALTHY, RequestedMode::Walk, 3);
+  TEST_ASSERT_TRUE(d.startBody);
+  TEST_ASSERT_TRUE(sv.runState == RunState::Running);
+}
+
+void test_sleep_only_fault_keeps_run_state_running()
+{
+  supervise(sv, HEALTHY, RequestedMode::Walk, 0);
+  supervise(sv, result(true, UNDERVOLTAGE, UNDERVOLTAGE), RequestedMode::Walk, 0);
+  TEST_ASSERT_TRUE(sv.runState == RunState::Running);
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -124,5 +166,7 @@ int main()
   RUN_TEST(test_sleep_request_does_not_restart_stopped_body);
   RUN_TEST(test_sleep_at_boot_does_not_start_body);
   RUN_TEST(test_sleep_only_fault_keeps_body_running_asleep);
+  RUN_TEST(test_run_state_follows_start_and_fault_stop);
+  RUN_TEST(test_sleep_only_fault_keeps_run_state_running);
   return UNITY_END();
 }
