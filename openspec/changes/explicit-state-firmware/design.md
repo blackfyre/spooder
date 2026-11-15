@@ -33,41 +33,44 @@ A new enum for the link was considered and rejected: the drive mode already is t
 
 ### D2. The C enum is a pinned mirror
 
-`main.c` cannot include the C++ `drive_mode.h`, so `bridge_boot_mode` stays in `wifi_drive.h`, documented as the C mirror of `drive_mode::Mode`. `wifi_drive.cpp` pins each value with `static_assert((int)BRIDGE_BOOT_BLUETOOTH == (int)drive_mode::Mode::Bluetooth, ...)` and so on for all three, and `bridge_boot_mode_select` returns `(enum bridge_boot_mode)drive_mode::select(...)`: no `switch`, no `default:`. `app_main` dispatches with `switch (boot)` over the three values and no `default:`, the Bluetooth case breaking out to the Bluepad32 start-up below as today. A fourth `drive_mode::Mode` then fails the build in `link.cpp`'s `switch` statements (`-Wswitch`); a fourth C value fails it in `app_main`; a reordered or renumbered value fails a `static_assert`.
+`main.c` cannot include the C++ `drive_mode.h`, so `bridge_boot_mode` stays in `wifi_drive.h`, documented as the C mirror of `drive_mode::Mode`. `wifi_drive.cpp` converts with one `constexpr enum bridge_boot_mode toBootMode(drive_mode::Mode m)`, an exhaustive `switch` over the three enumerators without `default:`, each case returning its C value. Below it, for each mode, `static_assert(toBootMode(drive_mode::Mode::Bluetooth) == BRIDGE_BOOT_BLUETOOTH && (int)BRIDGE_BOOT_BLUETOOTH == (int)drive_mode::Mode::Bluetooth, ...)` and so on for all three. `bridge_boot_mode_select` returns `toBootMode(drive_mode::select(...))`. A plain cast was considered and rejected: a fourth `drive_mode::Mode` handled in the link but not mirrored would cast to an unnamed C value that `app_main`'s `switch` silently skips into Bluepad32, with no warning (review round 1). `app_main` dispatches with `switch (boot)` over the three values and no `default:`, the Bluetooth case breaking out to the Bluepad32 start-up below as today. A fourth `drive_mode::Mode` then fails the build in `toBootMode` and in `link.cpp`'s `switch` statements (`-Wswitch`), each independently; a fourth C value fails it in `app_main`; a reordered, renumbered or wrongly mapped value fails a `static_assert`.
+
+The boot decision itself (`drive_mode::select`) is already host-tested (`test/test_drive_mode`), and the conversion is checked at compile time; only `app_main`'s three-case dispatch to `setup_mode_start()`, `wifi_drive_start()` and Bluepad32 is left to the hardware check (task 4.1). It is C calling hardware start-up functions, and factoring it into a host-testable table would add an indirection larger than the three cases it checks.
 
 ### D3. The emergency stop is one rule, computed in one place
 
-`core/wifi_drive/handheld_controller` gains `bool commandStop(const Controller &c, bool bridgeStop)`: `bridgeStop` (the bridge's own toggle) or the handheld's flag, which stays set through a lapse until an accepted frame clears it, as the `wifi-drive` requirement of `add-wifi-drive` already says. It is pure and host-tested.
+`core/wifi_drive/handheld_controller` gains `bool commandStop(drive_mode::Mode mode, const Controller &c, bool bridgeStop)`, an exhaustive `switch` over the mode without `default:`: in Bluetooth drive and setup mode `bridgeStop` (the bridge's own toggle) alone; in WiFi drive `bridgeStop` or the handheld's flag, which stays set through a lapse until an accepted frame clears it, as the `wifi-drive` requirement of `add-wifi-drive` already says. It is pure, and host tests cover all three modes, so the choice of rule per mode is checked deterministically and not only the OR (review round 1).
 
-In `link.cpp` one function, `static bool commandedStop()`, called with the lock held, returns the toggle in Bluetooth drive and setup mode and `handheld_controller::commandStop(handheld, emergencyStop)` in WiFi drive (an exhaustive `switch`, D1). `sendCommand` and `status()` both call it, so the frame and the status read the same rule; `status()` fills `Status::emergencyStop` from it in the same lock section as the telemetry. Because `handheld_controller::emergencyStop()` takes no time, the stop reported by `status()` is the one the next frame carries unless a datagram or a button press arrives in between, which is the same freshness every other `Status` field has. `HandheldView::emergencyStop` is removed (no reader is left) and `wifi_drive.cpp` passes `robot_link::status()` to the screen unchanged.
+In `link.cpp` one function, `static bool commandedStop()`, called with the lock held, returns `handheld_controller::commandStop(mode, handheld, emergencyStop)`. `sendCommand` and `status()` both call it, and nothing else in the link computes a stop, so the frame and the status read the same rule; `status()` fills `Status::emergencyStop` from it in the same lock section as the telemetry. Because `handheld_controller::emergencyStop()` takes no time, the stop reported by `status()` is the one the next frame carries unless a datagram or a button press arrives in between, which is the same freshness every other `Status` field has. `HandheldView::emergencyStop` is removed (no reader is left) and `wifi_drive.cpp` passes `robot_link::status()` to the screen unchanged.
 
-The virtual robot's `WifiBridge::beforeTick` calls `handheld_controller::commandStop(controller_, gpioStop)`.
+The virtual robot's `WifiBridge::beforeTick` calls `handheld_controller::commandStop(drive_mode::Mode::Wifi, controller_, gpioStop)`.
+
+The frame encoding of the stop (`gamepad_mapping::toCommand`, `protocol::encodeCommand`) is already host-tested; what stays untested on the host is the two calls of `commandedStop()` in the FreeRTOS and UART glue, which task 2.2 checks with a grep and task 4.1 on the boards.
 
 Storing the stop the last frame carried was considered and rejected: it would lag the toggle by up to a period, and recompute nothing that the rule does not already give.
 
-### D4. The idle gap is an explicit two-state machine in the adapter
+### D4. The idle gap is an explicit two-state machine in `core/protocol`
 
-`link.cpp` replaces the function statics with file-scope state owned by the link task:
+The function statics become a small pure state machine next to the decoder it serves, in `core/protocol/protocol.{h,cpp}` (no new source file, so no source-list change):
 
-- `enum class RxGap : uint8_t { Quiet, Receiving }`, starting `Quiet` (today's `idleHandled = true`);
-- `static uint32_t lastByteMs`, meaningful in `Receiving` only;
-- one transition function, `static bool rxGapIdle(bool bytesArrived, uint32_t nowMs)`: bytes arriving enter `Receiving` and stamp `lastByteMs`; in `Receiving`, `nowMs - lastByteMs >= RX_IDLE_MS` returns to `Quiet` and returns true, once, which is when `receive()` calls `decoder.idle()`.
+- `protocol::RxGap`, a struct holding `enum class State : uint8_t { Quiet, Receiving }`, starting `Quiet` (today's `idleHandled = true`), and `uint32_t lastByteMs`, meaningful in `Receiving` only;
+- one transition function, `bool update(RxGap &g, bool bytesArrived, uint32_t nowMs, uint32_t idleMs)`: bytes arriving enter `Receiving` and stamp `lastByteMs`; in `Receiving` without bytes, `nowMs - lastByteMs >= idleMs` (unsigned, so correct across the `millis()` wrap) returns to `Quiet` and returns true, once, which is when `receive()` calls `decoder.idle()`.
 
-It stays in the bridge rather than `core/`: it is three lines of state tied to polling `Serial1`, the robot handles the same gap per tick in `robot_tick` instead, and a shared helper would belong in `core/protocol`, outside this change. The receive path is exercised by the bridge build and the hardware check (task group 4).
+`link.cpp` holds one file-scope `protocol::RxGap`, owned by the link task, and passes `RX_IDLE_MS` (10 ms), which stays the bridge's constant. Placing it in `core/` was first rejected as more than the change needs, then adopted after review round 1: the bridge's receive path has no host test, and a wrong gap (firing early, repeatedly or never) would discard or strand partial frames. In `core/` it is host-tested in `test/test_protocol`. The robot keeps its per-tick idle in `robot_tick` (a whole 20 ms tick without a byte), which this change does not touch.
 
 ## Assumptions
 
 - The brief's "behaviour unchanged except where stated" admits the one visible difference: the WiFi drive screen now reads the emergency stop from one snapshot instead of ORing two.
 - "Keep any C enum only as a static_assert-pinned mirror with no default" applies to `app_main`'s dispatch as well as to `bridge_boot_mode_select`, since `main.c`'s `else` is the same silent fallback in the other direction.
-- `core/` changes are limited to the one `handheld_controller` function the shared rule needs and a stale comment in `core/status/status_screen.h` (`Inputs::emergencyStop`, already the combined stop in WiFi drive); this does not overlap `explicit-state-core`, which converts `core/` state.
+- `core/` changes are limited to the one `handheld_controller` function the shared rule needs, the `protocol::RxGap` state machine (D4) and a stale comment in `core/status/status_screen.h` (`Inputs::emergencyStop`, already the combined stop in WiFi drive); this does not overlap `explicit-state-core`, which converts `core/` state.
 - `add-wifi-drive` is not archived, so its `wifi-drive` capability is not in `openspec/specs/`; this change states the e-stop rule against `status-display` (the screen) and leaves `wifi-drive` alone. Its existing e-stop requirement is unchanged and is what `commandStop` implements.
 - Reflashing only the bridge is enough: no frame changes, so `protocol::VERSION` stays 3.
 - The brief's line numbers were checked at `631491b` and match.
 
 ## Risks / Trade-offs
 
-- [The bridge's link task is on the safety path (the e-stop and the heartbeat)] → the e-stop rule moves into a host-tested core function; the link change is mechanical and every branch is compiler-checked; the hardware check (task group 4) exercises the GPIO35 toggle and the handheld's flag on the boards before the change is called done.
-- [Exhaustive `switch` without `default:` relies on `-Wswitch` being fatal] → `build-warnings` makes it so for `main/`; task 2.1 proves it with a deliberate missing case.
+- [The bridge's link task is on the safety path (the e-stop and the heartbeat)] → the e-stop rule, including its choice per mode, and the receive idle gap move into host-tested core functions; the link change is mechanical and every branch is compiler-checked; the hardware check (task group 4) exercises the GPIO35 toggle and the handheld's flag on the boards before the change is called done.
+- [Exhaustive `switch` without `default:` relies on `-Wswitch` being fatal] → `build-warnings` makes it so for `main/`; task 2.1 proves it with deliberate missing cases, including a fourth mode handled in the link but not mirrored in C.
 
 ## Follow-ups
 

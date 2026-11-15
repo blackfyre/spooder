@@ -13,9 +13,9 @@ This change removes those three. The other seven items of the brief (the bridge 
 ## What Changes
 
 - `robot_link` starts through one `robot_link::start(drive_mode::Mode)`; `startPortal()` and `startHandheld()` go. The link keeps the one mode it was started in and branches on it with exhaustive `switch` statements without `default:`, so a new drive mode fails the build until the link handles it.
-- `bridge_boot_mode` stays only as the C mirror `app_main` needs: each value is pinned to its `drive_mode::Mode` with `static_assert`, `bridge_boot_mode_select` converts without a `default:` fallback, and `app_main` dispatches with an exhaustive `switch`.
-- The emergency stop the command frames carry is computed in one function of the link, under the lock, from one shared core rule (`handheld_controller::commandStop`, host-tested) that the virtual robot's WiFi bridge also uses. `robot_link::Status::emergencyStop` becomes that value, so the screen and the portal read the same stop the frames carry, from one snapshot; `HandheldView::emergencyStop` and the screen's own OR go.
-- The receive idle gap becomes file-scope explicit state in the link: one `enum class` with its transition function, no function statics.
+- `bridge_boot_mode` stays only as the C mirror `app_main` needs: `bridge_boot_mode_select` converts through one exhaustive `switch` without a `default:` fallback, each value pinned to its `drive_mode::Mode` with `static_assert`, and `app_main` dispatches with an exhaustive `switch`.
+- The emergency stop the command frames carry is computed in one function of the link, under the lock, from one shared core rule (`handheld_controller::commandStop`, host-tested for each drive mode) that the virtual robot's WiFi bridge also uses. `robot_link::Status::emergencyStop` becomes that value, so the screen and the portal read the same stop the frames carry, from one snapshot; `HandheldView::emergencyStop` and the screen's own OR go.
+- The receive idle gap becomes explicit state: a host-tested `protocol::RxGap` in `core/protocol` (one `enum class` with its transition function), held at file scope by the link, no function statics.
 - Behaviour is unchanged, except that the WiFi drive screen's emergency stop now always matches one consistent link state (it could briefly combine two snapshots).
 - `CHANGELOG.md`, `firmware/bridge/CLAUDE.md` and the firmware-shape skill name the new entry point.
 
@@ -33,6 +33,6 @@ None.
 ## Impact
 
 - `firmware/bridge/main/link.{h,cpp}`, `wifi_drive.{h,cpp}`, `main.c`, `bridge.cpp`, `setup_mode.cpp`.
-- `core/wifi_drive/handheld_controller.{h,cpp}` (one function) and `test/test_handheld_controller`; a comment fix in `core/status/status_screen.h`.
+- `core/wifi_drive/handheld_controller.{h,cpp}` (one function) and `test/test_handheld_controller`; `core/protocol/protocol.{h,cpp}` (`RxGap`) and `test/test_protocol`; a comment fix in `core/status/status_screen.h`.
 - `tools/virtual-robot/src/wifi_bridge.cpp` (one call).
 - No link protocol change; the bridge must be reflashed to carry the change, the robot need not be.
