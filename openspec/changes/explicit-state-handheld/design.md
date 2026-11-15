@@ -23,7 +23,7 @@ sequenceDiagram
 
 ## D2. Numbered baselines instead of a flag
 
-The receiver keeps a baseline number (`uint64`, 0 before the first frame). Every rebaseline (the first frame, the first after `Rebaseline()`, the first after `Gap` of silence) increments it. `Event.Baseline` and `Quality.Baseline` carry it. `Event.Rebaseline` stays for the receiver's own shown-frame logic and the screen.
+The receiver keeps a baseline number (`uint64`, 0 before the first frame). Every rebaseline (the first frame, the first after `Rebaseline()`, the first after `Gap` of silence) increments it. `Event.Baseline` and `Quality.Baseline` carry it. `Event.Rebaseline` stays for the receiver's own shown-frame logic (`receiver.go`); after this change nothing outside `internal/udplink` reads it.
 
 The leave records `ref = {baseline, newest}` from `Status` at the press, with no validity flag. `leave.observe` orders a telemetry frame by its baseline:
 
@@ -33,13 +33,17 @@ The leave records `ref = {baseline, newest}` from `Status` at the press, with no
 | equal to `ref.baseline` | same numbering as the press | only if its sequence number is 1..127 ahead of `ref.newest` |
 | higher than `ref.baseline` | numbered afresh after the press | yes |
 
+A frame the receiver marks `Late` is skipped before this ordering, in every baseline, as today. The receiver judges lateness within the current numbering, so after a rebaseline a frame behind the newest of the new numbering (reordered or duplicated after the rejoin) still does not count and does not break the run of confirmations. This keeps the freshness protection on leaving: only telemetry newer than every frame taken in its own numbering confirms.
+
 Before any frame, `ref.baseline` is 0 and every frame has baseline 1 or more, so every frame counts, as `refValid=false` did. A rebaseline can no longer be missed: if its first frame is drained, the frames after it still carry the higher baseline. This replaces the inference from `ev.Rebaseline && ev.At.After(since)`, and the event's arrival time is no longer used for ordering.
 
 Alternative considered: have the app clear the leave's reference when it rebaselines. That covers the rejoin and the resume but not a `Gap` rebaseline, which happens inside the receiver, so the flag inference would stay. The baseline number covers all three in one rule.
 
 ## D3. The regression test
 
-The test injects a robot frame between the receiver's rebaseline and the queue drain, through a hook in the fake link's `Rebaseline` that runs after `rx.Rebaseline()` and before the drain. This models the receiver goroutine winning the race. The scenario: drive, press Menu with telemetry received, go off the network, rejoin, then feed two Sleep telemetry frames whose sequence numbers are behind the press's newest. The leave must act on the second frame, well before `LeaveTimeout`. Against the current code this test fails: the injected frame is drained and `refValid` stays true.
+The test injects a robot frame between the receiver's rebaseline and the queue drain, through a hook in the fake link's `Rebaseline` that runs after `rx.Rebaseline()` and before the drain. This models the receiver goroutine winning the race, as it can with the current two-call rejoin. It proves D2: the leave is correct even when the rebaselining frame is lost to the drain. It does not test D1's lock, which with D1 makes that interleaving impossible on the real link; D1 is defence in depth.
+
+D1 is atomic by construction (one method, one `mu.Lock`, the same mutex `Link.datagram` takes) and has no deterministic concurrency test, since a race between two goroutines cannot be forced without a hook inside the lock. Its observable contract is tested at the real `Link` instead: frames queued before `Rebaseline` are gone after it, and the next datagram is queued with the next baseline number. The scenario: drive, press Menu with telemetry received, go off the network, rejoin, then feed two Sleep telemetry frames whose sequence numbers are behind the press's newest. The leave must act on the second frame, well before `LeaveTimeout`. A second case repeats the rejoin and then feeds a Sleep telemetry frame, a Sleep frame behind it (late in the new numbering) and one more Sleep frame newer than the first: the late frame does not count, and the leave acts on the third frame. Against the current code this test fails: the injected frame is drained and `refValid` stays true.
 
 ## Assumptions
 
