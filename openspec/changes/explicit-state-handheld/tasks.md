@@ -6,7 +6,7 @@
 
 ## 2. Leave reference
 
-- [ ] 2.1 Record the leave's reference as the press's baseline and newest sequence number, order telemetry by baseline then sequence number, remove `refValid` and the separate drains after `Rebaseline` in the rejoin and the resume (`internal/app`, D2). Verify with `go test ./internal/app` that a rejoin during a leave with a frame injected between the rebaseline and the drain ends the leave on the second Sleep telemetry after the rejoin, before `LeaveTimeout`, that after the rejoin a Sleep telemetry frame, then a Sleep frame late in the new numbering, then a newer Sleep frame keep the leave waiting after the late frame and end it on the third (the late frame neither counts nor breaks the run), that this test fails with the old two-call rejoin, and that the existing leave, delayed-frame, resume and network-check tests still pass.
+- [x] 2.1 Record the leave's reference as the press's baseline and newest sequence number, order telemetry by baseline then sequence number, remove `refValid` and the separate drains after `Rebaseline` in the rejoin and the resume (`internal/app`, D2). Verify with `go test ./internal/app` that a rejoin during a leave with a frame injected between the rebaseline and the drain ends the leave on the second Sleep telemetry after the rejoin, before `LeaveTimeout`, that after the rejoin a Sleep telemetry frame, then a Sleep frame late in the new numbering, then a newer Sleep frame keep the leave waiting after the late frame and end it on the third (the late frame neither counts nor breaks the run), that this test fails with the old two-call rejoin, and that the existing leave, delayed-frame, resume and network-check tests still pass.
 
 ## 3. Documentation and gates
 

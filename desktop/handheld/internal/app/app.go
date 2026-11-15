@@ -72,6 +72,8 @@ const (
 type Link interface {
 	TakeEvents() []udplink.Event
 	Status(now time.Time) udplink.Status
+	// Rebaseline starts the next baseline at the next valid frame and
+	// discards the frames not yet taken, in one step (udplink.Link.Rebaseline).
 	Rebaseline()
 }
 
@@ -81,13 +83,33 @@ type PowerSave interface {
 	Restore(ctx context.Context) error
 }
 
+// position is a place in the robot frames' numbering: a baseline and a
+// sequence number within it (openspec change explicit-state-handheld,
+// design D2).
+type position struct {
+	baseline uint64 // 0 before the first frame
+	newest   uint8
+}
+
+// after tells whether a frame of baseline b and sequence number seq was
+// numbered after p: a later baseline, or the same one and 1..127 ahead.
+func (p position) after(b uint64, seq uint8) bool {
+	switch {
+	case b > p.baseline:
+		return true
+	case b < p.baseline:
+		return false
+	}
+	d := seq - p.newest
+	return d >= 1 && d <= 127
+}
+
 // leave is one leave in progress.
 type leave struct {
 	action    Action
 	since     time.Time
-	ref       uint8 // the link-wide newest sequence number at the press
-	refValid  bool
-	confirmed int // telemetry frames in a row confirming Sleep
+	ref       position // the link-wide newest frame at the press
+	confirmed int      // telemetry frames in a row confirming Sleep
 }
 
 // App is the run's state. Its methods are safe for concurrent use: the
@@ -192,7 +214,7 @@ func (a *App) Press(act Action, now time.Time) {
 	}
 	st := a.link.Status(now)
 	a.state = Leaving
-	a.leave = leave{action: act, since: now, ref: st.Newest, refValid: st.HaveNewest}
+	a.leave = leave{action: act, since: now, ref: position{baseline: st.Baseline, newest: st.Newest}}
 	a.hand.RequestSleep()
 	a.hand.SetNeutral(true)
 }
@@ -203,21 +225,15 @@ func confirms(t protocol.Telemetry) bool {
 }
 
 // observe takes one received frame into the leave's confirmation.
+// Only telemetry numbered after the press's reference counts: a frame of
+// a later baseline was numbered afresh after the press (a Gap of silence,
+// a rejoin or a resume), one of an earlier baseline before it.
 func (l *leave) observe(ev udplink.Event) {
-	if ev.Rebaseline && ev.At.After(l.since) {
-		// After a rebaseline (Gap of silence, received after the press)
-		// the frames are taken as sent after the press: the press's
-		// reference no longer orders them. A rebaselining frame received
-		// before the press is the reference itself.
-		l.refValid = false
-	}
 	if ev.Frame.Type != protocol.TypeTelemetry || ev.Late {
 		return // a late frame neither counts nor breaks the run
 	}
-	if l.refValid {
-		if d := ev.Frame.Seq - l.ref; d < 1 || d > 127 {
-			return // received before the press, taken after it
-		}
+	if !l.ref.after(ev.Baseline, ev.Frame.Seq) {
+		return // numbered before the press, taken after it
 	}
 	if confirms(ev.Frame.Telemetry) {
 		l.confirmed++
@@ -247,7 +263,6 @@ func (a *App) Step(now time.Time) (protocol.Command, udplink.Outcome) {
 		// goes on.
 		a.rejoined = false
 		a.link.Rebaseline()
-		a.link.TakeEvents()
 		a.hand.RequestSleep()
 		a.hand.MaskHeld()
 	}
@@ -324,8 +339,7 @@ func (a *App) act(act Action, now time.Time) (protocol.Command, udplink.Outcome)
 func (a *App) resume(now time.Time) (protocol.Command, udplink.Outcome) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.link.Rebaseline()
-	a.link.TakeEvents() // frames from before the suspend
+	a.link.Rebaseline() // and discards the frames from before the suspend
 	a.hand.SetNeutral(false)
 	a.hand.RequestSleep()
 	a.state = Driving

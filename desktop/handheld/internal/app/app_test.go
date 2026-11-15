@@ -24,6 +24,11 @@ type fakeLink struct {
 	rx          *udplink.Receiver
 	events      []udplink.Event
 	rebaselines int
+	// midRebaseline, if set, runs inside Rebaseline after the receiver's
+	// rebaseline and before the drain: a frame the receiver goroutine
+	// accepts between the two, as two separate lock acquisitions allowed
+	// (openspec change explicit-state-handheld, design D3).
+	midRebaseline func()
 }
 
 func (l *fakeLink) TakeEvents() []udplink.Event {
@@ -32,7 +37,17 @@ func (l *fakeLink) TakeEvents() []udplink.Event {
 	return ev
 }
 func (l *fakeLink) Status(now time.Time) udplink.Status { return l.rx.Status(now) }
-func (l *fakeLink) Rebaseline()                         { l.rebaselines++; l.rx.Rebaseline() }
+
+// Rebaseline rebaselines the receiver and drains the queue, as
+// udplink.Link.Rebaseline does under its lock.
+func (l *fakeLink) Rebaseline() {
+	l.rebaselines++
+	l.rx.Rebaseline()
+	if l.midRebaseline != nil {
+		l.midRebaseline()
+	}
+	l.events = nil
+}
 
 // fakeRunner records every command, power save's included, in order.
 type fakeRunner struct {
@@ -778,6 +793,83 @@ func TestLeaveOffNetworkActsAfterTheWait(t *testing.T) {
 	}
 	if r.a.Ended() != ActionExit {
 		t.Fatalf("ended %v, want exit", r.a.Ended())
+	}
+}
+
+// rejoinDuringLeave walks, presses Menu with telemetry received (newest
+// 42), takes wlan0 off the network and back on, and has the robot's first
+// frame after the rebaseline (sequence number 9, Sleep) accepted between
+// the rebaseline and the drain, so the drain discards it (openspec change
+// explicit-state-handheld, design D3). It returns the time of the press.
+func rejoinDuringLeave(t *testing.T) (*rig, time.Time) {
+	r := walking(t)
+	if r.seq != 43 {
+		t.Fatalf("robot's next sequence number %d, want 43", r.seq)
+	}
+	r.onDevice()
+	r.sample(iwOn("spooder-drive-1a2b"), false)
+	r.step()
+	pressed := r.now
+	r.a.Press(ActionExit, pressed)
+	r.step()
+	r.sample(iwOn("Home WiFi"), false)
+	r.steps(3)
+	if !r.held {
+		t.Fatal("a frame was sent off the network")
+	}
+	injected := false
+	r.link.midRebaseline = func() {
+		r.telemetry(9, session.BodySleep, true)
+		injected = true
+	}
+	r.sample(iwOn("spooder-drive-1a2b"), false)
+	r.step()
+	r.link.midRebaseline = nil
+	if !injected {
+		t.Fatal("the rejoin did not rebaseline")
+	}
+	r.wantRunning("after the rejoin")
+	if r.a.State() != Leaving {
+		t.Fatalf("state %d after the rejoin, want Leaving", r.a.State())
+	}
+	return r, pressed
+}
+
+// After a rejoin during a leave, telemetry numbered afresh counts even
+// when its sequence numbers are behind the press's newest and the frame
+// that rebaselined was drained.
+func TestRejoinDuringLeaveCountsTheNewNumbering(t *testing.T) {
+	r, pressed := rejoinDuringLeave(t)
+	r.telemetry(10, session.BodySleep, true)
+	r.step()
+	r.wantRunning("after one Sleep frame after the rejoin")
+	r.telemetry(11, session.BodySleep, true)
+	r.step()
+	if !r.stop || r.a.Ended() != ActionExit {
+		t.Fatalf("stop %v ended %v after two Sleep frames after the rejoin, want an exit", r.stop, r.a.Ended())
+	}
+	if d := r.now.Sub(pressed); d >= LeaveTimeout {
+		t.Fatalf("the leave acted %v after the press, want before %v", d, LeaveTimeout)
+	}
+}
+
+// After a rejoin during a leave, a frame late in the new numbering
+// neither counts nor breaks the run of confirmations.
+func TestRejoinDuringLeaveSkipsALateFrame(t *testing.T) {
+	r, pressed := rejoinDuringLeave(t)
+	r.telemetry(20, session.BodySleep, true)
+	r.step()
+	r.wantRunning("after one Sleep frame after the rejoin")
+	r.telemetry(19, session.BodySleep, true)
+	r.step()
+	r.wantRunning("after a late Sleep frame")
+	r.telemetry(21, session.BodySleep, true)
+	r.step()
+	if !r.stop || r.a.Ended() != ActionExit {
+		t.Fatalf("stop %v ended %v after Sleep, a late Sleep and a newer Sleep, want an exit", r.stop, r.a.Ended())
+	}
+	if d := r.now.Sub(pressed); d >= LeaveTimeout {
+		t.Fatalf("the leave acted %v after the press, want before %v", d, LeaveTimeout)
 	}
 }
 
