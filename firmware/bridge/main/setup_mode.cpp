@@ -20,9 +20,13 @@
 #include "identity/build_identity.h"
 #include "link.h"
 #include "portal_page.h"
+#include "protocol/protocol.h"
 #include "setup/access_point.h"
 #include "setup/calibration_export.h"
 #include "setup/setup_entry.h"
+
+// portal_page.h tests the telemetry flags by value (fl&64 is the body-stopped flag).
+static_assert(protocol::TELEMETRY_BODY_STOPPED == 64, "update portal_page.h with the flag");
 
 // Survives esp_restart(), not a power-up; its power-up contents are
 // arbitrary, which is why the reset reason is checked as well.

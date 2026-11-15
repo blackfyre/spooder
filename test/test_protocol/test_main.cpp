@@ -450,6 +450,29 @@ void test_version_1_frame_is_rejected()
   TEST_ASSERT_EQUAL(3, dec.discardedFrames());
 }
 
+// The mismatched-versions scenario on the telemetry side: a stopped-body
+// telemetry frame of the previous version, or of the next, with a valid CRC,
+// is discarded, so a bridge and a robot of different versions see no
+// telemetry and the bridge shows the link as lost.
+void test_other_version_telemetry_is_rejected()
+{
+  uint8_t buf[MAX_FRAME_SIZE];
+  Telemetry t = sampleTelemetry();
+  t.flags = TELEMETRY_BODY_STOPPED;
+  const uint8_t versions[] = {(uint8_t)(VERSION - 1), (uint8_t)(VERSION + 1)};
+  for (uint8_t version : versions)
+  {
+    int n = encodeTelemetry(t, 1, buf);
+    buf[1] = version;
+    uint16_t crc = crc16(buf + 1, HEADER_SIZE - 1 + TELEMETRY_PAYLOAD_SIZE);
+    buf[n - 2] = (uint8_t)(crc & 0xFF);
+    buf[n - 1] = (uint8_t)(crc >> 8);
+    Frame f;
+    TEST_ASSERT_EQUAL(0, feedAndCount(buf, n, f));
+  }
+  TEST_ASSERT_EQUAL(2, dec.discardedFrames());
+}
+
 void test_unknown_version_is_rejected()
 {
   uint8_t buf[MAX_FRAME_SIZE];
@@ -682,6 +705,7 @@ int main()
   RUN_TEST(test_idle_keeps_a_complete_buffer_untouched);
   RUN_TEST(test_version_1_frame_is_rejected);
   RUN_TEST(test_unknown_version_is_rejected);
+  RUN_TEST(test_other_version_telemetry_is_rejected);
   RUN_TEST(test_unknown_type_is_rejected);
   RUN_TEST(test_inconsistent_length_is_rejected);
   RUN_TEST(test_sequence_wraps);

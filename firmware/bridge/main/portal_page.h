@@ -165,15 +165,16 @@ function render(){
   txt('src',!s.link?'':(fl&1)?'Source CONFLICT with USB':(fl&2)?'USB in control':(fl&4)?'Portal in control':'',
       (fl&1)?'bad':(fl&2)?'warn':'ok');
   $('estop').style.display=(s.estop||(s.link&&(t.faults&32)))?'block':'none';
-  txt('body',s.link?'Body '+(MODES[t.mode]||'?'):'Body --');
+  var stopped=fl&64; // the body-stopped flag: the mode is the last one, not live
+  txt('body',s.link?'Body '+(stopped?'Stopped':(MODES[t.mode]||'?')):'Body --');
   txt('power',s.link?('Out '+(t.out?'on':'off')+'  '+(t.mv/1000).toFixed(2)+' V  '+(t.ma/1000).toFixed(2)+' A'):'');
   var names=[];for(var b=0;b<16;b++)if(t.faults&(1<<b))names.push(FAULTS[b]||('0x'+(1<<b).toString(16)));
   txt('faults',!s.link?'':names.length?'Faults: '+names.join(', '):'Faults: none',names.length?'bad':'ok');
   txt('req','Requesting '+s.req+(s.portal?'':' (not connected)'));
   ['Stand','Calibrate','Sleep'].forEach(function(m){$('m-'+m).className=s.req==m?'sel':''});
-  var c=s.cal,calib=s.link&&t.mode==4;
+  var c=s.cal,calib=s.link&&!stopped&&t.mode==4;
   txt('hint',!s.link?'Robot link lost.':!c?'No calibration table yet: press Calibrate (the robot reports it in Calibrate).':
-      calib?'':'Changes are rejected outside Calibrate.','warn');
+      calib?'':stopped?'The robot is stopped: changes are rejected until it runs in Calibrate.':'Changes are rejected outside Calibrate.','warn');
   var j=c?c.j[cur()]:null;
   txt('e-offset',j?off(cur(),j[0]):'--');txt('l-offset',joint?'Offset':'Offset from centre','lbl');txt('e-p0',j?j[1]+' µs':'--');txt('e-p180',j?j[2]+' µs':'--');
   txt('e-rev',j?(j[3]?'reversed':'normal'):'--');
