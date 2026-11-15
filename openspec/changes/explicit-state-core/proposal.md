@@ -10,7 +10,7 @@ The brief lists sixteen such places. They are independent of each other, so this
 
 - `gamepad_mapping::Mapper`'s `baseMode`, `sleeping` and `calibrating` become one `enum class ModeState { Stand, Walk, SleepFromStand, SleepFromWalk, Calibrate }` with one transition function over the mapping's mode events (connect, `miscHome` press, `y` press, Calibrate hold). The requested mode is derived from it. Behaviour does not change: `test/golden/gamepad_mapping.txt` stays as it is and passes.
 - The handheld's line-for-line Go port (`desktop/handheld/internal/padmap/mapping.go`) takes the same enum and transition function. `Handheld.RequestSleep`, which writes the mapper's private fields, becomes a transition of the Go mapper (a sleep-request event) that `Handheld` calls; its behaviour does not change.
-- The gamepad-control specification states the behaviour the mapping has: leaving Sleep returns to Stand or Walk, whichever Sleep was entered from; Sleep entered from Calibrate returns to Stand; `miscHome` while Sleep is requested switches the mode Sleep returns to and leaves Sleep requested.
+- The gamepad-control specification states the behaviour the mapping has: leaving Sleep returns to Stand or Walk, whichever Sleep was entered from; Sleep entered from Calibrate returns to Stand; `miscHome` while Sleep is requested switches the mode Sleep returns to and leaves Sleep requested; a `y` press as the Calibrate hold completes enters Calibrate and leaves it for Sleep.
 - `REVIEW.md` gains "implicit state machine" as a known bug class, for C++ and Go.
 - No protocol change, no firmware behaviour change.
 
@@ -31,4 +31,5 @@ The handheld follows `gamepad-control` through its mapping requirement (`handhel
 - `core/gamepad_mapping/gamepad_mapping.h`, `gamepad_mapping.cpp`; `test/test_gamepad_mapping` (transition tests).
 - `desktop/handheld/internal/padmap/mapping.go`, `handheld.go` and their tests.
 - `REVIEW.md`, `CHANGELOG.md`.
+- `openspec/changes/wave-default-gait/specs/gamepad-control/spec.md`: brought to this change's `Input mapping` block, so the two changes archive in either order (design D4).
 - The bridge compiles the mapping; flashing it is not needed for behaviour, which the golden file pins.

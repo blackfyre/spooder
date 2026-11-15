@@ -43,3 +43,7 @@ At start-up the selected gait SHALL be Wave. The gaits SHALL be selected in the 
 #### Scenario: miscHome while sleeping
 - **WHEN** Sleep was entered from Stand, `miscHome` is pressed and then `y` is pressed
 - **THEN** Sleep is still requested after `miscHome`, with the mode-request counter advanced by one, and Walk is requested after `y`
+
+#### Scenario: Calibrate hold completes with y pressed
+- **WHEN** Stand is requested and `y` is pressed at the moment the `miscBack` + `miscHome` hold reaches 1 s
+- **THEN** Calibrate is entered and then left for Sleep, so Sleep is requested, the mode-request counter has advanced by two, and a further `y` press requests Stand

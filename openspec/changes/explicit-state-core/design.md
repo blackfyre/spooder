@@ -2,7 +2,7 @@
 
 ## Context
 
-`gamepad_mapping::Mapper` (`core/gamepad_mapping/gamepad_mapping.h`) holds the requested mode as three fields: `baseMode` (Stand or Walk), `sleeping` and `calibrating`. `requestedMode()` reads them in priority order, and `update()` writes them in four places: a fresh connection, the Calibrate hold, the `miscHome` press and the `y` press. Of the twelve combinations, five are reachable, because each writer restores the invariants by hand (`calibrating` implies `!sleeping` and `baseMode == Stand`). The handheld's Go port (`desktop/handheld/internal/padmap/mapping.go`) mirrors this line for line, and `Handheld.RequestSleep` (`handheld.go`) writes the mapper's private fields from outside it. `test/golden/gamepad_mapping.txt` runs both over the same hand-written steps.
+`gamepad_mapping::Mapper` (`core/gamepad_mapping/gamepad_mapping.h`) holds the requested mode as three fields: `baseMode` (Stand or Walk), `sleeping` and `calibrating`. `requestedMode()` reads them in priority order, and `update()` writes them in four places: a fresh connection, the Calibrate hold, the `miscHome` press and the `y` press. Of their eight intended combinations (sixteen representable, since `baseMode` is a four-valued `RequestedMode`), five are reachable, because each writer restores the invariants by hand (`calibrating` implies `!sleeping` and `baseMode == Stand`). The handheld's Go port (`desktop/handheld/internal/padmap/mapping.go`) mirrors this line for line, and `Handheld.RequestSleep` (`handheld.go`) writes the mapper's private fields from outside it. `test/golden/gamepad_mapping.txt` runs both over the same hand-written steps.
 
 ## Goals / Non-Goals
 
@@ -37,7 +37,7 @@
 | SleepFromWalk | Stand | SleepFromStand | Walk | Calibrate |
 | Calibrate | Stand | Stand | SleepFromStand | Stand |
 
-`update()` keeps its order of evaluation (connect, then the Calibrate hold or else `miscHome`, then `y` after the gesture layer has masked it), applies one event per detected input and advances the mode-request counter on Home, Sleep and CalibrateHold, as now. Two events in one sample (the hold firing and `y` pressed together) are applied in that order, as the fields are written now. The guards (`miscBack` held suppresses Home; the gesture layer masks `y`) stay input detection in `update()`, not states.
+`update()` keeps its order of evaluation (connect, then the Calibrate hold or else `miscHome`, then `y` after the gesture layer has masked it), applies one event per detected input and advances the mode-request counter on Home, Sleep and CalibrateHold, as now. Two events in one sample (the hold firing and `y` pressed together) are applied in that order, as the fields are written now: from Stand, CalibrateHold then Sleep gives SleepFromStand with the counter advanced by two, where the reverse order would give Calibrate. The single-event cells cannot catch that, so a scenario and an `update()`/`Update()` test in both languages pin it. The guards (`miscBack` held suppresses Home; the gesture layer masks `y`) stay input detection in `update()`, not states.
 
 ### D3. The handheld's sleep request is a Go mapper transition
 
@@ -45,7 +45,7 @@
 
 ### D4. Specification correction
 
-The user decided to keep the behaviour and correct the specification. The `Input mapping` requirement of gamepad-control is modified from the text of the unarchived `wave-default-gait` change (which already modifies it and whose code is merged), so archiving either one first keeps the Wave start-up text.
+The user decided to keep the behaviour and correct the specification. The `Input mapping` requirement of gamepad-control is modified from the text of the unarchived `wave-default-gait` change (which already modifies it and whose code is merged), so archiving either one first keeps the Wave start-up text. Archiving this change first and `wave-default-gait` after would replace the requirement with `wave-default-gait`'s older block, which still has the contradicted Sleep wording and lacks this change's scenarios. `wave-default-gait` waits on a hardware check by the user and may stay unarchived for a while, so this change also brings `wave-default-gait`'s delta to the same block (the two delta files identical), and either archive order then gives the same requirement. That edit is to specification text only and describes code already merged.
 
 ## Assumptions
 
