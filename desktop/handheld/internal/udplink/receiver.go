@@ -48,7 +48,6 @@ func newer(seq, ref uint8) bool {
 // Event is one accepted robot frame, in arrival order.
 type Event struct {
 	Frame protocol.Frame
-	At    time.Time
 	// Late: behind the link-wide newest sequence number, so not taken as
 	// newest.
 	Late bool
@@ -151,7 +150,7 @@ func (r *Receiver) Datagram(b []byte, now time.Time) (Event, bool) {
 		return Event{}, false
 	}
 	r.win[f.Type]++
-	ev := Event{Frame: f, At: now}
+	ev := Event{Frame: f}
 	if r.rebase || !r.q.HaveNewest || now.Sub(r.q.LastValid) >= Gap {
 		ev.Rebaseline = true
 		r.rebase = false

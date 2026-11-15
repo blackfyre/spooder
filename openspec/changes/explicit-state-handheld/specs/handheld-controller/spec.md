@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Leaving safely
-When Menu is pressed, or Power is pressed briefly or held, the handheld SHALL first request Sleep, keep sending command frames (none while `wlan0` is off the network it started on, Joining the bridge), and wait until two telemetry frames in a row, each newer by its sequence number than every robot frame taken before the press, report the body in Sleep or servo output off, for at most 3 s. When the robot frames' sequence numbers are taken afresh during the wait (after a gap of silence, or on rejoining the network), every telemetry frame taken from then on SHALL count as newer than the frames taken before the press (a frame older by its sequence number than the newest taken after the renumbering still SHALL NOT count), and no robot frame received in that moment SHALL be lost to the ordering. While it waits, no control but Select + Start (the emergency stop) SHALL change what it requests. Only then SHALL it exit (Menu), run NextUI's suspend script (a short Power press) or power off (Power held 2 s). A second press during the wait SHALL NOT start another leave. With no telemetry arriving, it SHALL wait the full 3 s before it acts.
+When Menu is pressed, or Power is pressed briefly or held, the handheld SHALL first request Sleep, keep sending command frames (none while `wlan0` is off the network it started on, Joining the bridge), and wait until two telemetry frames in a row, each newer by its sequence number than every robot frame taken before the press, report the body in Sleep or servo output off, for at most 3 s. When the robot frames' sequence numbers are taken afresh during the wait (after a gap of silence, or on rejoining the network), every telemetry frame taken from then on SHALL count as newer than the frames taken before the press (a frame older by its sequence number than the newest taken after the renumbering still SHALL NOT count), even when the frame that started the renumbering is discarded with the frames not yet taken on rejoining. While it waits, no control but Select + Start (the emergency stop) SHALL change what it requests. Only then SHALL it exit (Menu), run NextUI's suspend script (a short Power press) or power off (Power held 2 s). A second press during the wait SHALL NOT start another leave. With no telemetry arriving, it SHALL wait the full 3 s before it acts.
 
 #### Scenario: Leave while walking
 - **WHEN** Menu is pressed while the robot walks
@@ -14,7 +14,7 @@ When Menu is pressed, or Power is pressed briefly or held, the handheld SHALL fi
 - **THEN** the pak does not exit on that frame
 
 #### Scenario: Rejoin during a leave
-- **WHEN** Menu is pressed, `wlan0` leaves the network the handheld started on and rejoins it while the handheld waits, and after the rejoin two telemetry frames in a row report Sleep with sequence numbers at or behind the newest frame taken before the press
+- **WHEN** Menu is pressed, `wlan0` leaves the network the handheld started on and rejoins it while the handheld waits, and after the first tick back on it (which discards the frames not yet taken) two telemetry frames in a row report Sleep with sequence numbers at or behind the newest frame taken before the press
 - **THEN** the pak exits on the second of those frames, before 3 s have passed since the press
 
 #### Scenario: Late frame after a rejoin during a leave
