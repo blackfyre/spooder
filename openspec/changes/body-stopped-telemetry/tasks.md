@@ -19,7 +19,7 @@
 
 ## 5. Documentation
 
-- [ ] 5.1 Update `CLAUDE.md` (`protocol::VERSION`, now 4), `core/CLAUDE.md`, `desktop/CLAUDE.md`, `test/CLAUDE.md`, `tools/CLAUDE.md`, the `spooder-firmware-shape` skill (the telemetry flags and the version), and `CHANGELOG.md` under Unreleased (the flag, the version bump, flashing both boards together). Verify `grep -rn -E "now 3|VERSION = 3|Version = 3|protocol_v3|version 3 (command )?frame" CLAUDE.md core desktop test tools .claude/skills firmware` finds no stale reference, and `mise run lint` passes.
+- [x] 5.1 Update `CLAUDE.md` (`protocol::VERSION`, now 4), `core/CLAUDE.md`, `desktop/CLAUDE.md`, `test/CLAUDE.md`, `tools/CLAUDE.md`, the `spooder-firmware-shape` skill (the telemetry flags and the version), and `CHANGELOG.md` under Unreleased (the flag, the version bump, flashing both boards together). Verify `grep -rn -E "now 3|VERSION = 3|Version = 3|protocol_v3|version 3 (command )?frame" CLAUDE.md core desktop test tools .claude/skills firmware` finds no stale reference, and `mise run lint` passes.
 
 ## 6. Hardware confirmation
 

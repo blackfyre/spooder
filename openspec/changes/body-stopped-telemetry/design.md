@@ -70,6 +70,7 @@ Flash both boards from the same build, rebuild the desktop calibrator and the ha
 - The handheld's `Stopped` label is the exported `app.BodyStopped`; the gesture guard in `cmd/spooder-handheld` is tested with it, and `internal/app` tests that flagged frames with Stand or Perform last give it, which together cover "a flagged frame with last mode Stand or Perform makes gestures unavailable". The drive view keeps showing the last gait while stopped, as the handheld requirement names only the body mode.
 - `--telemetry-every`'s help text names a stopped body among the changes that print at once.
 - `tools/bridge-screenshots` sets no telemetry flags, so its images show a running body and stay unchanged.
+- Task 5.1: `test/CLAUDE.md` already names `protocol_v4.txt` (task 1.1) and says nothing else this change affects, so it is unchanged. The `spooder-hardware-check` skill's "it is 2 now" was stale before this change; it is corrected to 4 with the other version references, since the flash-both-boards advice is what this change relies on. `QR_VERSION = 3` in the bridge's `display.cpp` (the setup QR code's symbol version) matches the task's stale-reference grep but is unrelated to the protocol.
 
 ## Follow-ups
 

@@ -67,7 +67,7 @@ mise run clean
 
 **CI** (`.github/workflows/ci.yml`) runs the same gates, except `mise run cad`, `mise run cad-reference` and `mise run handheld-package` (the emulated arm64 build), on a clean Ubuntu runner on every push to `main` and `deliver/*` and every pull request, and nightly with `mise run vulncheck`. It is an independent check, not a merge gate: the delivery workflow's own gates decide merges. Actions are pinned to commit SHAs.
 
-**Flash both boards together** when the link protocol changes (`protocol::VERSION`, now 3). A mismatched pair fails safe: each side discards the other's frames, so the link looks lost and the robot sleeps.
+**Flash both boards together** when the link protocol changes (`protocol::VERSION`, now 4). A mismatched pair fails safe: each side discards the other's frames, so the link looks lost and the robot sleeps.
 
 ## Layout
 

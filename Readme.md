@@ -38,7 +38,7 @@ flowchart LR
 
 - **Gaits**: tri, wave, ripple, bi, quad and hop, from the upstream gait table, with dynamic or fixed stride and adjustable height and speed.
 - **Power protection**: overcurrent, overload, brown-out, low and high voltage, and an emergency stop. Faults latch, and clearing one never restarts motion by itself: a new mode request must follow.
-- **Link protocol v3**: CRC-16 framed messages for commands (with gesture requests), telemetry, calibration sets and reports, the pose and the diagnostics; the robot sends the pose and the diagnostics on both links, and the bridge relays them to the handheld in WiFi drive. It is pinned by golden vectors that the C++ and Go implementations both test against.
+- **Link protocol v4**: CRC-16 framed messages for commands (with gesture requests), telemetry (with a flag for a stopped body), calibration sets and reports, the pose and the diagnostics; the robot sends the pose and the diagnostics on both links, and the bridge relays them to the handheld in WiFi drive. It is pinned by golden vectors that the C++ and Go implementations both test against.
 - **Live joint calibration**: per joint, an offset, the pulses for 0° and 180°, and the direction.
   - Changes are guarded (Calibrate only, offset within ±30° of the default, pulses 400–2600 µs) and rate-limited to 60°/s.
   - They are held in RAM, confirmed by the robot's reports, and exported as the compiled defaults.
