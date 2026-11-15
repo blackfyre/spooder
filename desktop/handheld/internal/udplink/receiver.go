@@ -53,8 +53,15 @@ type Event struct {
 	// newest.
 	Late bool
 	// Rebaseline: this frame set the newest sequence number afresh (the
-	// run's first frame, the first after a resume or after Gap of silence).
+	// run's first frame, the first after Receiver.Rebaseline or after Gap
+	// of silence).
 	Rebaseline bool
+	// Baseline is the numbering the frame belongs to: 1 for the run's
+	// first, one more at every rebaseline (openspec change
+	// explicit-state-handheld, design D2). Sequence numbers compare only
+	// within one baseline; a frame of a higher baseline was numbered
+	// afresh after every frame of a lower one.
+	Baseline uint64
 }
 
 // Shown is what the screen shows of one frame type (design D3).
@@ -79,6 +86,9 @@ type Quality struct {
 	LastValid  time.Time // the last valid frame's arrival
 	Newest     uint8     // the link-wide newest sequence number
 	HaveNewest bool
+	// Baseline is the current numbering's (Event.Baseline), 0 before the
+	// first frame.
+	Baseline uint64
 }
 
 // SinceLast is the time since the last valid frame at now, or 0 before the
@@ -111,8 +121,9 @@ func NewReceiver(start time.Time) *Receiver {
 	return &Receiver{rebase: true, winFrom: start}
 }
 
-// Rebaseline makes the next valid frame set the newest sequence number
-// without counting anything lost or late: for a resume.
+// Rebaseline makes the next valid frame set the newest sequence number,
+// without counting anything lost or late, and start the next baseline: for
+// a resume or a rejoin.
 func (r *Receiver) Rebaseline() { r.rebase = true }
 
 // roll moves the one-second windows forward to now.
@@ -144,6 +155,7 @@ func (r *Receiver) Datagram(b []byte, now time.Time) (Event, bool) {
 	if r.rebase || !r.q.HaveNewest || now.Sub(r.q.LastValid) >= Gap {
 		ev.Rebaseline = true
 		r.rebase = false
+		r.q.Baseline++
 		r.q.Newest, r.q.HaveNewest = f.Seq, true
 		for i := range r.shown {
 			r.shown[i].seq = f.Seq
@@ -160,6 +172,7 @@ func (r *Receiver) Datagram(b []byte, now time.Time) (Event, bool) {
 			ev.Late = true
 		}
 	}
+	ev.Baseline = r.q.Baseline
 	r.q.HaveFrame, r.q.LastValid = true, now
 
 	s := &r.shown[f.Type]

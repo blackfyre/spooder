@@ -136,12 +136,16 @@ func (l *Link) Status(now time.Time) Status {
 	return l.rx.Status(now)
 }
 
-// Rebaseline makes the next valid frame set the newest sequence number
-// without counting anything lost or late: after a resume.
+// Rebaseline makes the next valid frame set the newest sequence number,
+// without counting anything lost or late, and start the next baseline, and
+// discards the frames not yet taken, all under one lock, so no frame can be
+// accepted between the two (openspec change explicit-state-handheld, design
+// D1): after a resume or a rejoin.
 func (l *Link) Rebaseline() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.rx.Rebaseline()
+	l.events = nil
 }
 
 // Run waits out StartWait from the socket's creation, then sends step's

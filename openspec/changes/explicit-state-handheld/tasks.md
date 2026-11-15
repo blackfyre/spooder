@@ -2,7 +2,7 @@
 
 ## 1. Link baselines
 
-- [ ] 1.1 Number the receiver's baselines in `internal/udplink` (`Event.Baseline`, `Quality.Baseline`, incremented by every rebaseline) and make `Link.Rebaseline` drain the event queue under the same lock (D1, D2). Verify with `go test ./internal/udplink` that the first frame, the first after `Rebaseline()` and the first after `Gap` each start a new baseline, that later frames keep it, and, on a real `Link` fed through `datagram`, that frames queued before `Rebaseline` are gone after it and the next datagram is queued with the next baseline number.
+- [x] 1.1 Number the receiver's baselines in `internal/udplink` (`Event.Baseline`, `Quality.Baseline`, incremented by every rebaseline) and make `Link.Rebaseline` drain the event queue under the same lock (D1, D2). Verify with `go test ./internal/udplink` that the first frame, the first after `Rebaseline()` and the first after `Gap` each start a new baseline, that later frames keep it, and, on a real `Link` fed through `datagram`, that frames queued before `Rebaseline` are gone after it and the next datagram is queued with the next baseline number.
 
 ## 2. Leave reference
 

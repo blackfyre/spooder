@@ -260,3 +260,30 @@ func TestHeldTicksSendNothing(t *testing.T) {
 		t.Fatalf("sent %d, want 5", st.Sent)
 	}
 }
+
+// Rebaseline discards the frames not yet taken, and the next datagram is
+// queued as the first of the next baseline (design D1, D2).
+func TestRebaselineDrainsTheQueue(t *testing.T) {
+	now := time.Unix(1000, 0)
+	l := &Link{rx: NewReceiver(now)}
+	feed := func(seq uint8) {
+		now = now.Add(20 * time.Millisecond)
+		l.datagram(protocol.EncodeTelemetry(protocol.Telemetry{}, seq), now)
+	}
+	feed(10)
+	feed(11)
+	l.Rebaseline()
+	if ev := l.TakeEvents(); len(ev) != 0 {
+		t.Fatalf("events %+v after Rebaseline, want none", ev)
+	}
+	feed(5)
+	feed(6)
+	ev := l.TakeEvents()
+	if len(ev) != 2 || ev[0].Frame.Seq != 5 || !ev[0].Rebaseline || ev[0].Baseline != 2 ||
+		ev[1].Frame.Seq != 6 || ev[1].Rebaseline || ev[1].Baseline != 2 {
+		t.Fatalf("events %+v, want 5 rebaselining and 6, both of baseline 2", ev)
+	}
+	if st := l.Status(now); st.Baseline != 2 || st.Newest != 6 || st.Lost != 0 || st.Late != 0 {
+		t.Fatalf("status %+v, want baseline 2, newest 6, nothing lost or late", st.Quality)
+	}
+}

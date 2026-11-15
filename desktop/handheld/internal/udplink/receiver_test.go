@@ -176,3 +176,41 @@ func TestFramesPerSecond(t *testing.T) {
 		t.Fatalf("since last %v, want 2 s", st.SinceLast(g.now.Add(2*time.Second)))
 	}
 }
+
+// Every rebaseline starts the next baseline: the run's first frame, the
+// first after Rebaseline and the first after Gap of silence; the frames in
+// between, late ones included, keep it.
+func TestBaselinesNumbered(t *testing.T) {
+	g := newRxRig(t)
+	if b := g.r.Status(g.now).Baseline; b != 0 {
+		t.Fatalf("baseline %d before any frame, want 0", b)
+	}
+	want := func(ev Event, baseline uint64, rebaseline bool) {
+		t.Helper()
+		if ev.Baseline != baseline || ev.Rebaseline != rebaseline {
+			t.Fatalf("event %+v, want baseline %d, rebaseline %v", ev, baseline, rebaseline)
+		}
+		if b := g.r.Status(g.now).Baseline; b != baseline {
+			t.Fatalf("status baseline %d, want %d", b, baseline)
+		}
+	}
+	tel := func(seq uint8) Event {
+		t.Helper()
+		return g.after(33*time.Millisecond).frame(protocol.TypeTelemetry, seq, 0)
+	}
+	want(tel(10), 1, true)
+	want(tel(11), 1, false)
+	want(tel(9), 1, false) // late, still the same numbering
+	want(g.after(20*time.Millisecond).frame(protocol.TypePose, 12, 0), 1, false)
+
+	g.r.Rebaseline()
+	if b := g.r.Status(g.now).Baseline; b != 1 {
+		t.Fatalf("baseline %d after Rebaseline before a frame, want 1", b)
+	}
+	want(tel(3), 2, true)
+	want(tel(4), 2, false)
+
+	g.after(Gap)
+	want(tel(200), 3, true)
+	want(tel(201), 3, false)
+}
