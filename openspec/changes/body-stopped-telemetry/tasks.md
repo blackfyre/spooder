@@ -1,0 +1,26 @@
+# Tasks
+
+## 1. Protocol version 4 and the body-stopped flag
+
+- [ ] 1.1 In `core/protocol/protocol.h`, set `VERSION = 4` and add `TELEMETRY_BODY_STOPPED = 1u << 6` with a comment (set while the body is not running: before the first start and after a fault stop; the mode and gait are then the last ones); update the version comment in `core/wifi_drive/handheld_controller.h`. In `desktop/internal/protocol/protocol.go`, set `Version = 4` and add `TelemetryBodyStopped uint8 = 1 << 6`. Add a golden telemetry vector with `TELEMETRY_BODY_STOPPED` in `test/test_protocol_golden`, regenerate the golden file with `SPOODER_WRITE_GOLDEN=1 mise run test`, rename it `test/golden/protocol_v4.txt` with `git mv`, and rename every reference (design D3). Verify the golden diff changes only the version byte, the CRCs and the new vector, `grep -rn protocol_v3 core test desktop tools firmware` finds nothing, and `mise run test`, `mise run desktop-test` and `mise run handheld-test` pass.
+
+## 2. Robot run state
+
+- [ ] 2.1 In `core/protection/supervisor`, replace `bool bodyRunning` with `enum class RunState : uint8_t { NotStarted, Running, Stopped }` and `RunState runState = RunState::NotStarted`, moving to Stopped where `stopBody` is set and to Running where `startBody` is set (design D1); update the header comment. In `core/robot/robot_tick.cpp`, set `TELEMETRY_BODY_STOPPED` in the telemetry flags while `runState != Running`, and derive the gesture argument, the LED input and the status line (`not started`, `running`, `stopped`) from `runState` (design D2). Update `tools/virtual-robot/src/main.cpp` and the uses in `test/test_bench_sim` and `test/test_robot_tick`. Verify with host tests in `test/test_supervisor` that the state is NotStarted before the first start, Running after it, Stopped after an output-inhibiting fault and Running again after the restart; and in `test/test_robot_tick` that telemetry sets the flag before the first start, that an emergency stop while walking sets the flag on the next telemetry frame with gesture 0 and keeps it set after the clear without a new request, and that the first telemetry frame after the restart has it clear; and that `mise run test`, `mise run lint`, `mise run build`, `mise run build --serial` and `mise run virtual-robot` pass.
+
+## 3. Stopped body on the bridge screen
+
+- [ ] 3.1 In `core/status/status_screen.cpp`, show `STOPPED` in the header's mode text and `Stopped` in the setup screen's body cell while fresh telemetry has `TELEMETRY_BODY_STOPPED` (design D4). Verify with host tests in `test/test_status_screen` that telemetry with body mode Walk and the flag set shows `STOPPED` and not `WALK` in the header, and the setup cell shows `Stopped`, and that the same telemetry without the flag shows `WALK`; that `mise run test`, `mise run build-bridge` pass; and that `mise run bridge-screenshots` leaves `docs/images/bridge-*.png` unchanged.
+
+## 4. Stopped body on the desktop and the handheld
+
+- [ ] 4.1 In the desktop, add `Stopped` to `session.Snapshot` from the flag, make `bodyText` return `Stopped` when it is set and build the charts' mode lane snapshot with it, and print `Stopped` in place of the body mode in `console.formatTelemetry` and in the WiFi drive probe's telemetry summary (design D4). Verify with Go tests that a telemetry frame with body mode Walk and the flag set gives `Stopped` in the header text, the charts' mode lane, the console line and the probe summary, and `Walk` without the flag, and that `mise run desktop-test` and `mise run desktop-build` pass.
+- [ ] 4.2 In `desktop/handheld/internal/app`, set `Robot.Body` to `Stopped` when the flag is set, and make `confirms()` return true for it (design D4). Verify with tests in `desktop/handheld/internal/app` that a flagged frame shows `Stopped` and that two newer flagged telemetry frames with output reported on confirm a leave, and that `mise run handheld-test`, `mise run handheld-build`, `mise run handheld-package` and `mise run e2e` pass.
+
+## 5. Documentation
+
+- [ ] 5.1 Update `CLAUDE.md` (`protocol::VERSION`, now 4), `core/CLAUDE.md`, `desktop/CLAUDE.md`, `test/CLAUDE.md`, `tools/CLAUDE.md`, the `spooder-firmware-shape` skill (the telemetry flags and the version), and `CHANGELOG.md` under Unreleased (the flag, the version bump, flashing both boards together). Verify `grep -rn -E "now 3|VERSION = 3|Version = 3|protocol_v3|version 3 (command )?frame" CLAUDE.md core desktop test tools .claude/skills firmware` finds no stale reference, and `mise run lint` passes.
+
+## 6. Hardware confirmation
+
+- [ ] 6.1 Flash both boards from this build and connect the desktop calibrator on USB. Verify: after power-up and before any request, the bridge header and the calibrator show `STOPPED` / `Stopped`; after Stand and Walk, an emergency stop shows the fault and `STOPPED`, and after clearing it (no new request) both still show `STOPPED` with output off and no fault; a new mode request restarts the body and both show the mode again; the LEDs breathe blue while stopped as before.
