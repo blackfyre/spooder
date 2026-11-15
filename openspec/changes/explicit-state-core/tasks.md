@@ -5,8 +5,8 @@
 
 ## 2. Review rule and changelog
 
-- [ ] 2.1 Add "implicit state machine" to the bug classes in `REVIEW.md`, covering C++ and Go: flags, timestamps, counters or sentinels doubling as state, states written outside their transition function; record the change in `CHANGELOG.md` under Unreleased, naming `ModeState`. Verify `grep -n "implicit state machine" REVIEW.md` and `grep -n "ModeState" CHANGELOG.md` find the entries and `openspec validate explicit-state-core` passes
-- [ ] 2.2 Replace the `Input mapping` block of `openspec/changes/wave-default-gait/specs/gamepad-control/spec.md` with this change's (design D4), so either archive order gives the same requirement. Verify `diff openspec/changes/wave-default-gait/specs/gamepad-control/spec.md openspec/changes/explicit-state-core/specs/gamepad-control/spec.md` is empty and `openspec validate wave-default-gait` passes
+- [x] 2.1 Add "implicit state machine" to the bug classes in `REVIEW.md`, covering C++ and Go: flags, timestamps, counters or sentinels doubling as state, states written outside their transition function; record the change in `CHANGELOG.md` under Unreleased, naming `ModeState`. Verify `grep -n "implicit state machine" REVIEW.md` and `grep -n "ModeState" CHANGELOG.md` find the entries and `openspec validate explicit-state-core` passes
+- [x] 2.2 Replace the `Input mapping` block of `openspec/changes/wave-default-gait/specs/gamepad-control/spec.md` with this change's (design D4), so either archive order gives the same requirement. Verify `diff openspec/changes/wave-default-gait/specs/gamepad-control/spec.md openspec/changes/explicit-state-core/specs/gamepad-control/spec.md` is empty and `openspec validate wave-default-gait` passes
 
 ## 3. Gates
 
