@@ -167,6 +167,20 @@ bool emergencyStop(const Controller &c)
   return c.emergencyStop;
 }
 
+bool commandStop(drive_mode::Mode mode, const Controller &c, bool bridgeStop)
+{
+  // No default: a new drive mode fails the build (-Wswitch) until it has a rule.
+  switch (mode)
+  {
+  case drive_mode::Mode::Bluetooth:
+  case drive_mode::Mode::Setup:
+    return bridgeStop;
+  case drive_mode::Mode::Wifi:
+    return bridgeStop || emergencyStop(c);
+  }
+  return true; // unreachable for a valid mode; an invalid one stops
+}
+
 State state(Controller &c, uint32_t nowMs)
 {
   if (!live(c, nowMs))

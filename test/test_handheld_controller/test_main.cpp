@@ -582,6 +582,52 @@ void test_e_stop_is_kept_through_a_lapse_until_a_frame_clears_it()
   TEST_ASSERT_TRUE(emergencyStop(c));
 }
 
+// --- the commanded stop (commandStop) ---------------------------------------------
+
+using drive_mode::Mode;
+
+void test_command_stop_in_wifi_drive()
+{
+  // The toggle on with no handheld frame: stop.
+  TEST_ASSERT_TRUE(commandStop(Mode::Wifi, c, true));
+  // Neither: no stop.
+  TEST_ASSERT_FALSE(commandStop(Mode::Wifi, c, false));
+  // The toggle off with an accepted frame carrying the flag: stop.
+  protocol::Command p = pad();
+  p.flags |= protocol::FLAG_EMERGENCY_STOP;
+  TEST_ASSERT_TRUE(send(p, 0, 0) == Outcome::Accepted);
+  TEST_ASSERT_TRUE(commandStop(Mode::Wifi, c, false));
+  // The flag kept after a 151 ms lapse: stop.
+  TEST_ASSERT_FALSE(live(c, 151));
+  TEST_ASSERT_TRUE(commandStop(Mode::Wifi, c, false));
+  // A later accepted frame without the flag: no stop.
+  TEST_ASSERT_TRUE(send(pad(), 1, 151) == Outcome::Accepted);
+  TEST_ASSERT_FALSE(commandStop(Mode::Wifi, c, false));
+  TEST_ASSERT_TRUE(commandStop(Mode::Wifi, c, true));
+}
+
+// In Bluetooth drive and setup mode there is no handheld: its flag, even
+// carried by an accepted frame, is not part of the stop.
+static void assertToggleAlone(Mode mode)
+{
+  protocol::Command p = pad();
+  p.flags |= protocol::FLAG_EMERGENCY_STOP;
+  TEST_ASSERT_TRUE(send(p, 0, 0) == Outcome::Accepted);
+  TEST_ASSERT_TRUE(emergencyStop(c));
+  TEST_ASSERT_FALSE(commandStop(mode, c, false));
+  TEST_ASSERT_TRUE(commandStop(mode, c, true));
+}
+
+void test_command_stop_in_bluetooth_drive_is_the_toggle()
+{
+  assertToggleAlone(Mode::Bluetooth);
+}
+
+void test_command_stop_in_setup_mode_is_the_toggle()
+{
+  assertToggleAlone(Mode::Setup);
+}
+
 // --- relay target and session epoch ------------------------------------------------
 
 void test_relay_target_follows_the_session()
@@ -644,6 +690,9 @@ int main()
   RUN_TEST(test_handheld_e_stop_is_carried);
   RUN_TEST(test_bridge_button_with_the_handheld_flag_clear);
   RUN_TEST(test_e_stop_is_kept_through_a_lapse_until_a_frame_clears_it);
+  RUN_TEST(test_command_stop_in_wifi_drive);
+  RUN_TEST(test_command_stop_in_bluetooth_drive_is_the_toggle);
+  RUN_TEST(test_command_stop_in_setup_mode_is_the_toggle);
   RUN_TEST(test_relay_target_follows_the_session);
   RUN_TEST(test_jump_ends_the_relay_at_once);
   return UNITY_END();

@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include "gamepad_mapping/gamepad_mapping.h"
 #include "protocol/protocol.h"
+#include "wifi_drive/drive_mode.h"
 
 namespace handheld_controller
 {
@@ -145,6 +146,15 @@ gamepad_mapping::Desired desired(Controller &c, uint32_t nowMs);
  * frame clears it.
  */
 bool emergencyStop(const Controller &c);
+
+/**
+ * @brief The emergency stop the bridge's command frames carry in drive mode
+ * @p mode, given the bridge's own GPIO35 toggle @p bridgeStop: in Bluetooth
+ * drive and setup mode the toggle alone; in WiFi drive the toggle or the
+ * handheld's flag (emergencyStop(), kept through a lapse). The one rule the
+ * bridge's frames, its screen and the virtual robot's WiFi bridge share.
+ */
+bool commandStop(drive_mode::Mode mode, const Controller &c, bool bridgeStop);
 
 /**
  * @brief The handheld's state at @p nowMs, for the screen.

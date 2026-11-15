@@ -355,4 +355,25 @@ bool Decoder::next(Frame &out)
   return false;
 }
 
+bool update(RxGap &g, bool bytesArrived, uint32_t nowMs, uint32_t idleMs)
+{
+  if (bytesArrived)
+  {
+    g.state = RxGap::State::Receiving;
+    g.lastByteMs = nowMs;
+    return false;
+  }
+  switch (g.state)
+  {
+  case RxGap::State::Quiet:
+    return false;
+  case RxGap::State::Receiving:
+    if (nowMs - g.lastByteMs < idleMs)
+      return false;
+    g.state = RxGap::State::Quiet;
+    return true;
+  }
+  return false;
+}
+
 } // namespace protocol

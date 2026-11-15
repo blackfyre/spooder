@@ -276,6 +276,30 @@ private:
   uint32_t discarded_ = 0;
 };
 
+// The receive idle gap: when a reader should call Decoder::idle(). Quiet
+// until bytes arrive, then Receiving until no byte has arrived for idleMs,
+// when it returns to Quiet and reports the gap once. lastByteMs is
+// meaningful in Receiving only.
+struct RxGap
+{
+  enum class State : uint8_t
+  {
+    Quiet,
+    Receiving,
+  };
+  State state = State::Quiet;
+  uint32_t lastByteMs = 0;
+};
+
+/**
+ * @brief Advances @p g by one receive poll at @p nowMs: @p bytesArrived when
+ * the poll read at least one byte. The interval is unsigned, so it is
+ * correct across the millis() wrap.
+ * @return true once per gap, on the first poll without bytes at least
+ * @p idleMs after the last byte: the moment to call Decoder::idle()
+ */
+bool update(RxGap &g, bool bytesArrived, uint32_t nowMs, uint32_t idleMs);
+
 } // namespace protocol
 
 #endif // PROTOCOL_H

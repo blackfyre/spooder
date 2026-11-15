@@ -683,6 +683,54 @@ void test_raw_bytes_follow_each_returned_frame()
   TEST_ASSERT_EQUAL_UINT8_ARRAY(buf + a, dec.frameBytes(), b);
 }
 
+// --- the receive idle gap (RxGap) -------------------------------------------------
+
+static const uint32_t GAP_MS = 10;
+
+// The gap sequence from @p t0: bytes at t0, a 9 ms poll, idle at 10 ms, then
+// quiet polls with no further idle.
+static void assertGapFrom(uint32_t t0)
+{
+  RxGap g;
+  TEST_ASSERT_FALSE(update(g, false, t0 - 1, GAP_MS)); // no idle before any byte
+  TEST_ASSERT_FALSE(update(g, true, t0, GAP_MS));
+  TEST_ASSERT_TRUE(g.state == RxGap::State::Receiving);
+  TEST_ASSERT_FALSE(update(g, false, t0 + 9, GAP_MS));
+  TEST_ASSERT_TRUE(update(g, false, t0 + 10, GAP_MS));
+  TEST_ASSERT_TRUE(g.state == RxGap::State::Quiet);
+  TEST_ASSERT_FALSE(update(g, false, t0 + 11, GAP_MS));
+  TEST_ASSERT_FALSE(update(g, false, t0 + 1000, GAP_MS));
+}
+
+void test_rx_gap_no_idle_before_any_byte()
+{
+  RxGap g;
+  TEST_ASSERT_TRUE(g.state == RxGap::State::Quiet);
+  TEST_ASSERT_FALSE(update(g, false, 0, GAP_MS));
+  TEST_ASSERT_FALSE(update(g, false, 100000, GAP_MS));
+}
+
+void test_rx_gap_idle_once_10_ms_after_the_last_byte()
+{
+  assertGapFrom(1000);
+}
+
+void test_rx_gap_bytes_restart_the_interval()
+{
+  RxGap g;
+  TEST_ASSERT_FALSE(update(g, true, 0, GAP_MS));
+  TEST_ASSERT_FALSE(update(g, true, 5, GAP_MS));
+  TEST_ASSERT_FALSE(update(g, false, 10, GAP_MS));
+  TEST_ASSERT_FALSE(update(g, false, 14, GAP_MS));
+  TEST_ASSERT_TRUE(update(g, false, 15, GAP_MS));
+  TEST_ASSERT_FALSE(update(g, false, 16, GAP_MS));
+}
+
+void test_rx_gap_across_the_millis_wrap()
+{
+  assertGapFrom(UINT32_MAX - 3); // the last byte 4 ms before the wrap
+}
+
 int main()
 {
   UNITY_BEGIN();
@@ -716,5 +764,9 @@ int main()
   RUN_TEST(test_bench_simulation_vector_decodes_every_other_field);
   RUN_TEST(test_body_stopped_vector_carries_the_flag_and_the_last_mode);
   RUN_TEST(test_raw_bytes_follow_each_returned_frame);
+  RUN_TEST(test_rx_gap_no_idle_before_any_byte);
+  RUN_TEST(test_rx_gap_idle_once_10_ms_after_the_last_byte);
+  RUN_TEST(test_rx_gap_bytes_restart_the_interval);
+  RUN_TEST(test_rx_gap_across_the_millis_wrap);
   return UNITY_END();
 }
