@@ -189,6 +189,9 @@ func TestStandFirst(t *testing.T) {
 		{app.Robot{Have: true, Body: "Walk"}, true},
 		{app.Robot{Have: true, Body: "Stand"}, false},
 		{app.Robot{Have: true, Body: "Perform"}, false},
+		// A stopped body, whatever its last mode (Stand or Perform): the
+		// app shows it as BodyStopped.
+		{app.Robot{Have: true, Body: app.BodyStopped}, true},
 	} {
 		if got := standFirst(c.rb); got != c.want {
 			t.Errorf("standFirst(%+v) = %v, want %v", c.rb, got, c.want)

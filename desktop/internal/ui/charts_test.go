@@ -455,3 +455,51 @@ func TestChartsShowHeldExtremes(t *testing.T) {
 		t.Errorf("held beyond the wrong side: peak %v vs %v, low %v vs %v", amps.held.v, last(amps), volts.held.v, last(volts))
 	}
 }
+
+// Spec "Stopped body shown": a stopped Walk shows Stopped in the header's
+// mode cell and in the charts' mode lane; running, it shows Walk.
+func TestStoppedBodyShown(t *testing.T) {
+	s := session.New(func() time.Time { return clock }, nil)
+	s.LinkState(link.State{Status: link.Connected, Port: servo})
+	running := protocol.Telemetry{BodyMode: uint8(session.BodyWalk), Gait: 2, OutputsOn: true}
+	stopped := running
+	stopped.OutputsOn = false
+	stopped.Faults = session.FaultEmergencyStop
+	stopped.Flags = protocol.TelemetryBodyStopped
+	feed := func(t protocol.Telemetry) {
+		clock = clock.Add(100 * time.Millisecond)
+		s.Frame(protocol.Frame{Type: protocol.TypeTelemetry, Telemetry: t}, link.Stats{})
+	}
+	feed(running)
+	if got := bodyText(s.Snapshot()); got != "Walk" {
+		t.Fatalf("running: header %q", got)
+	}
+	feed(stopped)
+	if got := bodyText(s.Snapshot()); got != "Stopped" {
+		t.Fatalf("stopped: header %q", got)
+	}
+	stopped.Faults = 0 // cleared, no new request
+	feed(stopped)
+	if got := bodyText(s.Snapshot()); got != "Stopped" {
+		t.Fatalf("cleared, still stopped: header %q", got)
+	}
+	feed(running)
+	if got := bodyText(s.Snapshot()); got != "Walk" {
+		t.Fatalf("restarted: header %q", got)
+	}
+	h, _ := s.HistorySince(clock.Add(-time.Minute))
+	var modes []string
+	for _, seg := range buildTimeline(h.Telemetry, clock).modes {
+		modes = append(modes, seg.label)
+	}
+	if got := strings.Join(modes, ","); got != "Walk,Stopped,Walk" {
+		t.Fatalf("timeline modes %s", got)
+	}
+	// The editor names the body stopped too, even when its last mode was
+	// Calibrate.
+	snap := session.Snapshot{Link: link.State{Status: link.Connected}, Control: true, Fresh: true,
+		Body: session.BodyCalibrate, Stopped: true}
+	if got := editHint(snap); got != "The robot is stopped. Request Calibrate to edit." {
+		t.Fatalf("edit hint %q", got)
+	}
+}

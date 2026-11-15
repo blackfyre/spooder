@@ -251,6 +251,8 @@ func editHint(snap session.Snapshot) string {
 		return "Observing. Take control and request Calibrate to edit."
 	case !snap.Fresh:
 		return "Telemetry is not current."
+	case snap.Stopped:
+		return "The robot is stopped. Request Calibrate to edit."
 	case snap.Body != session.BodyCalibrate:
 		return "The robot is in " + snap.Body.String() + ". Request Calibrate to edit."
 	case !snap.HaveReport:

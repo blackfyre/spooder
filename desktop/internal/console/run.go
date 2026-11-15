@@ -51,7 +51,7 @@ func ParseFlags(args []string, out io.Writer) (Config, error) {
 	fs.SetOutput(out)
 	fs.StringVar(&c.Port, "port", "", "serial port `path` to use (a USB port, a pseudo-terminal or a symlink to one)")
 	fs.BoolVar(&c.Frames, "frames", false, "also print a one-line decode of each frame")
-	fs.IntVar(&c.TelemetryEvery, "telemetry-every", 1, "with --frames, print every `N`th telemetry frame (and any that changes mode, gait, output, faults or source)")
+	fs.IntVar(&c.TelemetryEvery, "telemetry-every", 1, "with --frames, print every `N`th telemetry frame (and any that changes mode, gait, a stopped body, output, faults or source)")
 	fs.BoolVar(&c.Keys, "keys", false, "forward typed printable ASCII to the robot (for a --serial build)")
 	fs.Usage = func() {
 		fmt.Fprint(out, usageText)

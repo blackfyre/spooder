@@ -142,7 +142,13 @@ func (r *rig) press(b padmap.Buttons) {
 // telemetry delivers one telemetry frame with sequence seq.
 func (r *rig) telemetry(seq uint8, body session.BodyMode, outputs bool) {
 	r.t.Helper()
-	b := protocol.EncodeTelemetry(protocol.Telemetry{BodyMode: uint8(body), OutputsOn: outputs}, seq)
+	r.telemetryFrame(seq, protocol.Telemetry{BodyMode: uint8(body), OutputsOn: outputs})
+}
+
+// telemetryFrame delivers t as frame seq.
+func (r *rig) telemetryFrame(seq uint8, t protocol.Telemetry) {
+	r.t.Helper()
+	b := protocol.EncodeTelemetry(t, seq)
 	ev, ok := r.link.rx.Datagram(b, r.now)
 	if !ok {
 		r.t.Fatal("telemetry refused")
@@ -217,6 +223,56 @@ func TestLeaveConfirmedByOutputOff(t *testing.T) {
 	r.step()
 	if !r.stop {
 		t.Fatal("two output-off frames did not end the leave")
+	}
+}
+
+// Spec "Leaving while stopped": two newer frames reporting the body
+// stopped confirm the leave, even with output reported on and Walk as the
+// last mode.
+func TestLeaveConfirmedByStoppedBody(t *testing.T) {
+	r := walking(t)
+	r.a.Press(ActionExit, r.now)
+	r.step()
+	stopped := protocol.Telemetry{BodyMode: uint8(session.BodyWalk), OutputsOn: true, Flags: protocol.TelemetryBodyStopped}
+	r.telemetryFrame(r.seq, stopped)
+	r.seq++
+	r.step()
+	r.wantRunning("after one stopped frame")
+	r.telemetryFrame(r.seq, stopped)
+	r.seq++
+	r.step()
+	if !r.stop || r.a.Ended() != ActionExit {
+		t.Fatalf("stop %v ended %v after two stopped frames, want an exit", r.stop, r.a.Ended())
+	}
+}
+
+// Spec "Stopped body shown": a stopped Walk shows Stopped; running, Walk.
+func TestScreenShowsStoppedBody(t *testing.T) {
+	r := walking(t)
+	walk := protocol.Telemetry{BodyMode: uint8(session.BodyWalk), Flags: protocol.TelemetryBodyStopped}
+	r.telemetryFrame(r.seq, walk)
+	r.seq++
+	r.step()
+	if sc := r.a.Screen(r.now); sc.Robot.Stale || sc.Robot.Body != BodyStopped {
+		t.Fatalf("robot %+v, want fresh and Stopped", sc.Robot)
+	}
+	// Stopped with Stand or Perform last: still Stopped, which the
+	// gesture tiles take as neither standing nor performing.
+	for _, last := range []session.BodyMode{session.BodyStand, session.BodyPerform} {
+		r.telemetryFrame(r.seq, protocol.Telemetry{BodyMode: uint8(last), Flags: protocol.TelemetryBodyStopped})
+		r.seq++
+		r.step()
+		if sc := r.a.Screen(r.now); sc.Robot.Body != BodyStopped {
+			t.Fatalf("stopped after %v: robot %+v, want Stopped", last, sc.Robot)
+		}
+	}
+	walk.Flags = 0
+	walk.OutputsOn = true
+	r.telemetryFrame(r.seq, walk)
+	r.seq++
+	r.step()
+	if sc := r.a.Screen(r.now); sc.Robot.Body != "Walk" {
+		t.Fatalf("robot %+v, want Walk once running", sc.Robot)
 	}
 }
 

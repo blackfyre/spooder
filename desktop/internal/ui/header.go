@@ -291,8 +291,12 @@ func (w *window) telemetryStrip(gtx layout.Context) layout.Dimensions {
 	})
 }
 
-// bodyText is the body mode, with the gesture it is playing.
+// bodyText is the body mode, with the gesture it is playing, or Stopped
+// while the body is not running (its last mode is then not live).
 func bodyText(snap session.Snapshot) string {
+	if snap.Stopped {
+		return "Stopped"
+	}
 	if snap.Body == session.BodyPerform && snap.Gesture != protocol.GestureNone {
 		return "Perform: " + session.GestureName(snap.Gesture)
 	}

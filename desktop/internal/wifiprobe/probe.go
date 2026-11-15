@@ -347,7 +347,11 @@ func formatTelemetry(t protocol.Telemetry, have bool) string {
 	if t.OutputsOn {
 		outputs = "on"
 	}
-	return fmt.Sprintf("body %s, outputs %s, faults %s", session.BodyMode(t.BodyMode), outputs, faults)
+	body := session.BodyMode(t.BodyMode).String()
+	if t.Flags&protocol.TelemetryBodyStopped != 0 {
+		body = "Stopped" // the body is not running: its last mode is not live
+	}
+	return fmt.Sprintf("body %s, outputs %s, faults %s", body, outputs, faults)
 }
 
 // Run sends until ctx ends or the configured duration has passed, then

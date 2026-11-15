@@ -3,6 +3,7 @@ package session
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -222,6 +223,26 @@ func TestTelemetryView(t *testing.T) {
 	}
 }
 
+// A stopped body: Stopped in the snapshot, the last mode kept as received,
+// and the frames pane's summary shows the raw fields.
+func TestStoppedBody(t *testing.T) {
+	s, _ := connected(t)
+	walk := protocol.Telemetry{BodyMode: uint8(BodyWalk), Gait: 2, Flags: protocol.TelemetryBridgeInControl | protocol.TelemetryBodyStopped}
+	s.Frame(telemetryFrame(walk), link.Stats{})
+	snap := s.Snapshot()
+	if !snap.Stopped || snap.Body != BodyWalk {
+		t.Fatalf("stopped Walk: stopped %v body %v", snap.Stopped, snap.Body)
+	}
+	if n := len(snap.Frames); n == 0 || !strings.Contains(snap.Frames[n-1].Text, "bodyMode=2") || !strings.Contains(snap.Frames[n-1].Text, "flags=68") {
+		t.Fatalf("frames pane %v, want bodyMode=2 and flags=68 as received", snap.Frames)
+	}
+	walk.Flags &^= protocol.TelemetryBodyStopped
+	s.Frame(telemetryFrame(walk), link.Stats{})
+	if snap := s.Snapshot(); snap.Stopped || snap.Body != BodyWalk {
+		t.Fatalf("running Walk: stopped %v body %v", snap.Stopped, snap.Body)
+	}
+}
+
 // Spec "Conflict shown".
 func TestSourceAndConflict(t *testing.T) {
 	for flags, want := range map[uint8]Source{
@@ -301,6 +322,9 @@ func TestEditingDisabled(t *testing.T) {
 	cases := map[string]func(s *Session, c *clock){
 		"standing": func(s *Session, c *clock) {
 			s.Frame(telemetryFrame(protocol.Telemetry{BodyMode: uint8(BodyStand)}), link.Stats{})
+		},
+		"stopped in Calibrate": func(s *Session, c *clock) {
+			s.Frame(telemetryFrame(protocol.Telemetry{BodyMode: uint8(BodyCalibrate), Flags: protocol.TelemetryBodyStopped}), link.Stats{})
 		},
 		"observing":       func(s *Session, c *clock) { s.ReleaseControl() },
 		"stale telemetry": func(s *Session, c *clock) { c.advance(StaleAfter + time.Millisecond) },

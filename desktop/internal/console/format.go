@@ -75,12 +75,13 @@ func formatTelemetry(seq uint8, t protocol.Telemetry) string {
 	if session.SourceFrom(t.Flags) == session.SourceConflict {
 		source += " (bridge and USB)"
 	}
-	parts := []string{
-		"telemetry #" + strconv.Itoa(int(seq)),
-		session.BodyMode(t.BodyMode).String(),
-		gait,
-		"output " + output,
+	parts := []string{"telemetry #" + strconv.Itoa(int(seq))}
+	if t.Flags&protocol.TelemetryBodyStopped != 0 {
+		parts = append(parts, "Stopped") // the body is not running: its last mode and gait are not live
+	} else {
+		parts = append(parts, session.BodyMode(t.BodyMode).String(), gait)
 	}
+	parts = append(parts, "output "+output)
 	if t.Flags&protocol.TelemetrySimulated != 0 {
 		parts = append(parts, "SIM") // bench simulation: no servo moves
 	}
@@ -146,9 +147,11 @@ type telemetryKey struct {
 	source     session.Source
 	bridge     uint8 // the TelemetryBridge* bits: a change of the link or its gamepad
 	gesture    uint8
+	stopped    bool // protocol.TelemetryBodyStopped
 }
 
 func keyOf(t protocol.Telemetry) telemetryKey {
 	return telemetryKey{t.BodyMode, t.Gait, t.OutputsOn, t.Faults, session.SourceFrom(t.Flags),
-		t.Flags & (protocol.TelemetryBridgeLinkUp | protocol.TelemetryBridgeGamepad), t.Gesture}
+		t.Flags & (protocol.TelemetryBridgeLinkUp | protocol.TelemetryBridgeGamepad), t.Gesture,
+		t.Flags&protocol.TelemetryBodyStopped != 0}
 }

@@ -77,9 +77,9 @@ func TestFormatGoldenVectors(t *testing.T) {
 		"telemetry_perform_say_hi":             "telemetry #30  Perform  gait Tri  output on  6.05 V  2.10 A  faults none  link 0 ok 0 bad  source bridge  bridge down  gesture say hi",
 		"telemetry_usb_bridge_link_up":         "telemetry #31  Stand  gait Tri  output on  6.06 V  0.00 A  faults none  link 420 ok 0 bad  source USB  bridge up (no gamepad) 3143 ok 2 bad",
 		"telemetry_bench_simulation":           "telemetry #40  Walk  gait Wave  output on  SIM  6.00 V  2.16 A  faults supply in simulation  link 812 ok 3 bad  source none  bridge down",
-		"telemetry_body_stopped_walk":          "telemetry #50  Walk  gait Ripple  output off  6.03 V  0.12 A  faults emergency stop  link 2210 ok 0 bad  source bridge  bridge up (gamepad) 2210 ok 0 bad",
+		"telemetry_body_stopped_walk":          "telemetry #50  Stopped  output off  6.03 V  0.12 A  faults emergency stop  link 2210 ok 0 bad  source bridge  bridge up (gamepad) 2210 ok 0 bad",
 		"telemetry_conflict":                   "telemetry #128  Sleep  gait Tri  output off  0.00 V  0.00 A  faults emergency stop  link 0 ok 0 bad  source conflict (bridge and USB)  bridge down",
-		"telemetry_extremes":                   "telemetry #255  mode 255  gait 255  output on  SIM  65.53 V  65.53 A  faults overcurrent, sustained current, undervoltage, brown-out, overvoltage, emergency stop, supply in simulation, fault bit 7, fault bit 8, fault bit 9, fault bit 10, fault bit 11, fault bit 12, fault bit 13, fault bit 14, fault bit 15  link 65535 ok 65535 bad  source conflict (bridge and USB)  bridge up (gamepad) 65535 ok 65535 bad  gesture 255  tof 65535 mm (status 255)  pitch -327.68 deg roll 327.67 deg",
+		"telemetry_extremes":                   "telemetry #255  Stopped  output on  SIM  65.53 V  65.53 A  faults overcurrent, sustained current, undervoltage, brown-out, overvoltage, emergency stop, supply in simulation, fault bit 7, fault bit 8, fault bit 9, fault bit 10, fault bit 11, fault bit 12, fault bit 13, fault bit 14, fault bit 15  link 65535 ok 65535 bad  source conflict (bridge and USB)  bridge up (gamepad) 65535 ok 65535 bad  gesture 255  tof 65535 mm (status 255)  pitch -327.68 deg roll 327.67 deg",
 		"calibration_set_default_joint0":       "calibration_set seq=1 requestId=1 joint=0 offsetCentideg=9000 pulse0Us=500 pulse180Us=2500 flags=0",
 		"calibration_set_reversed_joint17":     "calibration_set seq=42 requestId=200 joint=17 offsetCentideg=-2450 pulse0Us=2400 pulse180Us=600 flags=1",
 		"calibration_set_extremes":             "calibration_set seq=255 requestId=255 joint=255 offsetCentideg=-32768 pulse0Us=0 pulse180Us=65535 flags=255",
@@ -114,12 +114,32 @@ func TestFormatGoldenVectors(t *testing.T) {
 	}
 }
 
+// Spec "Stopped telemetry line": a stopped body shows Stopped, not its last
+// mode and gait; running, the same frame shows them.
+func TestFormatStoppedBody(t *testing.T) {
+	walk := protocol.Telemetry{BodyMode: 2, Gait: 2, Flags: protocol.TelemetryBridgeInControl | protocol.TelemetryBodyStopped}
+	got := FormatFrame(protocol.Frame{Type: protocol.TypeTelemetry, Seq: 1, Telemetry: walk})
+	if want := "telemetry #1  Stopped  output off  0.00 V"; !strings.HasPrefix(got, want) || strings.Contains(got, "Walk") || strings.Contains(got, "Ripple") {
+		t.Errorf("stopped: got %q, want the prefix %q and no mode or gait", got, want)
+	}
+	walk.Flags &^= protocol.TelemetryBodyStopped
+	got = FormatFrame(protocol.Frame{Type: protocol.TypeTelemetry, Seq: 1, Telemetry: walk})
+	if want := "telemetry #1  Walk  gait Ripple  output off"; !strings.HasPrefix(got, want) {
+		t.Errorf("running: got %q, want the prefix %q", got, want)
+	}
+}
+
 func TestFormatSensorsAndUnknownType(t *testing.T) {
 	tel := protocol.Telemetry{BodyMode: 2, Gait: 2, SensorsAvailable: protocol.SensorToF, ToFMm: 123, Flags: protocol.TelemetryBridgeInControl}
 	got := FormatFrame(protocol.Frame{Type: protocol.TypeTelemetry, Seq: 1, Telemetry: tel})
 	want := "telemetry #1  Walk  gait Ripple  output off  0.00 V  0.00 A  faults none  link 0 ok 0 bad  source bridge  bridge down  tof 123 mm (status 0)"
 	if got != want {
 		t.Errorf("got %q", got)
+	}
+	// An unknown mode and gait (the golden extremes set the stopped flag).
+	got = FormatFrame(protocol.Frame{Type: protocol.TypeTelemetry, Seq: 2, Telemetry: protocol.Telemetry{BodyMode: 255, Gait: 255}})
+	if want := "telemetry #2  mode 255  gait 255  output off"; !strings.HasPrefix(got, want) {
+		t.Errorf("unknown mode and gait: got %q", got)
 	}
 	if got := FormatFrame(protocol.Frame{Type: 9, Seq: 3}); got != "type9 seq=3" {
 		t.Errorf("unknown type: %q", got)
@@ -237,6 +257,35 @@ func TestTelemetryThrottle(t *testing.T) {
 	}
 	if !strings.Contains(m.out.String(), "#20  Calibrate  gait Tri  output on  6.01 V  1.35 A  faults undervoltage") {
 		t.Errorf("fault not named:\n%s", m.out.String())
+	}
+}
+
+// Spec "Stop under throttling" and "Restart under throttling": a change of
+// the body-stopped flag alone, in Walk, prints at once both ways.
+func TestTelemetryThrottleOnStoppedBody(t *testing.T) {
+	sys := newFakeSystem(servo, true)
+	m := startMonitor(t, Config{Frames: true, TelemetryEvery: 10}, sys, nil)
+	p := waitPort(t, sys)
+	running := protocol.Telemetry{BodyMode: 2, Gait: 2, Flags: protocol.TelemetryBridgeInControl}
+	stopped := running
+	stopped.Flags |= protocol.TelemetryBodyStopped
+	var stream []byte
+	for i, t := range []protocol.Telemetry{running, running, running, stopped, stopped, stopped, running, running} {
+		stream = append(stream, tel(uint8(i), t)...)
+	}
+	stream = append(stream, "end\n"...)
+	p.send(stream)
+	m.out.waitFor(t, "end")
+	m.stop()
+	var seqs []string
+	for _, l := range body(m.out.String()) {
+		if strings.HasPrefix(l, "> telemetry #") {
+			seqs = append(seqs, strings.Fields(l)[2]+" "+strings.Fields(l)[3])
+		}
+	}
+	// The first, the stop and the restart; the rest are throttled.
+	if got := strings.Join(seqs, ", "); got != "#0 Walk, #3 Stopped, #6 Walk" {
+		t.Errorf("printed %s", got)
 	}
 }
 

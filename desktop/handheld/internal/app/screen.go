@@ -10,11 +10,15 @@ import (
 	"github.com/blackfyre/spooder/desktop/internal/session"
 )
 
+// BodyStopped is Robot.Body while telemetry reports the body not running
+// (protocol.TelemetryBodyStopped): its last mode is then not live.
+const BodyStopped = "Stopped"
+
 // Robot is the robot's side of the drive screen, from the shown telemetry.
 type Robot struct {
-	Have      bool // a telemetry frame has been taken
-	Stale     bool // none has arrived for StaleAfter (or none yet)
-	Body      string
+	Have      bool   // a telemetry frame has been taken
+	Stale     bool   // none has arrived for StaleAfter (or none yet)
+	Body      string // the body mode's name, or BodyStopped
 	Gait      string
 	OutputsOn bool
 	Faults    []string // by name; empty when none
@@ -143,6 +147,9 @@ func (a *App) Screen(now time.Time) Screen {
 	if tel.Have {
 		t := tel.Frame.Telemetry
 		sc.Robot.Body = session.BodyMode(t.BodyMode).String()
+		if t.Flags&protocol.TelemetryBodyStopped != 0 {
+			sc.Robot.Body = BodyStopped
+		}
 		sc.Robot.Gait = session.GaitName(t.Gait)
 		sc.Robot.OutputsOn = t.OutputsOn
 		sc.Robot.Faults = session.FaultNames(t.Faults)

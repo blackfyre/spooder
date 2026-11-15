@@ -312,7 +312,8 @@ func buildTimeline(tel []session.TelemetrySample, now time.Time) timelineSpec {
 		if i+1 < len(tel) {
 			t1 = math.Min(rel(tel[i+1].At, now), t0+sampleGap)
 		}
-		tl.modes = add(tl.modes, t0, t1, bodyText(session.Snapshot{Body: session.BodyMode(s.T.BodyMode), Gesture: s.T.Gesture}), true)
+		tl.modes = add(tl.modes, t0, t1, bodyText(session.Snapshot{Body: session.BodyMode(s.T.BodyMode), Gesture: s.T.Gesture,
+			Stopped: s.T.Flags&protocol.TelemetryBodyStopped != 0}), true)
 		out := "output off"
 		if s.T.OutputsOn {
 			out = "output on"

@@ -333,7 +333,8 @@ func (s *Session) ClearFault() error {
 // editable is the editing gate; s.mu is held.
 func (s *Session) editable() bool {
 	return s.control && s.connected() && s.fresh() &&
-		BodyMode(s.telemetry.BodyMode) == BodyCalibrate && s.calib.HaveReport()
+		BodyMode(s.telemetry.BodyMode) == BodyCalibrate && s.telemetry.Flags&protocol.TelemetryBodyStopped == 0 &&
+		s.calib.HaveReport()
 }
 
 func (s *Session) fresh() bool {
@@ -380,6 +381,7 @@ type Snapshot struct {
 	TelemetryAge  time.Duration
 	Telemetry     protocol.Telemetry
 	Body          BodyMode
+	Stopped       bool  // the body is not running (protocol.TelemetryBodyStopped): Body is its last mode, not live
 	Gesture       uint8 // the gesture being played (protocol.Gesture*), 0 when none
 	Source        Source
 	Faults        []string
@@ -427,6 +429,7 @@ func (s *Session) Snapshot() Snapshot {
 		Fresh:         s.fresh(),
 		Telemetry:     s.telemetry,
 		Body:          BodyMode(s.telemetry.BodyMode),
+		Stopped:       s.telemetry.Flags&protocol.TelemetryBodyStopped != 0,
 		Gesture:       s.telemetry.Gesture,
 		Source:        SourceFrom(s.telemetry.Flags),
 		Faults:        FaultNames(s.telemetry.Faults),

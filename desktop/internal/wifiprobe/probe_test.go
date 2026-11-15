@@ -278,6 +278,24 @@ func TestProbeSummaryCountsRelayedFrames(t *testing.T) {
 	}
 }
 
+// The summary names a stopped body Stopped, not its last mode.
+func TestTelemetrySummaryShowsStoppedBody(t *testing.T) {
+	f, ok := classify(golden(t, "telemetry_body_stopped_walk"))
+	if !ok {
+		t.Fatal("the golden vector does not decode")
+	}
+	if session.BodyMode(f.Telemetry.BodyMode) != session.BodyWalk || f.Telemetry.Flags&protocol.TelemetryBodyStopped == 0 {
+		t.Fatalf("golden vector %+v is not a stopped Walk", f.Telemetry)
+	}
+	if got, want := formatTelemetry(f.Telemetry, true), "body Stopped, outputs off, faults emergency stop"; got != want {
+		t.Errorf("stopped: %q, want %q", got, want)
+	}
+	f.Telemetry.Flags &^= protocol.TelemetryBodyStopped
+	if got, want := formatTelemetry(f.Telemetry, true), "body Walk, outputs off, faults emergency stop"; got != want {
+		t.Errorf("running: %q, want %q", got, want)
+	}
+}
+
 func TestClassify(t *testing.T) {
 	telemetry := golden(t, "telemetry_extremes")
 	two := append(append([]byte(nil), telemetry...), telemetry...)

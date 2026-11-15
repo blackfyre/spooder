@@ -219,9 +219,10 @@ func (a *App) Press(act Action, now time.Time) {
 	a.hand.SetNeutral(true)
 }
 
-// confirms tells whether telemetry reports the body asleep or output off.
+// confirms tells whether telemetry reports the body asleep, stopped or
+// output off.
 func confirms(t protocol.Telemetry) bool {
-	return session.BodyMode(t.BodyMode) == session.BodySleep || !t.OutputsOn
+	return session.BodyMode(t.BodyMode) == session.BodySleep || t.Flags&protocol.TelemetryBodyStopped != 0 || !t.OutputsOn
 }
 
 // observe takes one received frame into the leave's confirmation.
