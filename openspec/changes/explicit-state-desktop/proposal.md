@@ -6,8 +6,8 @@ The robot's firmware keeps mode-dependent behaviour in explicit state machines (
 
 ## What Changes
 
-- **The rule for Go.** `desktop/CLAUDE.md` states the explicit-state rule for the calibrator's module (`desktop/`, not `desktop/handheld/`): state that changes behaviour is one enum-like type with one transition function and its guards; no bool that duplicates a state; no nil, zero time or empty string standing for a state.
-- **The port selection as one state.** The window's port choice becomes one explicit state, `portChoice` (`None`, `Preselected`, `Picked`), with one transition function. When the operator's picked port leaves the list, the choice falls back to a preselection, so the `--port` path is preselected again once it appears.
+- **The rule for Go.** `desktop/CLAUDE.md` states the explicit-state rule for the calibrator's module (`desktop/`, not `desktop/handheld/`): state that changes behaviour is one enum-like type with one transition function and its guards; no bool that duplicates a state; no nil, zero time or empty string standing for a state. The rule is prospective: it binds state that a change adds or modifies, so the implicit states left for follow-ups are not violations until their own changes.
+- **The port selection as one state.** The window's port choice becomes one explicit state, `portChoice` (`None`, `Preselected`, `Picked`), with one transition function. When the operator's picked port leaves the list, the choice falls back to a preselection at once (the `--port` path, else a Servo 2040), so the `--port` path is preselected again once it appears.
 - The other implicit states the brief lists (the WiFi probe's session phase, session control, freshness, key state, the text pane, the calibration table, the export pane, the connected device, the remaining UI flags) are follow-ups, recorded in `design.md`.
 - No protocol, firmware or bridge change.
 
@@ -19,7 +19,7 @@ None.
 
 ### Modified Capabilities
 
-- `desktop-calibrator`: *Explicit port* gains a scenario for a picked port that is unplugged while the `--port` path is absent and then appears.
+- `desktop-calibrator`: *Explicit port* states when the operator's pick is kept ahead of the `--port` path, and gains scenarios for a pick kept while both are listed and for a picked port that is unplugged while the path is absent and then appears.
 
 ## Impact
 
